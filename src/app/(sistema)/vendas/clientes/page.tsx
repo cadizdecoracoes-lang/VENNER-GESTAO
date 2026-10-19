@@ -1,8 +1,21 @@
-import { Plus, Search } from "lucide-react";
+import { Plus } from "lucide-react";
 import Link from "next/link";
 import { CamposPessoa } from "@/components/campos-pessoa";
+import { ATALHO_SITUACAO, Filtro } from "@/components/filtro";
 import { FormAcao } from "@/components/form-acao";
-import { CabecalhoTela, Campo, Cartao, Celula, Etiqueta, LinkAcao, SemAcesso, Tabela, estiloBotao, estiloBotaoSecundario, estiloCampo } from "@/components/ui";
+import {
+  CabecalhoTela,
+  Campo,
+  Cartao,
+  Celula,
+  Etiqueta,
+  LinkAcao,
+  SemAcesso,
+  Tabela,
+  estiloBotao,
+  estiloBotaoSecundario,
+  estiloCampo,
+} from "@/components/ui";
 import { carregarAcesso, pode } from "@/lib/acesso";
 import { formatarDocumento } from "@/lib/formato";
 import type { DadosPessoa } from "@/lib/pessoa";
@@ -15,20 +28,12 @@ const TELA = "vendas.clientes";
 const CAMPOS = "id, tipo_pessoa, documento, nome, nome_fantasia, email, telefone, cidade, uf, observacao, ativo, canal";
 
 type Cliente = DadosPessoa & { id: string; canal: Canal };
-type Filtros = { q?: string; canal?: string; editar?: string; novo?: string };
+type Filtros = { editar?: string; novo?: string };
 
-async function carregar({ q, canal }: Filtros): Promise<Cliente[]> {
+async function carregar(): Promise<Cliente[]> {
   if (!supabaseConfigurado) return [];
   const supabase = await criarClienteServidor();
-  let consulta = supabase.from("clientes").select(CAMPOS).order("nome").limit(500);
-  if (q) {
-    const termo = q.replace(/[%,()]/g, " ").trim();
-    const digitos = termo.replace(/\D/g, "");
-    consulta = consulta.or(
-      [`nome.ilike.%${termo}%`, `nome_fantasia.ilike.%${termo}%`, ...(digitos ? [`documento.like.%${digitos}%`] : [])].join(","),
-    );
-  }
-  if (canal && canal in CANAIS) consulta = consulta.eq("canal", canal);
+  const consulta = supabase.from("clientes").select(CAMPOS).order("nome").limit(2000);
   const { data } = await consulta;
   return (data ?? []) as Cliente[];
 }
@@ -45,7 +50,7 @@ export default async function PaginaClientees({ searchParams }: { searchParams: 
   if (!pode(acesso, TELA, "ver")) return <SemAcesso codigo={TELA} />;
 
   const filtros = await searchParams;
-  const clientes = await carregar(filtros);
+  const clientes = await carregar();
   const emEdicao = filtros.editar ? (clientes.find((f) => f.id === filtros.editar) ?? (await buscar(filtros.editar))) : undefined;
   const mostrarForm = (filtros.novo && pode(acesso, TELA, "criar")) || (emEdicao && pode(acesso, TELA, "editar"));
 
@@ -61,7 +66,12 @@ export default async function PaginaClientees({ searchParams }: { searchParams: 
 
       {mostrarForm && (
         <Cartao titulo={emEdicao ? `Editar ${emEdicao.nome}` : "Novo cliente"}>
-          <FormAcao key={emEdicao?.id ?? "novo"} acao={salvarCliente.bind(null, emEdicao?.id ?? null)} rotulo="Salvar" className="space-y-4">
+          <FormAcao
+            key={emEdicao?.id ?? "novo"}
+            acao={salvarCliente.bind(null, emEdicao?.id ?? null)}
+            rotulo="Salvar"
+            className="space-y-4"
+          >
             <CamposPessoa valor={emEdicao} />
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
               <Campo rotulo="Canal de venda">
@@ -90,40 +100,26 @@ export default async function PaginaClientees({ searchParams }: { searchParams: 
         </Cartao>
       )}
 
-      <form className="flex flex-wrap items-center gap-2">
-        <div className="relative">
-          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-texto-suave" />
-          <input name="q" defaultValue={filtros.q} placeholder="Buscar por nome ou CNPJ/CPF" className={`${estiloCampo} w-72 pl-9`} />
-        </div>
-        <select name="canal" defaultValue={filtros.canal ?? ""} className={`${estiloCampo} w-48`}>
-          <option value="">Todos os canais</option>
-          {Object.entries(CANAIS).map(([v, r]) => (
-            <option key={v} value={v}>
-              {r}
-            </option>
-          ))}
-        </select>
-        <button className={estiloBotaoSecundario}>Filtrar</button>
-      </form>
-
-      <Tabela
-        colunas={["Cliente", "CNPJ / CPF", "Cidade", "Contato", "Canal", ""]}
-        vazio={filtros.q || filtros.canal ? "Nenhum cliente encontrado com esse filtro." : "Nenhum cliente cadastrado ainda."}
+      <Filtro
+        atalhos={[{ rotulo: "Canal", opcoes: Object.entries(CANAIS).map(([valor, rotulo]) => ({ valor, rotulo })) }, ATALHO_SITUACAO]}
+        placeholder="Filtrar por nome, CNPJ/CPF, cidade, UF..."
       >
-        {clientes.map((f) => (
-          <tr key={f.id} className={f.ativo ? "" : "text-texto-suave"}>
-            <Celula>
-              <span className="font-medium">{f.nome_fantasia ?? f.nome}</span> {!f.ativo && <Etiqueta>Inativo</Etiqueta>}
-              {f.nome_fantasia && <span className="block text-xs text-texto-suave">{f.nome}</span>}
-            </Celula>
-            <Celula className="whitespace-nowrap tabular-nums">{formatarDocumento(f.documento)}</Celula>
-            <Celula>{[f.cidade, f.uf].filter(Boolean).join(" / ") || "—"}</Celula>
-            <Celula className="text-texto-suave">{[f.telefone, f.email].filter(Boolean).join(" · ") || "—"}</Celula>
-            <Celula>{CANAIS[f.canal]}</Celula>
-            <Celula className="text-right">{pode(acesso, TELA, "editar") && <LinkAcao href={`?editar=${f.id}`}>Editar</LinkAcao>}</Celula>
-          </tr>
-        ))}
-      </Tabela>
+        <Tabela colunas={["Cliente", "CNPJ / CPF", "Cidade", "Contato", "Canal", ""]} vazio="Nenhum cliente cadastrado ainda.">
+          {clientes.map((f) => (
+            <tr key={f.id} data-tags={`${f.canal} ${f.ativo ? "ativo" : "inativo"}`} className={f.ativo ? "" : "text-texto-suave"}>
+              <Celula>
+                <span className="font-medium">{f.nome_fantasia ?? f.nome}</span> {!f.ativo && <Etiqueta>Inativo</Etiqueta>}
+                {f.nome_fantasia && <span className="block text-xs text-texto-suave">{f.nome}</span>}
+              </Celula>
+              <Celula className="whitespace-nowrap tabular-nums">{formatarDocumento(f.documento)}</Celula>
+              <Celula>{[f.cidade, f.uf].filter(Boolean).join(" / ") || "—"}</Celula>
+              <Celula className="text-texto-suave">{[f.telefone, f.email].filter(Boolean).join(" · ") || "—"}</Celula>
+              <Celula>{CANAIS[f.canal]}</Celula>
+              <Celula className="text-right">{pode(acesso, TELA, "editar") && <LinkAcao href={`?editar=${f.id}`}>Editar</LinkAcao>}</Celula>
+            </tr>
+          ))}
+        </Tabela>
+      </Filtro>
     </div>
   );
 }

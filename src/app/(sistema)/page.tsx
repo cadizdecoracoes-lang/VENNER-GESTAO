@@ -18,7 +18,7 @@ export default function Painel() {
       </div>
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {CARTOES.map((c) => (
-          <div key={c.titulo} className="rounded-2xl border border-borda bg-superficie p-5">
+          <div key={c.titulo} className="rounded-2xl bg-superficie p-5 shadow-[0_1px_3px_rgba(16,24,40,0.06)]">
             <div className="flex items-start justify-between gap-2">
               <span className="text-sm text-texto-suave">{c.titulo}</span>
               <button

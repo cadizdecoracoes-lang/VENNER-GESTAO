@@ -1,7 +1,20 @@
 import { Plus } from "lucide-react";
 import Link from "next/link";
+import { ATALHO_SITUACAO, Filtro } from "@/components/filtro";
 import { FormAcao } from "@/components/form-acao";
-import { CabecalhoTela, Campo, Cartao, Celula, Etiqueta, LinkAcao, SemAcesso, Tabela, estiloBotao, estiloBotaoSecundario, estiloCampo } from "@/components/ui";
+import {
+  CabecalhoTela,
+  Campo,
+  Cartao,
+  Celula,
+  Etiqueta,
+  LinkAcao,
+  SemAcesso,
+  Tabela,
+  estiloBotao,
+  estiloBotaoSecundario,
+  estiloCampo,
+} from "@/components/ui";
 import { carregarAcesso, pode } from "@/lib/acesso";
 import { supabaseConfigurado } from "@/lib/supabase/config";
 import { criarClienteServidor } from "@/lib/supabase/server";
@@ -56,15 +69,17 @@ export default async function PaginaLocais({ searchParams }: { searchParams: Pro
         </Cartao>
       )}
 
-      <Tabela colunas={["Local", "Situação", ""]} vazio="Nenhum local de estoque cadastrado ainda.">
-        {locais.map((l) => (
-          <tr key={l.id}>
-            <Celula className="font-medium">{l.nome}</Celula>
-            <Celula>{l.ativo ? <Etiqueta cor="sucesso">Ativo</Etiqueta> : <Etiqueta>Inativo</Etiqueta>}</Celula>
-            <Celula className="text-right">{pode(acesso, TELA, "editar") && <LinkAcao href={`?editar=${l.id}`}>Editar</LinkAcao>}</Celula>
-          </tr>
-        ))}
-      </Tabela>
+      <Filtro atalhos={[ATALHO_SITUACAO]}>
+        <Tabela colunas={["Local", "Situação", ""]} vazio="Nenhum local de estoque cadastrado ainda.">
+          {locais.map((l) => (
+            <tr key={l.id} data-tags={l.ativo ? "ativo" : "inativo"}>
+              <Celula className="font-medium">{l.nome}</Celula>
+              <Celula>{l.ativo ? <Etiqueta cor="sucesso">Ativo</Etiqueta> : <Etiqueta>Inativo</Etiqueta>}</Celula>
+              <Celula className="text-right">{pode(acesso, TELA, "editar") && <LinkAcao href={`?editar=${l.id}`}>Editar</LinkAcao>}</Celula>
+            </tr>
+          ))}
+        </Tabela>
+      </Filtro>
     </div>
   );
 }

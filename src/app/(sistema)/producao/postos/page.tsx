@@ -1,7 +1,20 @@
 import { Plus } from "lucide-react";
 import Link from "next/link";
+import { ATALHO_SITUACAO, Filtro } from "@/components/filtro";
 import { FormAcao } from "@/components/form-acao";
-import { CabecalhoTela, Campo, Cartao, Celula, Etiqueta, LinkAcao, SemAcesso, Tabela, estiloBotao, estiloBotaoSecundario, estiloCampo } from "@/components/ui";
+import {
+  CabecalhoTela,
+  Campo,
+  Cartao,
+  Celula,
+  Etiqueta,
+  LinkAcao,
+  SemAcesso,
+  Tabela,
+  estiloBotao,
+  estiloBotaoSecundario,
+  estiloCampo,
+} from "@/components/ui";
 import { carregarAcesso, pode } from "@/lib/acesso";
 import { formatarMoeda, formatarNumero } from "@/lib/formato";
 import { supabaseConfigurado } from "@/lib/supabase/config";
@@ -49,7 +62,12 @@ export default async function PaginaPostos({ searchParams }: { searchParams: Pro
                 <input name="custo_hora" inputMode="decimal" defaultValue={emEdicao?.custo_hora ?? 0} className={estiloCampo} />
               </Campo>
               <Campo rotulo="Capacidade (horas por dia)" dica="Usado no sequenciamento da produção.">
-                <input name="capacidade_horas_dia" inputMode="decimal" defaultValue={emEdicao?.capacidade_horas_dia ?? 8} className={estiloCampo} />
+                <input
+                  name="capacidade_horas_dia"
+                  inputMode="decimal"
+                  defaultValue={emEdicao?.capacidade_horas_dia ?? 8}
+                  className={estiloCampo}
+                />
               </Campo>
             </div>
             <div className="flex items-center justify-between gap-4">
@@ -65,17 +83,19 @@ export default async function PaginaPostos({ searchParams }: { searchParams: Pro
         </Cartao>
       )}
 
-      <Tabela colunas={["Posto", "Custo hora", "Capacidade", "Situação", ""]} vazio="Nenhum posto de trabalho cadastrado ainda.">
-        {postos.map((p) => (
-          <tr key={p.id}>
-            <Celula className="font-medium">{p.nome}</Celula>
-            <Celula className="tabular-nums">{formatarMoeda(p.custo_hora)}</Celula>
-            <Celula className="tabular-nums">{formatarNumero(p.capacidade_horas_dia)} h/dia</Celula>
-            <Celula>{p.ativo ? <Etiqueta cor="sucesso">Ativo</Etiqueta> : <Etiqueta>Inativo</Etiqueta>}</Celula>
-            <Celula className="text-right">{pode(acesso, TELA, "editar") && <LinkAcao href={`?editar=${p.id}`}>Editar</LinkAcao>}</Celula>
-          </tr>
-        ))}
-      </Tabela>
+      <Filtro atalhos={[ATALHO_SITUACAO]}>
+        <Tabela colunas={["Posto", "Custo hora", "Capacidade", "Situação", ""]} vazio="Nenhum posto de trabalho cadastrado ainda.">
+          {postos.map((p) => (
+            <tr key={p.id} data-tags={p.ativo ? "ativo" : "inativo"}>
+              <Celula className="font-medium">{p.nome}</Celula>
+              <Celula className="tabular-nums">{formatarMoeda(p.custo_hora)}</Celula>
+              <Celula className="tabular-nums">{formatarNumero(p.capacidade_horas_dia)} h/dia</Celula>
+              <Celula>{p.ativo ? <Etiqueta cor="sucesso">Ativo</Etiqueta> : <Etiqueta>Inativo</Etiqueta>}</Celula>
+              <Celula className="text-right">{pode(acesso, TELA, "editar") && <LinkAcao href={`?editar=${p.id}`}>Editar</LinkAcao>}</Celula>
+            </tr>
+          ))}
+        </Tabela>
+      </Filtro>
     </div>
   );
 }

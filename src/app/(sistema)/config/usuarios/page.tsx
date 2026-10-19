@@ -1,6 +1,18 @@
 import Link from "next/link";
+import { Filtro } from "@/components/filtro";
 import { FormAcao } from "@/components/form-acao";
-import { CabecalhoTela, Campo, Cartao, Celula, Etiqueta, LinkAcao, SemAcesso, Tabela, estiloBotaoSecundario, estiloCampo } from "@/components/ui";
+import {
+  CabecalhoTela,
+  Campo,
+  Cartao,
+  Celula,
+  Etiqueta,
+  LinkAcao,
+  SemAcesso,
+  Tabela,
+  estiloBotaoSecundario,
+  estiloCampo,
+} from "@/components/ui";
 import { carregarAcesso, pode } from "@/lib/acesso";
 import { formatarData } from "@/lib/formato";
 import { supabaseConfigurado } from "@/lib/supabase/config";
@@ -53,8 +65,8 @@ export default async function PaginaUsuarios({ searchParams }: { searchParams: P
       <CabecalhoTela codigo={TELA} />
 
       <p className="rounded-xl bg-primaria-suave px-4 py-2.5 text-sm text-primaria">
-        O login de uma pessoa nova é criado no Supabase (Authentication → Users → Add user). Ele aparece aqui como
-        &quot;aguardando liberação&quot;; escolha o perfil, os CNPJs e libere o acesso.
+        O login de uma pessoa nova é criado no Supabase (Authentication → Users → Add user). Ele aparece aqui como &quot;aguardando
+        liberação&quot;; escolha o perfil, os CNPJs e libere o acesso.
       </p>
 
       {emEdicao && (
@@ -81,7 +93,9 @@ export default async function PaginaUsuarios({ searchParams }: { searchParams: P
             </div>
             <fieldset className="space-y-2 text-sm">
               <legend className="text-texto-suave">CNPJs que a pessoa enxerga</legend>
-              <p className="text-xs text-texto-suave">Perfis com acesso a todas as empresas, como a Diretoria, enxergam todos os CNPJs mesmo sem marcar.</p>
+              <p className="text-xs text-texto-suave">
+                Perfis com acesso a todas as empresas, como a Diretoria, enxergam todos os CNPJs mesmo sem marcar.
+              </p>
               {empresas.length === 0 && <p className="text-texto-suave">Nenhuma empresa cadastrada ainda.</p>}
               <div className="flex flex-wrap gap-4">
                 {empresas.map((e) => (
@@ -116,28 +130,45 @@ export default async function PaginaUsuarios({ searchParams }: { searchParams: P
         </p>
       )}
 
-      <Tabela colunas={["Nome", "E-mail", "Perfil", "CNPJs", "Situação", "Desde", ""]} vazio="Nenhum usuário ainda.">
-        {ordenados.map((u) => {
-          const perfil = nomePerfil(u.perfil_id);
-          return (
-            <tr key={u.id}>
-              <Celula className="font-medium">{u.nome}</Celula>
-              <Celula className="text-texto-suave">{u.email}</Celula>
-              <Celula>{perfil?.nome ?? <span className="text-texto-suave">—</span>}</Celula>
-              <Celula className="text-texto-suave">
-                {perfil?.todas_empresas
-                  ? "Todos"
-                  : u.usuario_empresas.map((ue) => nomeEmpresa(ue.empresa_id)).filter(Boolean).join(", ") || "—"}
-              </Celula>
-              <Celula>{u.ativo ? <Etiqueta cor="sucesso">Liberado</Etiqueta> : <Etiqueta cor="alerta">Aguardando liberação</Etiqueta>}</Celula>
-              <Celula className="text-texto-suave">{formatarData(u.criado_em)}</Celula>
-              <Celula className="text-right">
-                {pode(acesso, TELA, "editar") && <LinkAcao href={`?editar=${u.id}`}>{u.ativo ? "Editar" : "Liberar"}</LinkAcao>}
-              </Celula>
-            </tr>
-          );
-        })}
-      </Tabela>
+      <Filtro
+        atalhos={[
+          {
+            rotulo: "Situação",
+            opcoes: [
+              { valor: "liberado", rotulo: "Liberados" },
+              { valor: "aguardando", rotulo: "Aguardando liberação" },
+            ],
+          },
+        ]}
+      >
+        <Tabela colunas={["Nome", "E-mail", "Perfil", "CNPJs", "Situação", "Desde", ""]} vazio="Nenhum usuário ainda.">
+          {ordenados.map((u) => {
+            const perfil = nomePerfil(u.perfil_id);
+            return (
+              <tr key={u.id} data-tags={u.ativo ? "liberado" : "aguardando"}>
+                <Celula className="font-medium">{u.nome}</Celula>
+                <Celula className="text-texto-suave">{u.email}</Celula>
+                <Celula>{perfil?.nome ?? <span className="text-texto-suave">—</span>}</Celula>
+                <Celula className="text-texto-suave">
+                  {perfil?.todas_empresas
+                    ? "Todos"
+                    : u.usuario_empresas
+                        .map((ue) => nomeEmpresa(ue.empresa_id))
+                        .filter(Boolean)
+                        .join(", ") || "—"}
+                </Celula>
+                <Celula>
+                  {u.ativo ? <Etiqueta cor="sucesso">Liberado</Etiqueta> : <Etiqueta cor="alerta">Aguardando liberação</Etiqueta>}
+                </Celula>
+                <Celula className="text-texto-suave">{formatarData(u.criado_em)}</Celula>
+                <Celula className="text-right">
+                  {pode(acesso, TELA, "editar") && <LinkAcao href={`?editar=${u.id}`}>{u.ativo ? "Editar" : "Liberar"}</LinkAcao>}
+                </Celula>
+              </tr>
+            );
+          })}
+        </Tabela>
+      </Filtro>
     </div>
   );
 }

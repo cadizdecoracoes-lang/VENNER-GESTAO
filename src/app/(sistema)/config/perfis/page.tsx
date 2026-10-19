@@ -1,7 +1,20 @@
 import { Plus } from "lucide-react";
 import Link from "next/link";
+import { Filtro } from "@/components/filtro";
 import { FormAcao } from "@/components/form-acao";
-import { CabecalhoTela, Campo, Cartao, Celula, Etiqueta, LinkAcao, SemAcesso, Tabela, estiloBotao, estiloBotaoSecundario, estiloCampo } from "@/components/ui";
+import {
+  CabecalhoTela,
+  Campo,
+  Cartao,
+  Celula,
+  Etiqueta,
+  LinkAcao,
+  SemAcesso,
+  Tabela,
+  estiloBotao,
+  estiloBotaoSecundario,
+  estiloCampo,
+} from "@/components/ui";
 import { carregarAcesso, pode } from "@/lib/acesso";
 import { MENU, PAINEL } from "@/lib/menu";
 import { ACOES } from "@/lib/rotulos";
@@ -34,10 +47,10 @@ async function carregar() {
 
 function MatrizPermissoes({ marcadas, travada }: { marcadas: Set<string>; travada: boolean }) {
   return (
-    <div className="overflow-x-auto rounded-xl border border-borda">
+    <div className="overflow-x-auto">
       <table className="w-full text-sm">
         <thead>
-          <tr className="border-b border-borda text-left text-xs uppercase tracking-wide text-texto-suave">
+          <tr className="text-left text-xs text-texto-suave">
             <th className="px-4 py-2 font-medium">Tela</th>
             {Object.values(ACOES).map((a) => (
               <th key={a} className="px-3 py-2 text-center font-medium">
@@ -47,8 +60,8 @@ function MatrizPermissoes({ marcadas, travada }: { marcadas: Set<string>; travad
           </tr>
         </thead>
         {GRUPOS.map((g) => (
-          <tbody key={g.titulo} className="divide-y divide-borda border-b border-borda last:border-0">
-            <tr className="bg-fundo">
+          <tbody key={g.titulo} className="divide-y divide-borda/70">
+            <tr className="bg-fundo/70">
               <td colSpan={6} className="px-4 py-1.5 text-xs font-medium text-texto-suave">
                 {g.titulo}
               </td>
@@ -109,7 +122,13 @@ export default async function PaginaPerfis({ searchParams }: { searchParams: Pro
             emEdicao &&
             !travada &&
             pode(acesso, TELA, "excluir") && (
-              <FormAcao acao={excluirPerfil.bind(null, emEdicao.id)} rotulo="Excluir perfil" enviando="Excluindo..." secundario confirmar={`Excluir o perfil ${emEdicao.nome}?`} />
+              <FormAcao
+                acao={excluirPerfil.bind(null, emEdicao.id)}
+                rotulo="Excluir perfil"
+                enviando="Excluindo..."
+                secundario
+                confirmar={`Excluir o perfil ${emEdicao.nome}?`}
+              />
             )
           }
         >
@@ -131,7 +150,7 @@ export default async function PaginaPerfis({ searchParams }: { searchParams: Pro
               <p className="text-sm text-texto-suave">
                 {travada
                   ? "Este perfil tem acesso total e enxerga todos os CNPJs. As permissões dele não podem ser retiradas, para o sistema nunca ficar sem quem o administre."
-                  : "Marque o que este perfil pode fazer em cada tela. Sem \"Ver\", a tela some do menu."}
+                  : 'Marque o que este perfil pode fazer em cada tela. Sem "Ver", a tela some do menu.'}
               </p>
               <MatrizPermissoes marcadas={marcadas} travada={travada} />
             </div>
@@ -144,22 +163,26 @@ export default async function PaginaPerfis({ searchParams }: { searchParams: Pro
         </Cartao>
       )}
 
-      <Tabela colunas={["Perfil", "Descrição", "Telas", "Usuários", ""]} vazio="Nenhum perfil cadastrado ainda.">
-        {perfis.map((p) => {
-          const telas = new Set(p.perfil_permissoes.filter((x) => x.acao === "ver").map((x) => x.tela_codigo)).size;
-          return (
-            <tr key={p.id}>
-              <Celula className="font-medium">
-                {p.nome} {p.todas_empresas && <Etiqueta cor="primaria">Acesso total</Etiqueta>}
-              </Celula>
-              <Celula className="text-texto-suave">{p.descricao ?? "—"}</Celula>
-              <Celula className="tabular-nums">{telas}</Celula>
-              <Celula className="tabular-nums">{qtdUsuarios(p.id)}</Celula>
-              <Celula className="text-right">{pode(acesso, TELA, "editar") && <LinkAcao href={`?editar=${p.id}`}>Editar</LinkAcao>}</Celula>
-            </tr>
-          );
-        })}
-      </Tabela>
+      <Filtro>
+        <Tabela colunas={["Perfil", "Descrição", "Telas", "Usuários", ""]} vazio="Nenhum perfil cadastrado ainda.">
+          {perfis.map((p) => {
+            const telas = new Set(p.perfil_permissoes.filter((x) => x.acao === "ver").map((x) => x.tela_codigo)).size;
+            return (
+              <tr key={p.id}>
+                <Celula className="font-medium">
+                  {p.nome} {p.todas_empresas && <Etiqueta cor="primaria">Acesso total</Etiqueta>}
+                </Celula>
+                <Celula className="text-texto-suave">{p.descricao ?? "—"}</Celula>
+                <Celula className="tabular-nums">{telas}</Celula>
+                <Celula className="tabular-nums">{qtdUsuarios(p.id)}</Celula>
+                <Celula className="text-right">
+                  {pode(acesso, TELA, "editar") && <LinkAcao href={`?editar=${p.id}`}>Editar</LinkAcao>}
+                </Celula>
+              </tr>
+            );
+          })}
+        </Tabela>
+      </Filtro>
     </div>
   );
 }

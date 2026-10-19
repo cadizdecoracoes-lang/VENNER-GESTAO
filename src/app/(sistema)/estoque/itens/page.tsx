@@ -1,7 +1,20 @@
-import { Plus, Search } from "lucide-react";
+import { Plus } from "lucide-react";
 import Link from "next/link";
+import { ATALHO_SITUACAO, Filtro } from "@/components/filtro";
 import { FormAcao } from "@/components/form-acao";
-import { CabecalhoTela, Campo, Cartao, Celula, Etiqueta, LinkAcao, SemAcesso, Tabela, estiloBotao, estiloBotaoSecundario, estiloCampo } from "@/components/ui";
+import {
+  CabecalhoTela,
+  Campo,
+  Cartao,
+  Celula,
+  Etiqueta,
+  LinkAcao,
+  SemAcesso,
+  Tabela,
+  estiloBotao,
+  estiloBotaoSecundario,
+  estiloCampo,
+} from "@/components/ui";
 import { carregarAcesso, pode } from "@/lib/acesso";
 import { formatarMoeda, formatarNumero } from "@/lib/formato";
 import { TIPOS_COM_FICHA, TIPOS_ITEM, type TipoItem } from "@/lib/rotulos";
@@ -25,21 +38,16 @@ type Item = {
 
 type Unidade = { sigla: string; descricao: string };
 
-type Filtros = { q?: string; tipo?: string; editar?: string; novo?: string };
+type Filtros = { editar?: string; novo?: string };
 
-async function carregar({ q, tipo }: Filtros) {
+async function carregar() {
   if (!supabaseConfigurado) return { itens: [] as Item[], unidades: [{ sigla: "UN", descricao: "Unidade" }] as Unidade[] };
   const supabase = await criarClienteServidor();
-  let consulta = supabase
+  const consulta = supabase
     .from("itens")
     .select("id, codigo, descricao, tipo, unidade, estoque_minimo, prazo_reposicao_dias, custo_medio, ativo")
     .order("codigo")
-    .limit(500);
-  if (q) {
-    const termo = q.replace(/[%,()]/g, " ").trim();
-    consulta = consulta.or(`codigo.ilike.%${termo}%,descricao.ilike.%${termo}%`);
-  }
-  if (tipo && tipo in TIPOS_ITEM) consulta = consulta.eq("tipo", tipo);
+    .limit(2000);
   const [{ data: itens }, { data: unidades }] = await Promise.all([
     consulta,
     supabase.from("unidades").select("sigla, descricao").order("sigla"),
@@ -52,7 +60,7 @@ export default async function PaginaItens({ searchParams }: { searchParams: Prom
   if (!pode(acesso, TELA, "ver")) return <SemAcesso codigo={TELA} />;
 
   const filtros = await searchParams;
-  const { itens, unidades } = await carregar(filtros);
+  const { itens, unidades } = await carregar();
   let emEdicao = filtros.editar ? itens.find((i) => i.id === filtros.editar) : undefined;
   if (filtros.editar && !emEdicao && supabaseConfigurado) {
     // O item pode estar fora do filtro atual.
@@ -112,7 +120,12 @@ export default async function PaginaItens({ searchParams }: { searchParams: Prom
                 <input name="estoque_minimo" inputMode="decimal" defaultValue={emEdicao?.estoque_minimo ?? 0} className={estiloCampo} />
               </Campo>
               <Campo rotulo="Prazo de reposição (dias)" dica="Usado pelo MRP para saber quando comprar.">
-                <input name="prazo_reposicao_dias" inputMode="numeric" defaultValue={emEdicao?.prazo_reposicao_dias ?? 0} className={estiloCampo} />
+                <input
+                  name="prazo_reposicao_dias"
+                  inputMode="numeric"
+                  defaultValue={emEdicao?.prazo_reposicao_dias ?? 0}
+                  className={estiloCampo}
+                />
               </Campo>
               <Campo rotulo="Custo médio (R$)" dica="Base do custo padrão da ficha técnica. Será atualizado pelas compras.">
                 <input name="custo_medio" inputMode="decimal" defaultValue={emEdicao?.custo_medio ?? 0} className={estiloCampo} />
@@ -131,44 +144,33 @@ export default async function PaginaItens({ searchParams }: { searchParams: Prom
         </Cartao>
       )}
 
-      <form className="flex flex-wrap items-center gap-2">
-        <div className="relative">
-          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-texto-suave" />
-          <input name="q" defaultValue={filtros.q} placeholder="Buscar por código ou descrição" className={`${estiloCampo} w-72 pl-9`} />
-        </div>
-        <select name="tipo" defaultValue={filtros.tipo ?? ""} className={`${estiloCampo} w-48`}>
-          <option value="">Todos os tipos</option>
-          {Object.entries(TIPOS_ITEM).map(([v, r]) => (
-            <option key={v} value={v}>
-              {r}
-            </option>
-          ))}
-        </select>
-        <button className={estiloBotaoSecundario}>Filtrar</button>
-      </form>
-
-      <Tabela
-        colunas={["Código", "Descrição", "Tipo", "Un.", "Estoque mín.", "Reposição", "Custo médio", ""]}
-        vazio={filtros.q || filtros.tipo ? "Nenhum item encontrado com esse filtro." : "Nenhum item cadastrado ainda."}
+      <Filtro
+        atalhos={[{ rotulo: "Tipo", opcoes: Object.entries(TIPOS_ITEM).map(([valor, rotulo]) => ({ valor, rotulo })) }, ATALHO_SITUACAO]}
+        placeholder="Filtrar por código, descrição, tipo, unidade..."
       >
-        {itens.map((i) => (
-          <tr key={i.id} className={i.ativo ? "" : "text-texto-suave"}>
-            <Celula className="font-medium">{i.codigo}</Celula>
-            <Celula>
-              {i.descricao} {!i.ativo && <Etiqueta>Inativo</Etiqueta>}
-            </Celula>
-            <Celula>{TIPOS_ITEM[i.tipo]}</Celula>
-            <Celula>{i.unidade}</Celula>
-            <Celula className="tabular-nums">{formatarNumero(i.estoque_minimo)}</Celula>
-            <Celula className="tabular-nums">{i.prazo_reposicao_dias} dias</Celula>
-            <Celula className="tabular-nums">{formatarMoeda(i.custo_medio)}</Celula>
-            <Celula className="space-x-3 whitespace-nowrap text-right">
-              {verFicha && TIPOS_COM_FICHA.includes(i.tipo) && <LinkAcao href={`/producao/ficha-tecnica?item=${i.id}`}>Ficha</LinkAcao>}
-              {pode(acesso, TELA, "editar") && <LinkAcao href={`?editar=${i.id}`}>Editar</LinkAcao>}
-            </Celula>
-          </tr>
-        ))}
-      </Tabela>
+        <Tabela
+          colunas={["Código", "Descrição", "Tipo", "Un.", "Estoque mín.", "Reposição", "Custo médio", ""]}
+          vazio="Nenhum item cadastrado ainda."
+        >
+          {itens.map((i) => (
+            <tr key={i.id} data-tags={`${i.tipo} ${i.ativo ? "ativo" : "inativo"}`} className={i.ativo ? "" : "text-texto-suave"}>
+              <Celula className="whitespace-nowrap font-medium">{i.codigo}</Celula>
+              <Celula>
+                {i.descricao} {!i.ativo && <Etiqueta>Inativo</Etiqueta>}
+              </Celula>
+              <Celula>{TIPOS_ITEM[i.tipo]}</Celula>
+              <Celula>{i.unidade}</Celula>
+              <Celula className="tabular-nums">{formatarNumero(i.estoque_minimo)}</Celula>
+              <Celula className="tabular-nums">{i.prazo_reposicao_dias} dias</Celula>
+              <Celula className="tabular-nums">{formatarMoeda(i.custo_medio)}</Celula>
+              <Celula className="space-x-3 whitespace-nowrap text-right">
+                {verFicha && TIPOS_COM_FICHA.includes(i.tipo) && <LinkAcao href={`/producao/ficha-tecnica?item=${i.id}`}>Ficha</LinkAcao>}
+                {pode(acesso, TELA, "editar") && <LinkAcao href={`?editar=${i.id}`}>Editar</LinkAcao>}
+              </Celula>
+            </tr>
+          ))}
+        </Tabela>
+      </Filtro>
     </div>
   );
 }

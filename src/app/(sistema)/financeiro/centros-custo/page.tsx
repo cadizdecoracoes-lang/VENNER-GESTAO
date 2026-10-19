@@ -1,7 +1,20 @@
 import { Plus } from "lucide-react";
 import Link from "next/link";
+import { ATALHO_SITUACAO, Filtro } from "@/components/filtro";
 import { FormAcao } from "@/components/form-acao";
-import { CabecalhoTela, Campo, Cartao, Celula, Etiqueta, LinkAcao, SemAcesso, Tabela, estiloBotao, estiloBotaoSecundario, estiloCampo } from "@/components/ui";
+import {
+  CabecalhoTela,
+  Campo,
+  Cartao,
+  Celula,
+  Etiqueta,
+  LinkAcao,
+  SemAcesso,
+  Tabela,
+  estiloBotao,
+  estiloBotaoSecundario,
+  estiloCampo,
+} from "@/components/ui";
 import { carregarAcesso, pode } from "@/lib/acesso";
 import { supabaseConfigurado } from "@/lib/supabase/config";
 import { criarClienteServidor } from "@/lib/supabase/server";
@@ -61,16 +74,18 @@ export default async function PaginaCentrosCusto({ searchParams }: { searchParam
         </Cartao>
       )}
 
-      <Tabela colunas={["Código", "Nome", "Situação", ""]} vazio="Nenhum centro de custo cadastrado ainda.">
-        {centros.map((c) => (
-          <tr key={c.id}>
-            <Celula className="font-medium">{c.codigo}</Celula>
-            <Celula>{c.nome}</Celula>
-            <Celula>{c.ativo ? <Etiqueta cor="sucesso">Ativo</Etiqueta> : <Etiqueta>Inativo</Etiqueta>}</Celula>
-            <Celula className="text-right">{pode(acesso, TELA, "editar") && <LinkAcao href={`?editar=${c.id}`}>Editar</LinkAcao>}</Celula>
-          </tr>
-        ))}
-      </Tabela>
+      <Filtro atalhos={[ATALHO_SITUACAO]}>
+        <Tabela colunas={["Código", "Nome", "Situação", ""]} vazio="Nenhum centro de custo cadastrado ainda.">
+          {centros.map((c) => (
+            <tr key={c.id} data-tags={c.ativo ? "ativo" : "inativo"}>
+              <Celula className="font-medium">{c.codigo}</Celula>
+              <Celula>{c.nome}</Celula>
+              <Celula>{c.ativo ? <Etiqueta cor="sucesso">Ativo</Etiqueta> : <Etiqueta>Inativo</Etiqueta>}</Celula>
+              <Celula className="text-right">{pode(acesso, TELA, "editar") && <LinkAcao href={`?editar=${c.id}`}>Editar</LinkAcao>}</Celula>
+            </tr>
+          ))}
+        </Tabela>
+      </Filtro>
     </div>
   );
 }

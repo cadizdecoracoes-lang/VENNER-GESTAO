@@ -5,13 +5,13 @@ import { telaPorCodigo } from "@/lib/menu";
 // Peças visuais comuns às telas de cadastro.
 
 export const estiloCampo =
-  "w-full rounded-lg border border-borda bg-superficie px-3 py-2 text-sm outline-none focus:border-primaria disabled:bg-fundo disabled:text-texto-suave";
+  "w-full rounded-lg border border-borda bg-superficie px-3 py-2 text-sm outline-none transition-colors focus:border-primaria disabled:bg-fundo disabled:text-texto-suave";
 
 export const estiloBotao =
   "inline-flex items-center gap-1.5 rounded-lg bg-primaria px-3 py-2 text-sm font-medium text-white hover:opacity-90 disabled:opacity-60";
 
 export const estiloBotaoSecundario =
-  "inline-flex items-center gap-1.5 rounded-lg border border-borda bg-superficie px-3 py-2 text-sm text-texto hover:bg-fundo";
+  "inline-flex items-center gap-1.5 rounded-lg bg-superficie px-3 py-2 text-sm text-texto shadow-[0_0_0_1px_var(--color-borda)] hover:bg-fundo";
 
 export function CabecalhoTela({ codigo, children }: { codigo: string; children?: React.ReactNode }) {
   const { tela, grupo } = telaPorCodigo(codigo);
@@ -29,9 +29,9 @@ export function CabecalhoTela({ codigo, children }: { codigo: string; children?:
 
 export function Cartao({ titulo, children, acoes }: { titulo?: string; children: React.ReactNode; acoes?: React.ReactNode }) {
   return (
-    <section className="rounded-2xl border border-borda bg-superficie">
+    <section className="rounded-2xl bg-superficie shadow-[0_1px_3px_rgba(16,24,40,0.06)]">
       {(titulo || acoes) && (
-        <div className="flex items-center justify-between gap-2 border-b border-borda px-5 py-3">
+        <div className="flex items-center justify-between gap-2 px-5 pt-4">
           {titulo && <h2 className="font-medium">{titulo}</h2>}
           {acoes}
         </div>
@@ -41,7 +41,17 @@ export function Cartao({ titulo, children, acoes }: { titulo?: string; children:
   );
 }
 
-export function Campo({ rotulo, dica, children, className }: { rotulo: string; dica?: string; children: React.ReactNode; className?: string }) {
+export function Campo({
+  rotulo,
+  dica,
+  children,
+  className,
+}: {
+  rotulo: string;
+  dica?: string;
+  children: React.ReactNode;
+  className?: string;
+}) {
   return (
     <label className={`block space-y-1 text-sm ${className ?? ""}`}>
       <span className="text-texto-suave">{rotulo}</span>
@@ -62,25 +72,36 @@ export function Etiqueta({ cor = "neutra", children }: { cor?: keyof typeof CORE
   return <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${CORES[cor]}`}>{children}</span>;
 }
 
-export function Tabela({ colunas, children, vazio }: { colunas: string[]; children: React.ReactNode; vazio?: string }) {
+// `embutida`: dentro de um Cartão, sem fundo e sombra próprios.
+export function Tabela({
+  colunas,
+  children,
+  vazio,
+  embutida = false,
+}: {
+  colunas: string[];
+  children: React.ReactNode;
+  vazio?: string;
+  embutida?: boolean;
+}) {
   const temLinhas = Array.isArray(children) ? children.length > 0 : !!children;
   return (
-    <div className="overflow-x-auto rounded-2xl border border-borda bg-superficie">
+    <div className={`overflow-x-auto ${embutida ? "-mx-1" : "rounded-2xl bg-superficie shadow-[0_1px_3px_rgba(16,24,40,0.06)]"}`}>
       <table className="w-full text-sm">
         <thead>
-          <tr className="border-b border-borda text-left text-xs uppercase tracking-wide text-texto-suave">
+          <tr className="text-left text-xs text-texto-suave">
             {colunas.map((c, i) => (
-              <th key={i} className="px-4 py-2.5 font-medium">
+              <th key={i} className="px-4 pb-2 pt-3 font-medium">
                 {c}
               </th>
             ))}
           </tr>
         </thead>
-        <tbody className="divide-y divide-borda">
+        <tbody className="divide-y divide-borda/70 [&>tr:not([data-vazio])]:transition-colors [&>tr:not([data-vazio]):hover]:bg-fundo/70">
           {temLinhas ? (
             children
           ) : (
-            <tr>
+            <tr data-vazio>
               <td colSpan={colunas.length} className="px-4 py-8 text-center text-texto-suave">
                 {vazio ?? "Nenhum cadastro ainda."}
               </td>
@@ -93,7 +114,7 @@ export function Tabela({ colunas, children, vazio }: { colunas: string[]; childr
 }
 
 export function Celula({ children, className }: { children?: React.ReactNode; className?: string }) {
-  return <td className={`px-4 py-2.5 ${className ?? ""}`}>{children}</td>;
+  return <td className={`px-4 py-3 ${className ?? ""}`}>{children}</td>;
 }
 
 export function LinkAcao({ href, children }: { href: string; children: React.ReactNode }) {
@@ -108,7 +129,7 @@ export function SemAcesso({ codigo }: { codigo: string }) {
   return (
     <div className="space-y-6">
       <CabecalhoTela codigo={codigo} />
-      <div className="flex items-center gap-3 rounded-2xl border border-borda bg-superficie p-6 text-texto-suave">
+      <div className="flex items-center gap-3 rounded-2xl bg-superficie p-6 text-texto-suave shadow-[0_1px_3px_rgba(16,24,40,0.06)]">
         <Lock size={20} />
         <span>Seu perfil não tem acesso a esta tela. Fale com a diretoria se precisar dela.</span>
       </div>
