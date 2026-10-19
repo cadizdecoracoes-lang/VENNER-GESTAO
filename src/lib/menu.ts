@@ -88,6 +88,7 @@ export const MENU: GrupoMenu[] = [
     icone: Landmark,
     telas: [
       tela("financeiro.pagar", "Contas a pagar", "Títulos a pagar por CNPJ."),
+      tela("financeiro.notas_fornecedor", "Notas de fornecedores", "XML ou PDF da nota do fornecedor: gera as contas a pagar e a entrada no estoque."),
       tela("financeiro.receber", "Contas a receber", "Títulos a receber por CNPJ."),
       tela("financeiro.conciliacao", "Conciliação bancária", "Extrato do banco casado com os lançamentos."),
       tela("financeiro.fluxo_caixa", "Fluxo de caixa", "Realizado (conciliado) e projetado, por CNPJ e consolidado."),

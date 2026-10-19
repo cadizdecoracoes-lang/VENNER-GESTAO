@@ -3,7 +3,7 @@
 
 create function pg_temp.esperar(condicao boolean, mensagem text) returns void language plpgsql as $$
 begin
-  if not condicao then raise exception 'FALHOU: %', mensagem; end if;
+  if not coalesce(condicao, false) then raise exception 'FALHOU: %', mensagem; end if;
   raise notice 'ok: %', mensagem;
 end $$;
 
