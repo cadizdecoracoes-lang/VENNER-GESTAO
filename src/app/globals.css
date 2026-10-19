@@ -1,0 +1,29 @@
+@import "tailwindcss";
+
+/* Paleta suave: azul acinzentado como cor principal, verde e âmbar só para status. */
+@theme {
+  --color-fundo: #f6f7f9;
+  --color-superficie: #ffffff;
+  --color-lateral: #eef1f5;
+  --color-borda: #e2e6ec;
+  --color-texto: #1f2a37;
+  --color-texto-suave: #5f6b7a;
+  --color-primaria: #4a6fa5;
+  --color-primaria-suave: #e3ebf6;
+  --color-sucesso: #3f8f6b;
+  --color-alerta: #b7791f;
+  --color-perigo: #b54a4a;
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  background: var(--color-fundo);
+  color: var(--color-texto);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
