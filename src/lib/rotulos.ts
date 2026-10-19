@@ -59,3 +59,32 @@ export const ACOES = {
   aprovar: "Aprovar",
   excluir: "Excluir",
 } as const;
+
+export const TIPOS_CONTA_BANCARIA = {
+  corrente: "Conta corrente",
+  poupanca: "Poupança",
+  aplicacao: "Aplicação",
+  caixa: "Caixa (dinheiro)",
+} as const;
+export type TipoContaBancaria = keyof typeof TIPOS_CONTA_BANCARIA;
+
+export const TIPOS_PLANO_CONTA = {
+  receita: "Receita",
+  despesa: "Despesa",
+} as const;
+export type TipoPlanoConta = keyof typeof TIPOS_PLANO_CONTA;
+
+export const TIPOS_EVENTO_FOLHA = {
+  provento: "Provento",
+  desconto: "Desconto",
+  informativo: "Informativo",
+} as const;
+export type TipoEventoFolha = keyof typeof TIPOS_EVENTO_FOLHA;
+
+export const FORMAS_CALCULO = {
+  valor: "Valor (R$)",
+  percentual: "Percentual (%)",
+  horas: "Horas",
+  dias: "Dias",
+} as const;
+export type FormaCalculo = keyof typeof FORMAS_CALCULO;

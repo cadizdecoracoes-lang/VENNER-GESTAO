@@ -2,26 +2,13 @@ import { Clock, LogOut } from "lucide-react";
 import { AbasProvider } from "@/components/abas";
 import { BarraAbas } from "@/components/barra-abas";
 import { MenuLateral } from "@/components/menu-lateral";
-import { SeletorEmpresa, type EmpresaResumo } from "@/components/seletor-empresa";
+import { SeletorEmpresa } from "@/components/seletor-empresa";
 import { carregarAcesso, telasVisiveis } from "@/lib/acesso";
-import { supabaseConfigurado } from "@/lib/supabase/config";
-import { criarClienteServidor } from "@/lib/supabase/server";
+import { carregarEmpresas, empresaSelecionada } from "@/lib/empresa";
 import { sair } from "../login/actions";
 
-async function carregarEmpresas(): Promise<EmpresaResumo[]> {
-  if (!supabaseConfigurado) return [];
-  const supabase = await criarClienteServidor();
-  // A RLS devolve só as empresas que o perfil do usuário pode ver.
-  const { data } = await supabase
-    .from("empresas")
-    .select("id, nome_fantasia, razao_social")
-    .eq("ativa", true)
-    .order("nome_fantasia");
-  return (data ?? []).map((e) => ({ id: e.id as string, nome: (e.nome_fantasia ?? e.razao_social) as string }));
-}
-
 export default async function LayoutSistema({ children }: { children: React.ReactNode }) {
-  const [acesso, empresas] = await Promise.all([carregarAcesso(), carregarEmpresas()]);
+  const [acesso, empresas, selecionada] = await Promise.all([carregarAcesso(), carregarEmpresas(), empresaSelecionada()]);
   const { email } = acesso;
 
   return (
@@ -31,7 +18,7 @@ export default async function LayoutSistema({ children }: { children: React.Reac
         <div className="flex min-w-0 flex-1 flex-col">
           <BarraAbas />
           <header className="flex h-12 items-center justify-end gap-4 border-b border-borda bg-superficie px-6">
-            <SeletorEmpresa empresas={empresas} />
+            <SeletorEmpresa empresas={empresas} valor={selecionada?.id ?? null} />
             {email ? (
               <form action={sair} className="flex items-center gap-2 text-sm text-texto-suave">
                 <span>{email}</span>

@@ -91,6 +91,9 @@ export const MENU: GrupoMenu[] = [
       tela("financeiro.receber", "Contas a receber", "Títulos a receber por CNPJ."),
       tela("financeiro.conciliacao", "Conciliação bancária", "Extrato do banco casado com os lançamentos."),
       tela("financeiro.fluxo_caixa", "Fluxo de caixa", "Realizado (conciliado) e projetado, por CNPJ e consolidado."),
+      tela("financeiro.contas_bancarias", "Contas bancárias", "Contas de cada CNPJ, com saldo inicial para a conciliação."),
+      tela("financeiro.categorias", "Categorias financeiras", "Plano de contas: receitas e despesas em árvore, comuns a todo o grupo."),
+      tela("financeiro.centros_custo", "Centros de custo", "Áreas do grupo para separar as despesas."),
     ],
   },
   {
@@ -102,6 +105,7 @@ export const MENU: GrupoMenu[] = [
       tela("rh.ponto", "Ponto e escalas", "Escalas, marcações, horas extras e faltas."),
       tela("rh.ferias", "Férias e 13º", "Períodos aquisitivos, programação e provisões."),
       tela("rh.folha", "Conferência da folha", "Holerite calculado comparado com o da contabilidade."),
+      tela("rh.eventos", "Eventos do holerite", "Proventos, descontos e informativos, com incidência de INSS, FGTS e IRRF."),
     ],
   },
   {
