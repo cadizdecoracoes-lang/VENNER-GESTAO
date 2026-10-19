@@ -1,7 +1,20 @@
 import { Check, Plus } from "lucide-react";
 import Link from "next/link";
+import { ATALHO_SITUACAO, Filtro } from "@/components/filtro";
 import { FormAcao } from "@/components/form-acao";
-import { CabecalhoTela, Campo, Cartao, Celula, Etiqueta, LinkAcao, SemAcesso, Tabela, estiloBotao, estiloBotaoSecundario, estiloCampo } from "@/components/ui";
+import {
+  CabecalhoTela,
+  Campo,
+  Cartao,
+  Celula,
+  Etiqueta,
+  LinkAcao,
+  SemAcesso,
+  Tabela,
+  estiloBotao,
+  estiloBotaoSecundario,
+  estiloCampo,
+} from "@/components/ui";
 import { carregarAcesso, pode } from "@/lib/acesso";
 import { FORMAS_CALCULO, TIPOS_EVENTO_FOLHA, type FormaCalculo, type TipoEventoFolha } from "@/lib/rotulos";
 import { supabaseConfigurado } from "@/lib/supabase/config";
@@ -36,7 +49,11 @@ async function carregar(): Promise<Evento[]> {
 const COR_TIPO = { provento: "sucesso", desconto: "alerta", informativo: "neutra" } as const;
 
 function Marca({ sim }: { sim: boolean }) {
-  return sim ? <Check size={16} className="mx-auto text-sucesso" aria-label="Sim" /> : <span className="block text-center text-texto-suave">—</span>;
+  return sim ? (
+    <Check size={16} className="mx-auto text-sucesso" aria-label="Sim" />
+  ) : (
+    <span className="block text-center text-texto-suave">—</span>
+  );
 }
 
 export default async function PaginaEventos({ searchParams }: { searchParams: Promise<{ editar?: string; novo?: string }> }) {
@@ -121,31 +138,38 @@ export default async function PaginaEventos({ searchParams }: { searchParams: Pr
         </Cartao>
       )}
 
-      <Tabela colunas={["Código", "Evento", "Tipo", "Informado em", "INSS", "FGTS", "IRRF", ""]} vazio="Nenhum evento cadastrado ainda.">
-        {eventos.map((e) => (
-          <tr key={e.id} className={e.ativo ? "" : "text-texto-suave"}>
-            <Celula className="font-medium tabular-nums">{e.codigo}</Celula>
-            <Celula>
-              {e.descricao} {!e.ativo && <Etiqueta>Inativo</Etiqueta>}
-              {e.observacao && <span className="block text-xs text-texto-suave">{e.observacao}</span>}
-            </Celula>
-            <Celula>
-              <Etiqueta cor={COR_TIPO[e.tipo]}>{TIPOS_EVENTO_FOLHA[e.tipo]}</Etiqueta>
-            </Celula>
-            <Celula>{FORMAS_CALCULO[e.forma_calculo]}</Celula>
-            <Celula>
-              <Marca sim={e.incide_inss} />
-            </Celula>
-            <Celula>
-              <Marca sim={e.incide_fgts} />
-            </Celula>
-            <Celula>
-              <Marca sim={e.incide_irrf} />
-            </Celula>
-            <Celula className="text-right">{pode(acesso, TELA, "editar") && <LinkAcao href={`?editar=${e.id}`}>Editar</LinkAcao>}</Celula>
-          </tr>
-        ))}
-      </Tabela>
+      <Filtro
+        atalhos={[
+          { rotulo: "Tipo", opcoes: Object.entries(TIPOS_EVENTO_FOLHA).map(([valor, rotulo]) => ({ valor, rotulo })) },
+          ATALHO_SITUACAO,
+        ]}
+      >
+        <Tabela colunas={["Código", "Evento", "Tipo", "Informado em", "INSS", "FGTS", "IRRF", ""]} vazio="Nenhum evento cadastrado ainda.">
+          {eventos.map((e) => (
+            <tr key={e.id} data-tags={`${e.tipo} ${e.ativo ? "ativo" : "inativo"}`} className={e.ativo ? "" : "text-texto-suave"}>
+              <Celula className="font-medium tabular-nums">{e.codigo}</Celula>
+              <Celula>
+                {e.descricao} {!e.ativo && <Etiqueta>Inativo</Etiqueta>}
+                {e.observacao && <span className="block text-xs text-texto-suave">{e.observacao}</span>}
+              </Celula>
+              <Celula>
+                <Etiqueta cor={COR_TIPO[e.tipo]}>{TIPOS_EVENTO_FOLHA[e.tipo]}</Etiqueta>
+              </Celula>
+              <Celula>{FORMAS_CALCULO[e.forma_calculo]}</Celula>
+              <Celula>
+                <Marca sim={e.incide_inss} />
+              </Celula>
+              <Celula>
+                <Marca sim={e.incide_fgts} />
+              </Celula>
+              <Celula>
+                <Marca sim={e.incide_irrf} />
+              </Celula>
+              <Celula className="text-right">{pode(acesso, TELA, "editar") && <LinkAcao href={`?editar=${e.id}`}>Editar</LinkAcao>}</Celula>
+            </tr>
+          ))}
+        </Tabela>
+      </Filtro>
     </div>
   );
 }

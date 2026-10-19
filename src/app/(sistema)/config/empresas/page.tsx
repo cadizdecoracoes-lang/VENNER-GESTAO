@@ -1,7 +1,20 @@
 import { Plus } from "lucide-react";
 import Link from "next/link";
+import { Filtro } from "@/components/filtro";
 import { FormAcao } from "@/components/form-acao";
-import { CabecalhoTela, Campo, Cartao, Celula, Etiqueta, LinkAcao, SemAcesso, Tabela, estiloBotao, estiloBotaoSecundario, estiloCampo } from "@/components/ui";
+import {
+  CabecalhoTela,
+  Campo,
+  Cartao,
+  Celula,
+  Etiqueta,
+  LinkAcao,
+  SemAcesso,
+  Tabela,
+  estiloBotao,
+  estiloBotaoSecundario,
+  estiloCampo,
+} from "@/components/ui";
 import { carregarAcesso, pode } from "@/lib/acesso";
 import { formatarCnpj, formatarData } from "@/lib/formato";
 import { ATIVIDADES, REGIMES, type Regime } from "@/lib/rotulos";
@@ -137,27 +150,40 @@ export default async function PaginaEmpresas({ searchParams }: { searchParams: P
         </Cartao>
       )}
 
-      <Tabela colunas={["Empresa", "CNPJ", "Regime", "Atividades", "Situação", ""]} vazio="Nenhuma empresa cadastrada ainda.">
-        {empresas.map((e) => (
-          <tr key={e.id}>
-            <Celula>
-              <div className="font-medium">{e.nome_fantasia ?? e.razao_social}</div>
-              {e.nome_fantasia && <div className="text-xs text-texto-suave">{e.razao_social}</div>}
-            </Celula>
-            <Celula className="tabular-nums">{formatarCnpj(e.cnpj)}</Celula>
-            <Celula>
-              <Etiqueta cor={e.regime_tributario === "simples_nacional" ? "sucesso" : "primaria"}>{REGIMES[e.regime_tributario]}</Etiqueta>
-            </Celula>
-            <Celula className="text-texto-suave">
-              {e.atividades.map((a) => ATIVIDADES[a as keyof typeof ATIVIDADES] ?? a).join(", ") || "—"}
-            </Celula>
-            <Celula>{e.ativa ? <Etiqueta cor="sucesso">Ativa</Etiqueta> : <Etiqueta>Inativa</Etiqueta>}</Celula>
-            <Celula className="text-right">
-              {pode(acesso, TELA, "editar") && <LinkAcao href={`?editar=${e.id}`}>Editar</LinkAcao>}
-            </Celula>
-          </tr>
-        ))}
-      </Tabela>
+      <Filtro
+        atalhos={[
+          { rotulo: "Regime", opcoes: Object.entries(REGIMES).map(([valor, rotulo]) => ({ valor, rotulo })) },
+          {
+            rotulo: "Situação",
+            opcoes: [
+              { valor: "ativo", rotulo: "Ativas" },
+              { valor: "inativo", rotulo: "Inativas" },
+            ],
+          },
+        ]}
+      >
+        <Tabela colunas={["Empresa", "CNPJ", "Regime", "Atividades", "Situação", ""]} vazio="Nenhuma empresa cadastrada ainda.">
+          {empresas.map((e) => (
+            <tr key={e.id} data-tags={`${e.regime_tributario} ${e.ativa ? "ativo" : "inativo"}`}>
+              <Celula>
+                <div className="font-medium">{e.nome_fantasia ?? e.razao_social}</div>
+                {e.nome_fantasia && <div className="text-xs text-texto-suave">{e.razao_social}</div>}
+              </Celula>
+              <Celula className="tabular-nums">{formatarCnpj(e.cnpj)}</Celula>
+              <Celula>
+                <Etiqueta cor={e.regime_tributario === "simples_nacional" ? "sucesso" : "primaria"}>
+                  {REGIMES[e.regime_tributario]}
+                </Etiqueta>
+              </Celula>
+              <Celula className="text-texto-suave">
+                {e.atividades.map((a) => ATIVIDADES[a as keyof typeof ATIVIDADES] ?? a).join(", ") || "—"}
+              </Celula>
+              <Celula>{e.ativa ? <Etiqueta cor="sucesso">Ativa</Etiqueta> : <Etiqueta>Inativa</Etiqueta>}</Celula>
+              <Celula className="text-right">{pode(acesso, TELA, "editar") && <LinkAcao href={`?editar=${e.id}`}>Editar</LinkAcao>}</Celula>
+            </tr>
+          ))}
+        </Tabela>
+      </Filtro>
     </div>
   );
 }

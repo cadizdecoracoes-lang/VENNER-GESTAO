@@ -1,7 +1,20 @@
 import { Plus } from "lucide-react";
 import Link from "next/link";
+import { ATALHO_SITUACAO, Filtro } from "@/components/filtro";
 import { FormAcao } from "@/components/form-acao";
-import { CabecalhoTela, Campo, Cartao, Celula, Etiqueta, LinkAcao, SemAcesso, Tabela, estiloBotao, estiloBotaoSecundario, estiloCampo } from "@/components/ui";
+import {
+  CabecalhoTela,
+  Campo,
+  Cartao,
+  Celula,
+  Etiqueta,
+  LinkAcao,
+  SemAcesso,
+  Tabela,
+  estiloBotao,
+  estiloBotaoSecundario,
+  estiloCampo,
+} from "@/components/ui";
 import { carregarAcesso, pode } from "@/lib/acesso";
 import { TIPOS_PLANO_CONTA, type TipoPlanoConta } from "@/lib/rotulos";
 import { supabaseConfigurado } from "@/lib/supabase/config";
@@ -61,11 +74,29 @@ export default async function PaginaCategorias({ searchParams }: { searchParams:
       </CabecalhoTela>
 
       {mostrarForm && (
-        <Cartao titulo={emEdicao ? `Editar ${emEdicao.codigo} ${emEdicao.nome}` : paiNovo ? `Nova categoria abaixo de ${paiNovo.codigo} ${paiNovo.nome}` : "Nova categoria principal"}>
-          <FormAcao key={emEdicao?.id ?? paiNovo?.id ?? "novo"} acao={salvarPlanoConta.bind(null, emEdicao?.id ?? null)} rotulo="Salvar" className="space-y-4">
+        <Cartao
+          titulo={
+            emEdicao
+              ? `Editar ${emEdicao.codigo} ${emEdicao.nome}`
+              : paiNovo
+                ? `Nova categoria abaixo de ${paiNovo.codigo} ${paiNovo.nome}`
+                : "Nova categoria principal"
+          }
+        >
+          <FormAcao
+            key={emEdicao?.id ?? paiNovo?.id ?? "novo"}
+            acao={salvarPlanoConta.bind(null, emEdicao?.id ?? null)}
+            rotulo="Salvar"
+            className="space-y-4"
+          >
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
               <Campo rotulo="Código" dica="Números separados por ponto, ex.: 4.07.">
-                <input name="codigo" required defaultValue={emEdicao?.codigo ?? (paiNovo ? proximoCodigo(paiNovo, contas) : "")} className={estiloCampo} />
+                <input
+                  name="codigo"
+                  required
+                  defaultValue={emEdicao?.codigo ?? (paiNovo ? proximoCodigo(paiNovo, contas) : "")}
+                  className={estiloCampo}
+                />
               </Campo>
               <Campo rotulo="Nome" className="lg:col-span-3">
                 <input name="nome" required defaultValue={emEdicao?.nome} className={estiloCampo} />
@@ -106,34 +137,41 @@ export default async function PaginaCategorias({ searchParams }: { searchParams:
       )}
 
       <p className="text-sm text-texto-suave">
-        As contas a pagar e a receber usam as categorias sem subcategorias (as mais detalhadas). As categorias em
-        negrito somam as de baixo nos relatórios. Elas valem para todo o grupo; o CNPJ fica em cada lançamento.
+        As contas a pagar e a receber usam as categorias sem subcategorias (as mais detalhadas). As categorias em negrito somam as de baixo
+        nos relatórios. Elas valem para todo o grupo; o CNPJ fica em cada lançamento.
       </p>
 
-      <Tabela colunas={["Código", "Categoria", "Tipo", ""]} vazio="Nenhuma categoria cadastrada ainda.">
-        {contas.map((c) => {
-          const nivel = c.codigo.split(".").length - 1;
-          const agrupadora = temFilhas.has(c.id);
-          return (
-            <tr key={c.id} className={c.ativa ? "" : "text-texto-suave"}>
-              <Celula className={`tabular-nums ${agrupadora ? "font-semibold" : ""}`}>{c.codigo}</Celula>
-              <Celula>
-                <span style={{ paddingLeft: `${nivel * 1.25}rem` }} className={agrupadora ? "font-semibold" : ""}>
-                  {c.nome}
-                </span>{" "}
-                {!c.ativa && <Etiqueta>Inativa</Etiqueta>}
-              </Celula>
-              <Celula>
-                <Etiqueta cor={c.tipo === "receita" ? "sucesso" : "neutra"}>{TIPOS_PLANO_CONTA[c.tipo]}</Etiqueta>
-              </Celula>
-              <Celula className="space-x-3 whitespace-nowrap text-right">
-                {podeCriar && <LinkAcao href={`?novo=1&pai=${c.id}`}>Nova subcategoria</LinkAcao>}
-                {pode(acesso, TELA, "editar") && <LinkAcao href={`?editar=${c.id}`}>Editar</LinkAcao>}
-              </Celula>
-            </tr>
-          );
-        })}
-      </Tabela>
+      <Filtro
+        atalhos={[
+          { rotulo: "Tipo", opcoes: Object.entries(TIPOS_PLANO_CONTA).map(([valor, rotulo]) => ({ valor, rotulo })) },
+          ATALHO_SITUACAO,
+        ]}
+      >
+        <Tabela colunas={["Código", "Categoria", "Tipo", ""]} vazio="Nenhuma categoria cadastrada ainda.">
+          {contas.map((c) => {
+            const nivel = c.codigo.split(".").length - 1;
+            const agrupadora = temFilhas.has(c.id);
+            return (
+              <tr key={c.id} data-tags={`${c.tipo} ${c.ativa ? "ativo" : "inativo"}`} className={c.ativa ? "" : "text-texto-suave"}>
+                <Celula className={`tabular-nums ${agrupadora ? "font-semibold" : ""}`}>{c.codigo}</Celula>
+                <Celula>
+                  <span style={{ paddingLeft: `${nivel * 1.25}rem` }} className={agrupadora ? "font-semibold" : ""}>
+                    {c.nome}
+                  </span>{" "}
+                  {!c.ativa && <Etiqueta>Inativa</Etiqueta>}
+                </Celula>
+                <Celula>
+                  <Etiqueta cor={c.tipo === "receita" ? "sucesso" : "neutra"}>{TIPOS_PLANO_CONTA[c.tipo]}</Etiqueta>
+                </Celula>
+                <Celula className="space-x-3 whitespace-nowrap text-right">
+                  {podeCriar && <LinkAcao href={`?novo=1&pai=${c.id}`}>Nova subcategoria</LinkAcao>}
+                  {pode(acesso, TELA, "editar") && <LinkAcao href={`?editar=${c.id}`}>Editar</LinkAcao>}
+                </Celula>
+              </tr>
+            );
+          })}
+        </Tabela>
+      </Filtro>
     </div>
   );
 }

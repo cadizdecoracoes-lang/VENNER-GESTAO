@@ -1,7 +1,19 @@
-import { ArrowLeft, CheckCircle2, CopyPlus, Search, Trash2 } from "lucide-react";
+import { ArrowLeft, CheckCircle2, CopyPlus, Trash2 } from "lucide-react";
 import Link from "next/link";
+import { Filtro } from "@/components/filtro";
 import { FormAcao } from "@/components/form-acao";
-import { CabecalhoTela, Campo, Cartao, Celula, Etiqueta, LinkAcao, SemAcesso, Tabela, estiloBotaoSecundario, estiloCampo } from "@/components/ui";
+import {
+  CabecalhoTela,
+  Campo,
+  Cartao,
+  Celula,
+  Etiqueta,
+  LinkAcao,
+  SemAcesso,
+  Tabela,
+  estiloBotaoSecundario,
+  estiloCampo,
+} from "@/components/ui";
 import { carregarAcesso, pode, type Acesso } from "@/lib/acesso";
 import { custoComponente, custoOperacao, custoPadrao, quantidadeComPerda } from "@/lib/custo";
 import { formatarData, formatarMoeda, formatarNumero } from "@/lib/formato";
@@ -22,8 +34,21 @@ import {
 const TELA = "producao.ficha_tecnica";
 
 type Item = { id: string; codigo: string; descricao: string; tipo: TipoItem; unidade: string; custo_medio: number; ativo: boolean };
-type Ficha = { id: string; item_id: string; versao: number; status: StatusFicha; vigencia_inicio: string | null; quantidade_base: number; observacao: string | null };
-type Componente = { id: string; quantidade: number; perda_percentual: number; item: Pick<Item, "codigo" | "descricao" | "unidade" | "custo_medio" | "tipo"> };
+type Ficha = {
+  id: string;
+  item_id: string;
+  versao: number;
+  status: StatusFicha;
+  vigencia_inicio: string | null;
+  quantidade_base: number;
+  observacao: string | null;
+};
+type Componente = {
+  id: string;
+  quantidade: number;
+  perda_percentual: number;
+  item: Pick<Item, "codigo" | "descricao" | "unidade" | "custo_medio" | "tipo">;
+};
 type Operacao = {
   id: string;
   sequencia: number;
@@ -37,31 +62,27 @@ type Posto = { id: string; nome: string };
 
 const COR_STATUS = { rascunho: "alerta", ativa: "sucesso", substituida: "neutra" } as const;
 
-export default async function PaginaFichaTecnica({ searchParams }: { searchParams: Promise<{ item?: string; versao?: string; q?: string }> }) {
+export default async function PaginaFichaTecnica({ searchParams }: { searchParams: Promise<{ item?: string; versao?: string }> }) {
   const acesso = await carregarAcesso();
   if (!pode(acesso, TELA, "ver")) return <SemAcesso codigo={TELA} />;
-  const { item, versao, q } = await searchParams;
-  return item ? <DetalheFicha acesso={acesso} itemId={item} versao={Number(versao) || undefined} /> : <ListaProdutos busca={q} />;
+  const { item, versao } = await searchParams;
+  return item ? <DetalheFicha acesso={acesso} itemId={item} versao={Number(versao) || undefined} /> : <ListaProdutos />;
 }
 
 // -----------------------------------------------------------------------------
 // Lista de produtos e subconjuntos, com a situação da ficha de cada um
 // -----------------------------------------------------------------------------
-async function ListaProdutos({ busca }: { busca?: string }) {
+async function ListaProdutos() {
   let itens: Item[] = [];
   let fichas: Pick<Ficha, "item_id" | "versao" | "status" | "vigencia_inicio">[] = [];
   if (supabaseConfigurado) {
     const supabase = await criarClienteServidor();
-    let consulta = supabase
+    const consulta = supabase
       .from("itens")
       .select("id, codigo, descricao, tipo, unidade, custo_medio, ativo")
       .in("tipo", TIPOS_COM_FICHA)
       .order("codigo")
-      .limit(500);
-    if (busca) {
-      const termo = busca.replace(/[%,()]/g, " ").trim();
-      consulta = consulta.or(`codigo.ilike.%${termo}%,descricao.ilike.%${termo}%`);
-    }
+      .limit(2000);
     const [r1, r2] = await Promise.all([
       consulta,
       supabase.from("fichas_tecnicas").select("item_id, versao, status, vigencia_inicio").in("status", ["ativa", "rascunho"]),
@@ -73,39 +94,50 @@ async function ListaProdutos({ busca }: { busca?: string }) {
   return (
     <div className="space-y-6">
       <CabecalhoTela codigo={TELA} />
-      <form className="relative w-fit">
-        <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-texto-suave" />
-        <input name="q" defaultValue={busca} placeholder="Buscar produto por código ou descrição" className={`${estiloCampo} w-80 pl-9`} />
-      </form>
-      <Tabela
-        colunas={["Código", "Produto", "Tipo", "Versão ativa", "Em revisão", ""]}
-        vazio={busca ? "Nenhum produto encontrado." : "Cadastre produtos acabados e subconjuntos na tela Itens para montar as fichas."}
+      <Filtro
+        atalhos={[
+          { rotulo: "Tipo", opcoes: TIPOS_COM_FICHA.map((valor) => ({ valor, rotulo: TIPOS_ITEM[valor] })) },
+          {
+            rotulo: "Ficha",
+            opcoes: [
+              { valor: "com_ficha", rotulo: "Com ficha ativa" },
+              { valor: "sem_ficha", rotulo: "Sem ficha ativa" },
+              { valor: "em_revisao", rotulo: "Em revisão" },
+            ],
+          },
+        ]}
+        placeholder="Filtrar por código ou descrição do produto"
       >
-        {itens.map((i) => {
-          const ativa = fichas.find((f) => f.item_id === i.id && f.status === "ativa");
-          const rascunho = fichas.find((f) => f.item_id === i.id && f.status === "rascunho");
-          return (
-            <tr key={i.id}>
-              <Celula className="font-medium">{i.codigo}</Celula>
-              <Celula>{i.descricao}</Celula>
-              <Celula>{TIPOS_ITEM[i.tipo]}</Celula>
-              <Celula>
-                {ativa ? (
-                  <span>
-                    v{ativa.versao} <span className="text-texto-suave">desde {formatarData(ativa.vigencia_inicio)}</span>
-                  </span>
-                ) : (
-                  <Etiqueta cor="alerta">Sem ficha ativa</Etiqueta>
-                )}
-              </Celula>
-              <Celula>{rascunho && <Etiqueta cor="alerta">v{rascunho.versao} em rascunho</Etiqueta>}</Celula>
-              <Celula className="text-right">
-                <LinkAcao href={`?item=${i.id}`}>Abrir</LinkAcao>
-              </Celula>
-            </tr>
-          );
-        })}
-      </Tabela>
+        <Tabela
+          colunas={["Código", "Produto", "Tipo", "Versão ativa", "Em revisão", ""]}
+          vazio="Cadastre produtos acabados e subconjuntos na tela Itens para montar as fichas."
+        >
+          {itens.map((i) => {
+            const ativa = fichas.find((f) => f.item_id === i.id && f.status === "ativa");
+            const rascunho = fichas.find((f) => f.item_id === i.id && f.status === "rascunho");
+            return (
+              <tr key={i.id} data-tags={[i.tipo, ativa ? "com_ficha" : "sem_ficha", rascunho ? "em_revisao" : ""].join(" ")}>
+                <Celula className="whitespace-nowrap font-medium">{i.codigo}</Celula>
+                <Celula>{i.descricao}</Celula>
+                <Celula>{TIPOS_ITEM[i.tipo]}</Celula>
+                <Celula>
+                  {ativa ? (
+                    <span>
+                      v{ativa.versao} <span className="text-texto-suave">desde {formatarData(ativa.vigencia_inicio)}</span>
+                    </span>
+                  ) : (
+                    <Etiqueta cor="alerta">Sem ficha ativa</Etiqueta>
+                  )}
+                </Celula>
+                <Celula>{rascunho && <Etiqueta cor="alerta">v{rascunho.versao} em rascunho</Etiqueta>}</Celula>
+                <Celula className="text-right">
+                  <LinkAcao href={`?item=${i.id}`}>Abrir</LinkAcao>
+                </Celula>
+              </tr>
+            );
+          })}
+        </Tabela>
+      </Filtro>
     </div>
   );
 }
@@ -136,8 +168,7 @@ async function DetalheFicha({ acesso, itemId, versao }: { acesso: Acesso; itemId
   }
   const fichas = (fichasDado ?? []) as Ficha[];
   const rascunho = fichas.find((f) => f.status === "rascunho");
-  const ficha =
-    fichas.find((f) => f.versao === versao) ?? rascunho ?? fichas.find((f) => f.status === "ativa") ?? fichas[0];
+  const ficha = fichas.find((f) => f.versao === versao) ?? rascunho ?? fichas.find((f) => f.status === "ativa") ?? fichas[0];
 
   const podeCriar = pode(acesso, TELA, "criar");
   const editavel = ficha?.status === "rascunho" && pode(acesso, TELA, "editar");
@@ -189,7 +220,15 @@ async function DetalheFicha({ acesso, itemId, versao }: { acesso: Acesso; itemId
             </h1>
           </div>
           {podeCriar && !rascunho && (
-            <FormAcao acao={criarVersao.bind(null, item.id)} rotulo={<><CopyPlus size={16} /> {fichas.length ? "Nova versão" : "Criar ficha técnica"}</>} enviando="Criando..." />
+            <FormAcao
+              acao={criarVersao.bind(null, item.id)}
+              rotulo={
+                <>
+                  <CopyPlus size={16} /> {fichas.length ? "Nova versão" : "Criar ficha técnica"}
+                </>
+              }
+              enviando="Criando..."
+            />
           )}
         </div>
         {fichas.length > 0 && (
@@ -218,20 +257,28 @@ async function DetalheFicha({ acesso, itemId, versao }: { acesso: Acesso; itemId
           <div className="space-y-6">
             {ficha.status !== "rascunho" && (
               <p className="rounded-xl bg-primaria-suave px-4 py-2.5 text-sm text-primaria">
-                {ficha.status === "ativa" ? "Esta é a versão em uso na produção" : "Versão substituída, mantida como histórico"}. Para mudar,
-                crie uma nova versão: ela começa como cópia da ativa e só passa a valer depois de aprovada.
+                {ficha.status === "ativa" ? "Esta é a versão em uso na produção" : "Versão substituída, mantida como histórico"}. Para
+                mudar, crie uma nova versão: ela começa como cópia da ativa e só passa a valer depois de aprovada.
               </p>
             )}
 
             <Cartao titulo="Componentes">
               <div className="space-y-4">
-                <Tabela colunas={["Código", "Componente", "Qtd.", "Perda", "Qtd. com perda", "Custo unit.", "Custo", ""]} vazio="Nenhum componente.">
+                <Tabela
+                  embutida
+                  colunas={["Código", "Componente", "Qtd.", "Perda", "Qtd. com perda", "Custo unit.", "Custo", ""]}
+                  vazio="Nenhum componente."
+                >
                   {componentes.map((c) => (
                     <tr key={c.id}>
-                      <Celula className="font-medium">{c.item.codigo}</Celula>
+                      <Celula className="whitespace-nowrap font-medium">{c.item.codigo}</Celula>
                       <Celula>
                         {c.item.descricao}
-                        {c.item.tipo === "subconjunto" && <span className="ml-2"><Etiqueta>Subconjunto</Etiqueta></span>}
+                        {c.item.tipo === "subconjunto" && (
+                          <span className="ml-2">
+                            <Etiqueta>Subconjunto</Etiqueta>
+                          </span>
+                        )}
                       </Celula>
                       <Celula className="tabular-nums">
                         {formatarNumero(c.quantidade)} {c.item.unidade}
@@ -242,14 +289,25 @@ async function DetalheFicha({ acesso, itemId, versao }: { acesso: Acesso; itemId
                       <Celula className="tabular-nums">{formatarMoeda(custoComponente({ ...c, custo_medio: c.item.custo_medio }))}</Celula>
                       <Celula className="text-right">
                         {editavel && (
-                          <FormAcao acao={removerComponente.bind(null, c.id)} rotulo={<Trash2 size={14} />} enviando="..." secundario confirmar={`Tirar ${c.item.codigo} da ficha?`} />
+                          <FormAcao
+                            acao={removerComponente.bind(null, c.id)}
+                            rotulo={<Trash2 size={14} />}
+                            enviando="..."
+                            secundario
+                            confirmar={`Tirar ${c.item.codigo} da ficha?`}
+                          />
                         )}
                       </Celula>
                     </tr>
                   ))}
                 </Tabela>
                 {editavel && (
-                  <FormAcao acao={adicionarComponente.bind(null, ficha.id)} rotulo="Adicionar" limpar className="flex flex-wrap items-end gap-3">
+                  <FormAcao
+                    acao={adicionarComponente.bind(null, ficha.id)}
+                    rotulo="Adicionar"
+                    limpar
+                    className="flex flex-wrap items-end gap-3"
+                  >
                     <Campo rotulo="Componente" className="min-w-64 flex-1">
                       <select name="componente_id" required defaultValue="" className={estiloCampo}>
                         <option value="" disabled>
@@ -275,7 +333,7 @@ async function DetalheFicha({ acesso, itemId, versao }: { acesso: Acesso; itemId
 
             <Cartao titulo="Roteiro de operações">
               <div className="space-y-4">
-                <Tabela colunas={["Seq.", "Operação", "Posto", "Preparação", "Execução", "Custo", ""]} vazio="Nenhuma operação.">
+                <Tabela embutida colunas={["Seq.", "Operação", "Posto", "Preparação", "Execução", "Custo", ""]} vazio="Nenhuma operação.">
                   {operacoes.map((o) => (
                     <tr key={o.id}>
                       <Celula className="tabular-nums">{o.sequencia}</Celula>
@@ -286,17 +344,31 @@ async function DetalheFicha({ acesso, itemId, versao }: { acesso: Acesso; itemId
                       <Celula>{o.posto?.nome ?? <span className="text-texto-suave">—</span>}</Celula>
                       <Celula className="tabular-nums">{formatarNumero(o.tempo_setup_min)} min</Celula>
                       <Celula className="tabular-nums">{formatarNumero(o.tempo_execucao_min)} min</Celula>
-                      <Celula className="tabular-nums">{formatarMoeda(custoOperacao({ ...o, custo_hora: o.posto?.custo_hora ?? 0 }))}</Celula>
+                      <Celula className="tabular-nums">
+                        {formatarMoeda(custoOperacao({ ...o, custo_hora: o.posto?.custo_hora ?? 0 }))}
+                      </Celula>
                       <Celula className="text-right">
                         {editavel && (
-                          <FormAcao acao={removerOperacao.bind(null, o.id)} rotulo={<Trash2 size={14} />} enviando="..." secundario confirmar={`Tirar a operação ${o.sequencia}?`} />
+                          <FormAcao
+                            acao={removerOperacao.bind(null, o.id)}
+                            rotulo={<Trash2 size={14} />}
+                            enviando="..."
+                            secundario
+                            confirmar={`Tirar a operação ${o.sequencia}?`}
+                          />
                         )}
                       </Celula>
                     </tr>
                   ))}
                 </Tabela>
                 {editavel && (
-                  <FormAcao key={proximaSequencia} acao={adicionarOperacao.bind(null, ficha.id)} rotulo="Adicionar" limpar className="space-y-3">
+                  <FormAcao
+                    key={proximaSequencia}
+                    acao={adicionarOperacao.bind(null, ficha.id)}
+                    rotulo="Adicionar"
+                    limpar
+                    className="space-y-3"
+                  >
                     <div className="flex flex-wrap items-end gap-3">
                       <Campo rotulo="Seq." className="w-20">
                         <input name="sequencia" required inputMode="numeric" defaultValue={proximaSequencia} className={estiloCampo} />
@@ -392,7 +464,11 @@ async function DetalheFicha({ acesso, itemId, versao }: { acesso: Acesso; itemId
                   {pode(acesso, TELA, "aprovar") ? (
                     <FormAcao
                       acao={ativarVersao.bind(null, ficha.id, item.id)}
-                      rotulo={<><CheckCircle2 size={16} /> Ativar versão {ficha.versao}</>}
+                      rotulo={
+                        <>
+                          <CheckCircle2 size={16} /> Ativar versão {ficha.versao}
+                        </>
+                      }
                       enviando="Ativando..."
                       confirmar={`Ativar a versão ${ficha.versao}? A versão em uso hoje passa a ser histórico.`}
                     />
@@ -402,7 +478,11 @@ async function DetalheFicha({ acesso, itemId, versao }: { acesso: Acesso; itemId
                   {pode(acesso, TELA, "excluir") && (
                     <FormAcao
                       acao={excluirRascunho.bind(null, ficha.id, item.id)}
-                      rotulo={<><Trash2 size={14} /> Descartar rascunho</>}
+                      rotulo={
+                        <>
+                          <Trash2 size={14} /> Descartar rascunho
+                        </>
+                      }
                       enviando="Descartando..."
                       secundario
                       confirmar="Descartar este rascunho? As alterações dele serão perdidas."

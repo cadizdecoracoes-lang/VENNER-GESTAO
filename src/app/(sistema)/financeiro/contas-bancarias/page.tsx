@@ -1,7 +1,21 @@
 import { Plus } from "lucide-react";
 import Link from "next/link";
+import { ATALHO_SITUACAO, Filtro } from "@/components/filtro";
 import { FormAcao } from "@/components/form-acao";
-import { CabecalhoTela, Campo, Cartao, Celula, Etiqueta, FaixaEmpresa, LinkAcao, SemAcesso, Tabela, estiloBotao, estiloBotaoSecundario, estiloCampo } from "@/components/ui";
+import {
+  CabecalhoTela,
+  Campo,
+  Cartao,
+  Celula,
+  Etiqueta,
+  FaixaEmpresa,
+  LinkAcao,
+  SemAcesso,
+  Tabela,
+  estiloBotao,
+  estiloBotaoSecundario,
+  estiloCampo,
+} from "@/components/ui";
 import { carregarAcesso, pode } from "@/lib/acesso";
 import { carregarEmpresas, empresaSelecionada } from "@/lib/empresa";
 import { formatarData, formatarMoeda } from "@/lib/formato";
@@ -94,7 +108,13 @@ export default async function PaginaContasBancarias({ searchParams }: { searchPa
                 </select>
               </Campo>
               <Campo rotulo="Código do banco" dica="3 números, ex.: 341.">
-                <input name="banco_codigo" inputMode="numeric" maxLength={3} defaultValue={emEdicao?.banco_codigo ?? ""} className={estiloCampo} />
+                <input
+                  name="banco_codigo"
+                  inputMode="numeric"
+                  maxLength={3}
+                  defaultValue={emEdicao?.banco_codigo ?? ""}
+                  className={estiloCampo}
+                />
               </Campo>
               <Campo rotulo="Banco">
                 <input name="banco_nome" defaultValue={emEdicao?.banco_nome ?? ""} className={estiloCampo} />
@@ -109,7 +129,13 @@ export default async function PaginaContasBancarias({ searchParams }: { searchPa
                 <input name="saldo_inicial" inputMode="decimal" defaultValue={emEdicao?.saldo_inicial ?? 0} className={estiloCampo} />
               </Campo>
               <Campo rotulo="Data do saldo inicial">
-                <input name="data_saldo_inicial" type="date" required defaultValue={emEdicao?.data_saldo_inicial ?? hoje} className={estiloCampo} />
+                <input
+                  name="data_saldo_inicial"
+                  type="date"
+                  required
+                  defaultValue={emEdicao?.data_saldo_inicial ?? hoje}
+                  className={estiloCampo}
+                />
               </Campo>
             </div>
             <div className="flex items-center justify-between gap-4">
@@ -128,35 +154,55 @@ export default async function PaginaContasBancarias({ searchParams }: { searchPa
       <FaixaEmpresa empresa={selecionada} />
 
       {blocos.length === 0 && (
-        <Tabela colunas={["Conta", "Banco", "Agência / conta", "Saldo inicial", ""]} vazio={selecionada ? "Nenhuma conta nesta empresa." : "Nenhuma conta bancária cadastrada ainda."}>
+        <Tabela
+          colunas={["Conta", "Banco", "Agência / conta", "Saldo inicial", ""]}
+          vazio={selecionada ? "Nenhuma conta nesta empresa." : "Nenhuma conta bancária cadastrada ainda."}
+        >
           {[]}
         </Tabela>
       )}
 
-      {blocos.map(({ empresa, contas: daEmpresa }) => (
-        <Cartao key={empresa.id} titulo={empresa.nome} acoes={<span className="text-sm tabular-nums text-texto-suave">Saldos iniciais: {formatarMoeda(soma(daEmpresa))}</span>}>
-          <Tabela colunas={["Conta", "Banco", "Agência / conta", "Saldo inicial", ""]}>
-            {daEmpresa.map((c) => (
-              <tr key={c.id} className={c.ativa ? "" : "text-texto-suave"}>
-                <Celula>
-                  <span className="font-medium">{c.nome}</span> {!c.ativa && <Etiqueta>Inativa</Etiqueta>}
-                  <span className="block text-xs text-texto-suave">{TIPOS_CONTA_BANCARIA[c.tipo]}</span>
-                </Celula>
-                <Celula>{[c.banco_codigo, c.banco_nome].filter(Boolean).join(" · ") || "—"}</Celula>
-                <Celula className="tabular-nums">{[c.agencia, c.conta].filter(Boolean).join(" / ") || "—"}</Celula>
-                <Celula className="whitespace-nowrap tabular-nums">
-                  {formatarMoeda(c.saldo_inicial)}
-                  <span className="block text-xs text-texto-suave">em {formatarData(c.data_saldo_inicial)}</span>
-                </Celula>
-                <Celula className="text-right">{pode(acesso, TELA, "editar") && <LinkAcao href={`?editar=${c.id}`}>Editar</LinkAcao>}</Celula>
-              </tr>
-            ))}
-          </Tabela>
-        </Cartao>
-      ))}
+      <Filtro
+        atalhos={[
+          { rotulo: "Tipo", opcoes: Object.entries(TIPOS_CONTA_BANCARIA).map(([valor, rotulo]) => ({ valor, rotulo })) },
+          ATALHO_SITUACAO,
+        ]}
+        placeholder="Filtrar por conta, banco, agência..."
+      >
+        <div className="space-y-6">
+          {blocos.map(({ empresa, contas: daEmpresa }) => (
+            <div key={empresa.id} data-bloco-filtro>
+              <Cartao
+                titulo={empresa.nome}
+                acoes={<span className="text-sm tabular-nums text-texto-suave">Saldos iniciais: {formatarMoeda(soma(daEmpresa))}</span>}
+              >
+                <Tabela embutida colunas={["Conta", "Banco", "Agência / conta", "Saldo inicial", ""]}>
+                  {daEmpresa.map((c) => (
+                    <tr key={c.id} data-tags={`${c.tipo} ${c.ativa ? "ativo" : "inativo"}`} className={c.ativa ? "" : "text-texto-suave"}>
+                      <Celula>
+                        <span className="font-medium">{c.nome}</span> {!c.ativa && <Etiqueta>Inativa</Etiqueta>}
+                        <span className="block text-xs text-texto-suave">{TIPOS_CONTA_BANCARIA[c.tipo]}</span>
+                      </Celula>
+                      <Celula>{[c.banco_codigo, c.banco_nome].filter(Boolean).join(" · ") || "—"}</Celula>
+                      <Celula className="tabular-nums">{[c.agencia, c.conta].filter(Boolean).join(" / ") || "—"}</Celula>
+                      <Celula className="whitespace-nowrap tabular-nums">
+                        {formatarMoeda(c.saldo_inicial)}
+                        <span className="block text-xs text-texto-suave">em {formatarData(c.data_saldo_inicial)}</span>
+                      </Celula>
+                      <Celula className="text-right">
+                        {pode(acesso, TELA, "editar") && <LinkAcao href={`?editar=${c.id}`}>Editar</LinkAcao>}
+                      </Celula>
+                    </tr>
+                  ))}
+                </Tabela>
+              </Cartao>
+            </div>
+          ))}
+        </div>
+      </Filtro>
 
       {!selecionada && blocos.length > 1 && (
-        <div className="flex justify-between rounded-2xl border border-borda bg-superficie px-5 py-3 font-medium">
+        <div className="flex justify-between rounded-2xl bg-superficie px-5 py-3 font-medium shadow-[0_1px_3px_rgba(16,24,40,0.06)]">
           <span>Saldos iniciais do grupo ({blocos.length} empresas)</span>
           <span className="tabular-nums">{formatarMoeda(soma(contas))}</span>
         </div>

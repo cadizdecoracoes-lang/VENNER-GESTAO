@@ -9,7 +9,7 @@ export function EmConstrucao({ tela, grupo }: { tela: Tela; grupo?: string }) {
         <h1 className="text-2xl font-semibold">{tela.titulo}</h1>
         <p className="mt-1 text-texto-suave">{tela.descricao}</p>
       </div>
-      <div className="flex items-center gap-3 rounded-2xl border border-dashed border-borda bg-superficie p-6 text-texto-suave">
+      <div className="flex items-center gap-3 rounded-2xl bg-superficie p-6 shadow-[0_1px_3px_rgba(16,24,40,0.06)] text-texto-suave">
         <Construction size={20} />
         <span>Esta tela será construída numa próxima etapa do plano.</span>
       </div>

@@ -17,7 +17,7 @@ export default async function LayoutSistema({ children }: { children: React.Reac
         <MenuLateral telas={telasVisiveis(acesso)} />
         <div className="flex min-w-0 flex-1 flex-col">
           <BarraAbas />
-          <header className="flex h-12 items-center justify-end gap-4 border-b border-borda bg-superficie px-6">
+          <header className="flex h-12 items-center justify-end gap-4 border-b border-borda/70 bg-superficie px-6">
             <SeletorEmpresa empresas={empresas} valor={selecionada?.id ?? null} />
             {email ? (
               <form action={sair} className="flex items-center gap-2 text-sm text-texto-suave">
