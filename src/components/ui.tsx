@@ -115,3 +115,20 @@ export function SemAcesso({ codigo }: { codigo: string }) {
     </div>
   );
 }
+
+// Diz de qual CNPJ são os dados da tela, conforme o seletor "Empresa" do topo.
+export function FaixaEmpresa({ empresa }: { empresa: { nome: string } | null }) {
+  return (
+    <p className="rounded-xl bg-primaria-suave px-4 py-2.5 text-sm text-primaria">
+      {empresa ? (
+        <>
+          Mostrando só <strong>{empresa.nome}</strong>. Para ver todas as empresas, escolha &quot;Grupo (consolidado)&quot; no topo.
+        </>
+      ) : (
+        <>
+          <strong>Consolidado do grupo</strong>, separado por empresa. Para ver uma empresa só, escolha o CNPJ no topo.
+        </>
+      )}
+    </p>
+  );
+}
