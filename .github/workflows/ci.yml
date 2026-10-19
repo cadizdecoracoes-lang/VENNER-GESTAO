@@ -18,6 +18,8 @@ jobs:
       - run: npm ci
       - run: npm run typecheck
       - run: npm run build
+      - name: Pacote para o Cloudflare
+        run: npm run cf:build
 
   banco:
     name: Banco (migrações e regras de acesso)
