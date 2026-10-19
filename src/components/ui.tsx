@@ -69,7 +69,7 @@ const CORES = {
 };
 
 export function Etiqueta({ cor = "neutra", children }: { cor?: keyof typeof CORES; children: React.ReactNode }) {
-  return <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${CORES[cor]}`}>{children}</span>;
+  return <span className={`inline-block whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-medium ${CORES[cor]}`}>{children}</span>;
 }
 
 // `embutida`: dentro de um Cartão, sem fundo e sombra próprios.

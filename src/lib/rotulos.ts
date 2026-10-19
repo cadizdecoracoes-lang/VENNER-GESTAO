@@ -88,3 +88,17 @@ export const FORMAS_CALCULO = {
   dias: "Dias",
 } as const;
 export type FormaCalculo = keyof typeof FORMAS_CALCULO;
+
+export const SITUACOES_TITULO = {
+  aberto: "Em aberto",
+  pago: "Pago",
+  cancelado: "Cancelado",
+} as const;
+export type SituacaoTitulo = keyof typeof SITUACOES_TITULO;
+
+export const ORIGENS_NOTA = {
+  xml: "XML",
+  pdf: "PDF",
+  manual: "Manual",
+} as const;
+export type OrigemNota = keyof typeof ORIGENS_NOTA;

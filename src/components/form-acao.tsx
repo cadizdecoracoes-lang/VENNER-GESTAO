@@ -12,6 +12,7 @@ export function FormAcao({
   enviando = "Salvando...",
   limpar = false,
   secundario = false,
+  discreto = false,
   confirmar,
   className,
   children,
@@ -21,6 +22,8 @@ export function FormAcao({
   enviando?: string;
   limpar?: boolean;
   secundario?: boolean;
+  // Botão em forma de link, para ações de linha de tabela (cancelar, estornar).
+  discreto?: boolean;
   confirmar?: string;
   className?: string;
   children?: React.ReactNode;
@@ -45,7 +48,13 @@ export function FormAcao({
     >
       {children}
       <div className="flex flex-wrap items-center gap-3">
-        <button type="submit" disabled={pendente} className={secundario ? estiloBotaoSecundario : estiloBotao}>
+        <button
+          type="submit"
+          disabled={pendente}
+          className={
+            discreto ? "text-sm text-texto-suave hover:text-perigo disabled:opacity-60" : secundario ? estiloBotaoSecundario : estiloBotao
+          }
+        >
           {pendente ? enviando : rotulo}
         </button>
         {estado.erro && <p className="text-sm text-perigo">{estado.erro}</p>}
