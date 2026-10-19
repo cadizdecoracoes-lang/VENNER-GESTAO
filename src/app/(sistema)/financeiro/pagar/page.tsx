@@ -1,6 +1,7 @@
 import { FileUp, Plus } from "lucide-react";
 import Link from "next/link";
 import { Filtro } from "@/components/filtro";
+import { FiltroPeriodo, lerPeriodo, type Periodo } from "@/components/periodo";
 import { FormAcao } from "@/components/form-acao";
 import {
   CabecalhoTela,
@@ -42,7 +43,8 @@ type Titulo = {
   plano_contas: { codigo: string; nome: string } | null;
   contas_bancarias: { nome: string } | null;
 };
-type Filtros = { novo?: string; pagar?: string };
+type Filtros = { novo?: string; pagar?: string; de?: string; ate?: string; por?: string };
+const DATAS_PERIODO = { vencimento: "Vencimento", data_pagamento: "Pagamento" };
 
 // Datas no fuso de Brasília, para "vencido" bater com o dia de quem usa.
 const hojeBrasil = () => new Date().toLocaleDateString("sv-SE", { timeZone: "America/Sao_Paulo" });
@@ -52,19 +54,23 @@ function somarDias(iso: string, dias: number) {
   return d.toISOString().slice(0, 10);
 }
 
-async function carregar(empresa: string | null): Promise<Titulo[]> {
+async function carregar(empresa: string | null, periodo: Periodo): Promise<Titulo[]> {
   if (!supabaseConfigurado) return [];
   const supabase = await criarClienteServidor();
-  // Em aberto: todos. Pagos e cancelados: só os últimos 120 dias.
-  const desde = somarDias(hojeBrasil(), -120);
   let consulta = supabase
     .from("contas_pagar")
     .select(
       "id, empresa_id, descricao, parcela, valor, vencimento, situacao, data_pagamento, valor_pago, nota_id, fornecedores(nome, nome_fantasia), plano_contas(codigo, nome), contas_bancarias(nome)",
     )
-    .or(`situacao.eq.aberto,vencimento.gte.${desde},data_pagamento.gte.${desde}`)
     .order("vencimento")
     .limit(3000);
+  if (periodo) {
+    consulta = consulta.gte(periodo.por, periodo.de).lte(periodo.por, periodo.ate);
+  } else {
+    // Sem período: tudo em aberto, e pagos ou cancelados dos últimos 120 dias.
+    const desde = somarDias(hojeBrasil(), -120);
+    consulta = consulta.or(`situacao.eq.aberto,vencimento.gte.${desde},data_pagamento.gte.${desde}`);
+  }
   if (empresa) consulta = consulta.eq("empresa_id", empresa);
   return ((await consulta).data ?? []) as unknown as Titulo[];
 }
@@ -87,7 +93,8 @@ export default async function PaginaContasPagar({ searchParams }: { searchParams
 
   const filtros = await searchParams;
   const [empresas, selecionada] = await Promise.all([carregarEmpresas(), empresaSelecionada()]);
-  const titulos = await carregar(selecionada?.id ?? null);
+  const periodo = lerPeriodo(filtros, Object.keys(DATAS_PERIODO));
+  const titulos = await carregar(selecionada?.id ?? null, periodo);
   const nomeEmpresa = new Map(empresas.map((e) => [e.id, e.nome]));
   const hoje = hojeBrasil();
   const semana = somarDias(hoje, 7);
@@ -96,6 +103,7 @@ export default async function PaginaContasPagar({ searchParams }: { searchParams
   const abertos = titulos.filter((t) => t.situacao === "aberto");
   const vencidos = abertos.filter((t) => t.vencimento < hoje);
   const proximos = abertos.filter((t) => t.vencimento >= hoje && t.vencimento <= semana);
+  const pagos = titulos.filter((t) => t.situacao === "pago");
   const pagosMes = titulos.filter((t) => t.situacao === "pago" && (t.data_pagamento ?? "") >= inicioMes);
   const soma = (l: Titulo[], campo: "valor" | "valor_pago" = "valor") => l.reduce((s, t) => s + Number(t[campo] ?? 0), 0);
 
@@ -240,11 +248,17 @@ export default async function PaginaContasPagar({ searchParams }: { searchParams
 
       <FaixaEmpresa empresa={selecionada} />
 
+      <FiltroPeriodo periodo={periodo} hoje={hoje} campos={DATAS_PERIODO} semPeriodo="Em aberto e recentes" />
+
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Resumo rotulo="Vencido" valor={soma(vencidos)} quantidade={vencidos.length} cor={vencidos.length ? "text-perigo" : ""} />
         <Resumo rotulo="Vence nos próximos 7 dias" valor={soma(proximos)} quantidade={proximos.length} />
-        <Resumo rotulo="Total em aberto" valor={soma(abertos)} quantidade={abertos.length} />
-        <Resumo rotulo="Pago neste mês" valor={soma(pagosMes, "valor_pago")} quantidade={pagosMes.length} cor="text-sucesso" />
+        <Resumo rotulo={periodo ? "Em aberto no período" : "Total em aberto"} valor={soma(abertos)} quantidade={abertos.length} />
+        {periodo ? (
+          <Resumo rotulo="Pago no período" valor={soma(pagos, "valor_pago")} quantidade={pagos.length} cor="text-sucesso" />
+        ) : (
+          <Resumo rotulo="Pago neste mês" valor={soma(pagosMes, "valor_pago")} quantidade={pagosMes.length} cor="text-sucesso" />
+        )}
       </div>
 
       <Filtro
@@ -317,7 +331,9 @@ export default async function PaginaContasPagar({ searchParams }: { searchParams
                     <div className="flex items-center justify-end gap-3">
                       {t.situacao === "aberto" && (
                         <>
-                          <LinkAcao href={`?pagar=${t.id}`}>Pagar</LinkAcao>
+                          <LinkAcao href={`?pagar=${t.id}${periodo ? `&de=${periodo.de}&ate=${periodo.ate}&por=${periodo.por}` : ""}`}>
+                            Pagar
+                          </LinkAcao>
                           <FormAcao
                             acao={cancelarConta.bind(null, t.id)}
                             rotulo="Cancelar"

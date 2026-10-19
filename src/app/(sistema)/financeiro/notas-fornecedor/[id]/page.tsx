@@ -152,6 +152,21 @@ export default async function PaginaNota({
               Produtos {formatarMoeda(n.valor_produtos)} · frete {formatarMoeda(n.valor_frete)} · desconto {formatarMoeda(n.valor_desconto)}
             </div>
           )}
+          {lista.length > 0 && (
+            <div className="sm:col-span-2 lg:col-span-4">
+              <dt className="text-texto-suave">Produtos da nota ({lista.length})</dt>
+              <dd>
+                {lista.map((l) => (
+                  <span key={l.id} className="mr-4 inline-block">
+                    {l.descricao}{" "}
+                    <span className="text-texto-suave">
+                      ({formatarNumero(l.quantidade)} {l.unidade})
+                    </span>
+                  </span>
+                ))}
+              </dd>
+            </div>
+          )}
           {n.chave && (
             <div className="text-xs text-texto-suave sm:col-span-2 lg:col-span-4">Chave {n.chave.replace(/(\d{4})/g, "$1 ").trim()}</div>
           )}
@@ -164,7 +179,7 @@ export default async function PaginaNota({
           titulo="Produtos e comparação com a compra anterior"
           acoes={faltam > 0 ? <Etiqueta cor="alerta">{faltam} sem vínculo</Etiqueta> : <Etiqueta cor="sucesso">Todos vinculados</Etiqueta>}
         >
-          <Tabela embutida colunas={["Produto do fornecedor", "Quantidade", "Valor unitário", "Compra anterior", "Item no sistema"]}>
+          <Tabela embutida colunas={["Produto na nota", "Quantidade", "Valor unitário", "Compra anterior deste produto", "Item da Venner"]}>
             {lista.map((l) => {
               const item = l.item_id ? porId.get(l.item_id) : undefined;
               const editando =
