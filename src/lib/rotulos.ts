@@ -32,3 +32,30 @@ export const STATUS_FICHA = {
   substituida: "Substituída",
 } as const;
 export type StatusFicha = keyof typeof STATUS_FICHA;
+
+export const TIPOS_PESSOA = {
+  juridica: "Pessoa jurídica (CNPJ)",
+  fisica: "Pessoa física (CPF)",
+} as const;
+export type TipoPessoa = keyof typeof TIPOS_PESSOA;
+
+export const CANAIS = {
+  venda_direta: "Venda direta",
+  mercado_livre: "Mercado Livre",
+  shopee: "Shopee",
+  outro: "Outro",
+} as const;
+export type Canal = keyof typeof CANAIS;
+
+export const UFS = [
+  "AC", "AL", "AM", "AP", "BA", "CE", "DF", "ES", "GO", "MA", "MG", "MS", "MT", "PA",
+  "PB", "PE", "PI", "PR", "RJ", "RN", "RO", "RR", "RS", "SC", "SE", "SP", "TO",
+] as const;
+
+export const ACOES = {
+  ver: "Ver",
+  criar: "Criar",
+  editar: "Editar",
+  aprovar: "Aprovar",
+  excluir: "Excluir",
+} as const;

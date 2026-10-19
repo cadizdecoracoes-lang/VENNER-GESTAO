@@ -16,8 +16,27 @@ export function cnpjValido(cnpj: string): boolean {
   return cnpj.endsWith(`${d1}${d2}`);
 }
 
+export function cpfValido(cpf: string): boolean {
+  if (!/^\d{11}$/.test(cpf) || /^(\d)\1{10}$/.test(cpf)) return false;
+  const digito = (base: string) => {
+    const soma = [...base].reduce((s, d, i) => s + Number(d) * (base.length + 1 - i), 0);
+    const resto = (soma * 10) % 11;
+    return resto === 10 ? 0 : resto;
+  };
+  const d1 = digito(cpf.slice(0, 9));
+  const d2 = digito(cpf.slice(0, 9) + d1);
+  return cpf.endsWith(`${d1}${d2}`);
+}
+
 export function formatarCnpj(cnpj: string): string {
   return cnpj.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, "$1.$2.$3/$4-$5");
+}
+
+// CNPJ ou CPF, conforme a quantidade de dígitos.
+export function formatarDocumento(documento: string | null): string {
+  if (!documento) return "—";
+  if (documento.length === 11) return documento.replace(/^(\d{3})(\d{3})(\d{3})(\d{2})$/, "$1.$2.$3-$4");
+  return formatarCnpj(documento);
 }
 
 const moeda = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });

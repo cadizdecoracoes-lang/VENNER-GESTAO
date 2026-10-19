@@ -60,6 +60,7 @@ export const MENU: GrupoMenu[] = [
       tela("estoque.saldos", "Saldos", "Saldo unificado do grupo por item e local."),
       tela("estoque.movimentos", "Movimentações", "Entradas, saídas e ajustes, cada um com o documento de origem."),
       tela("estoque.itens", "Itens", "Produtos acabados, subconjuntos e matérias-primas."),
+      tela("estoque.locais", "Locais de estoque", "Depósitos e áreas onde o estoque fica guardado."),
     ],
   },
   {

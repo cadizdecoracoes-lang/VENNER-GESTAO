@@ -1,0 +1,129 @@
+import { Plus, Search } from "lucide-react";
+import Link from "next/link";
+import { CamposPessoa } from "@/components/campos-pessoa";
+import { FormAcao } from "@/components/form-acao";
+import { CabecalhoTela, Campo, Cartao, Celula, Etiqueta, LinkAcao, SemAcesso, Tabela, estiloBotao, estiloBotaoSecundario, estiloCampo } from "@/components/ui";
+import { carregarAcesso, pode } from "@/lib/acesso";
+import { formatarDocumento } from "@/lib/formato";
+import type { DadosPessoa } from "@/lib/pessoa";
+import { CANAIS, type Canal } from "@/lib/rotulos";
+import { supabaseConfigurado } from "@/lib/supabase/config";
+import { criarClienteServidor } from "@/lib/supabase/server";
+import { salvarCliente } from "./actions";
+
+const TELA = "vendas.clientes";
+const CAMPOS = "id, tipo_pessoa, documento, nome, nome_fantasia, email, telefone, cidade, uf, observacao, ativo, canal";
+
+type Cliente = DadosPessoa & { id: string; canal: Canal };
+type Filtros = { q?: string; canal?: string; editar?: string; novo?: string };
+
+async function carregar({ q, canal }: Filtros): Promise<Cliente[]> {
+  if (!supabaseConfigurado) return [];
+  const supabase = await criarClienteServidor();
+  let consulta = supabase.from("clientes").select(CAMPOS).order("nome").limit(500);
+  if (q) {
+    const termo = q.replace(/[%,()]/g, " ").trim();
+    const digitos = termo.replace(/\D/g, "");
+    consulta = consulta.or(
+      [`nome.ilike.%${termo}%`, `nome_fantasia.ilike.%${termo}%`, ...(digitos ? [`documento.like.%${digitos}%`] : [])].join(","),
+    );
+  }
+  if (canal && canal in CANAIS) consulta = consulta.eq("canal", canal);
+  const { data } = await consulta;
+  return (data ?? []) as Cliente[];
+}
+
+async function buscar(id: string): Promise<Cliente | undefined> {
+  if (!supabaseConfigurado) return undefined;
+  const supabase = await criarClienteServidor();
+  const { data } = await supabase.from("clientes").select(CAMPOS).eq("id", id).maybeSingle();
+  return (data as Cliente | null) ?? undefined;
+}
+
+export default async function PaginaClientees({ searchParams }: { searchParams: Promise<Filtros> }) {
+  const acesso = await carregarAcesso();
+  if (!pode(acesso, TELA, "ver")) return <SemAcesso codigo={TELA} />;
+
+  const filtros = await searchParams;
+  const clientes = await carregar(filtros);
+  const emEdicao = filtros.editar ? (clientes.find((f) => f.id === filtros.editar) ?? (await buscar(filtros.editar))) : undefined;
+  const mostrarForm = (filtros.novo && pode(acesso, TELA, "criar")) || (emEdicao && pode(acesso, TELA, "editar"));
+
+  return (
+    <div className="space-y-6">
+      <CabecalhoTela codigo={TELA}>
+        {pode(acesso, TELA, "criar") && !mostrarForm && (
+          <Link href="?novo=1" className={estiloBotao}>
+            <Plus size={16} /> Novo cliente
+          </Link>
+        )}
+      </CabecalhoTela>
+
+      {mostrarForm && (
+        <Cartao titulo={emEdicao ? `Editar ${emEdicao.nome}` : "Novo cliente"}>
+          <FormAcao key={emEdicao?.id ?? "novo"} acao={salvarCliente.bind(null, emEdicao?.id ?? null)} rotulo="Salvar" className="space-y-4">
+            <CamposPessoa valor={emEdicao} />
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              <Campo rotulo="Canal de venda">
+                <select name="canal" defaultValue={emEdicao?.canal ?? "venda_direta"} className={estiloCampo}>
+                  {Object.entries(CANAIS).map(([v, r]) => (
+                    <option key={v} value={v}>
+                      {r}
+                    </option>
+                  ))}
+                </select>
+              </Campo>
+              <Campo rotulo="Observação" className="sm:col-span-1 lg:col-span-3">
+                <input name="observacao" defaultValue={emEdicao?.observacao ?? ""} className={estiloCampo} />
+              </Campo>
+            </div>
+            <div className="flex items-center justify-between gap-4">
+              <label className="flex items-center gap-2 text-sm">
+                <input type="checkbox" name="ativo" defaultChecked={emEdicao?.ativo ?? true} />
+                Cliente ativo
+              </label>
+              <Link href="/vendas/clientes" className={estiloBotaoSecundario}>
+                Cancelar
+              </Link>
+            </div>
+          </FormAcao>
+        </Cartao>
+      )}
+
+      <form className="flex flex-wrap items-center gap-2">
+        <div className="relative">
+          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-texto-suave" />
+          <input name="q" defaultValue={filtros.q} placeholder="Buscar por nome ou CNPJ/CPF" className={`${estiloCampo} w-72 pl-9`} />
+        </div>
+        <select name="canal" defaultValue={filtros.canal ?? ""} className={`${estiloCampo} w-48`}>
+          <option value="">Todos os canais</option>
+          {Object.entries(CANAIS).map(([v, r]) => (
+            <option key={v} value={v}>
+              {r}
+            </option>
+          ))}
+        </select>
+        <button className={estiloBotaoSecundario}>Filtrar</button>
+      </form>
+
+      <Tabela
+        colunas={["Cliente", "CNPJ / CPF", "Cidade", "Contato", "Canal", ""]}
+        vazio={filtros.q || filtros.canal ? "Nenhum cliente encontrado com esse filtro." : "Nenhum cliente cadastrado ainda."}
+      >
+        {clientes.map((f) => (
+          <tr key={f.id} className={f.ativo ? "" : "text-texto-suave"}>
+            <Celula>
+              <span className="font-medium">{f.nome_fantasia ?? f.nome}</span> {!f.ativo && <Etiqueta>Inativo</Etiqueta>}
+              {f.nome_fantasia && <span className="block text-xs text-texto-suave">{f.nome}</span>}
+            </Celula>
+            <Celula className="whitespace-nowrap tabular-nums">{formatarDocumento(f.documento)}</Celula>
+            <Celula>{[f.cidade, f.uf].filter(Boolean).join(" / ") || "—"}</Celula>
+            <Celula className="text-texto-suave">{[f.telefone, f.email].filter(Boolean).join(" · ") || "—"}</Celula>
+            <Celula>{CANAIS[f.canal]}</Celula>
+            <Celula className="text-right">{pode(acesso, TELA, "editar") && <LinkAcao href={`?editar=${f.id}`}>Editar</LinkAcao>}</Celula>
+          </tr>
+        ))}
+      </Tabela>
+    </div>
+  );
+}
