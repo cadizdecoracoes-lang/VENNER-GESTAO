@@ -6,8 +6,10 @@ import { useEffect, useState } from "react";
 import { ChevronDown, PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { ICONE_PAINEL, MENU, PAINEL } from "@/lib/menu";
 
-export function MenuLateral() {
+// `telas`: códigos que o perfil pode ver; null mostra tudo (modo de demonstração).
+export function MenuLateral({ telas }: { telas: string[] | null }) {
   const pathname = usePathname();
+  const menu = telas === null ? MENU : MENU.map((g) => ({ ...g, telas: g.telas.filter((t) => telas.includes(t.codigo)) })).filter((g) => g.telas.length > 0);
   const [recolhido, setRecolhido] = useState(false);
   const grupoAtual = MENU.find((g) => g.telas.some((t) => t.href === pathname))?.codigo;
   const [abertos, setAbertos] = useState<Set<string>>(new Set(grupoAtual ? [grupoAtual] : ["producao"]));
@@ -54,7 +56,7 @@ export function MenuLateral() {
           {!recolhido && PAINEL.titulo}
         </Link>
 
-        {MENU.map((grupo) => {
+        {menu.map((grupo) => {
           const Icone = grupo.icone;
           const aberto = abertos.has(grupo.codigo);
           return (
