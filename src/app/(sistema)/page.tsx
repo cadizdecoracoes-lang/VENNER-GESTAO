@@ -1,38 +1,267 @@
-import { Search } from "lucide-react";
+import { Briefcase, Factory, Landmark, ShoppingCart, Users } from "lucide-react";
+import Link from "next/link";
+import { FaixaEmpresa, Fonte, Indicador } from "@/components/ui";
+import { carregarAcesso, pode } from "@/lib/acesso";
+import { diaSemana, hojeBrasil, inicioSemana, somarDias } from "@/lib/datas";
+import { empresaSelecionada } from "@/lib/empresa";
+import { formatarData, formatarMoeda } from "@/lib/formato";
+import { filaProducao, necessidadeMateriais } from "@/lib/planejamento";
+import { carregarPlanejamento } from "@/lib/planejamento-servidor";
+import { supabaseConfigurado } from "@/lib/supabase/config";
+import { criarClienteServidor } from "@/lib/supabase/server";
+import { CAMPOS_PEDIDO, carregarEtapas, confirmadosNoPeriodo, type PedidoResumo } from "@/lib/vendas";
 
-// Cartões do painel. Os valores entram quando os módulos estiverem ligados ao
-// banco; a lupa de cada cartão vai abrir a origem do número.
-const CARTOES = [
-  { titulo: "Ordens atrasadas", origem: "Ordens de produção com prazo vencido" },
-  { titulo: "Falta de material", origem: "Necessidades do MRP sem estoque nem compra a caminho" },
-  { titulo: "Saldo em caixa", origem: "Saldos bancários conciliados, por CNPJ" },
-  { titulo: "Contas a pagar na semana", origem: "Títulos a pagar dos próximos 7 dias" },
-];
+// Painel em blocos por área. Cada número abre os registros que o formam e
+// diz de onde vem e qual período usa.
 
-export default function Painel() {
+function Bloco({ titulo, icone: Icone, children }: { titulo: string; icone: typeof Briefcase; children: React.ReactNode }) {
+  return (
+    <section className="space-y-3 rounded-2xl bg-fundo/60 p-4 shadow-[0_0_0_1px_var(--color-borda)]">
+      <h2 className="flex items-center gap-2 font-medium">
+        <Icone size={18} className="text-primaria" /> {titulo}
+      </h2>
+      {children}
+    </section>
+  );
+}
+
+const soma = (l: { valor_total: number }[]) => l.reduce((s, p) => s + Number(p.valor_total), 0);
+const qtd = (n: number, um: string, varios: string) => `${n} ${n === 1 ? um : varios}`;
+
+type Titulo = { valor: number; vencimento: string };
+
+export default async function Painel() {
+  const acesso = await carregarAcesso();
+  const selecionada = await empresaSelecionada();
+  const hoje = hojeBrasil();
+  const segunda = inicioSemana(hoje);
+  const verComercial = pode(acesso, "vendas.pedidos", "ver");
+  const verFinanceiro = pode(acesso, "financeiro.pagar", "ver");
+  const verProducao = pode(acesso, "producao.sequenciamento", "ver");
+  const verCompras = pode(acesso, "compras.sugestoes", "ver");
+  const verRh = ["rh.funcionarios", "rh.ponto", "rh.ferias"].some((t) => pode(acesso, t, "ver"));
+  const supabase = supabaseConfigurado ? await criarClienteServidor() : null;
+
+  const [pedidos, etapas, titulos, plano] = await Promise.all([
+    (verComercial || verProducao) && supabase
+      ? (() => {
+          let c = supabase.from("pedidos_venda_resumo").select(CAMPOS_PEDIDO).neq("fase", "encerrado").limit(5000);
+          if (selecionada) c = c.eq("empresa_id", selecionada.id);
+          return c.then((r) => (r.data ?? []) as unknown as PedidoResumo[]);
+        })()
+      : Promise.resolve([] as PedidoResumo[]),
+    verComercial || verProducao ? carregarEtapas() : Promise.resolve([]),
+    verFinanceiro && supabase
+      ? (() => {
+          let c = supabase
+            .from("contas_pagar")
+            .select("valor, vencimento")
+            .eq("situacao", "aberto")
+            .lte("vencimento", somarDias(hoje, 2))
+            .limit(5000);
+          if (selecionada) c = c.eq("empresa_id", selecionada.id);
+          return c.then((r) => (r.data ?? []) as Titulo[]);
+        })()
+      : Promise.resolve([] as Titulo[]),
+    verProducao || verCompras ? carregarPlanejamento() : Promise.resolve(null),
+  ]);
+  const confirmados = verComercial ? await confirmadosNoPeriodo(etapas, segunda, hoje) : null;
+
+  const periodoSemana = `de ${formatarData(segunda)} (segunda) a ${formatarData(hoje)}`;
+  const daEmpresa = selecionada ? `só ${selecionada.nome}` : "todas as empresas que você vê";
+  const negociacao = etapas.filter((e) => e.fase === "negociacao" && e.ativa);
+  const producao = etapas.filter(
+    (e) => (e.fase === "producao" || e.fase === "expedicao") && (e.ativa || pedidos.some((p) => p.etapa_id === e.id)),
+  );
+  const atrasados = pedidos.filter((p) => p.dias_atraso > 0);
+  const aprovados = pedidos.filter((p) => confirmados?.ids.has(p.id));
+  // Aprovados que já foram encerrados na semana também contam.
+  const aprovadosEncerrados = confirmados ? confirmados.ids.size - aprovados.length : 0;
+
+  const vencidas = titulos.filter((t) => t.vencimento < hoje);
+  const dias = [0, 1, 2].map((n) => {
+    const dia = somarDias(hoje, n);
+    const lista = titulos.filter((t) => t.vencimento === dia);
+    return {
+      dia,
+      rotulo: n === 0 ? "Hoje" : n === 1 ? "Amanhã" : "Depois de amanhã",
+      quantidade: lista.length,
+      valor: lista.reduce((s, t) => s + Number(t.valor), 0),
+    };
+  });
+
+  const fila = plano && verProducao ? filaProducao(plano, hoje) : [];
+  const compras = plano && verCompras ? necessidadeMateriais(plano, hoje).filter((l) => !l.produzido && l.falta > 0) : [];
+  const comprarJa = compras.filter((l) => l.data_limite && l.data_limite <= hoje);
+  const comprarSemana = compras.filter((l) => l.data_limite && l.data_limite > hoje && l.data_limite <= somarDias(hoje, 7));
+
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-semibold">Painel</h1>
-        <p className="mt-1 text-texto-suave">Visão geral do dia: produção, estoque, caixa e pendências.</p>
+        <p className="mt-1 text-texto-suave">
+          {diaSemana(hoje)}, {formatarData(hoje)}. Clique em qualquer número para ver os registros que o formam.
+        </p>
       </div>
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        {CARTOES.map((c) => (
-          <div key={c.titulo} className="rounded-2xl bg-superficie p-5 shadow-[0_1px_3px_rgba(16,24,40,0.06)]">
-            <div className="flex items-start justify-between gap-2">
-              <span className="text-sm text-texto-suave">{c.titulo}</span>
-              <button
-                className="rounded-lg p-1 text-texto-suave hover:bg-fundo"
-                title={`Origem: ${c.origem}`}
-                aria-label={`Ver origem de ${c.titulo}`}
-              >
-                <Search size={16} />
-              </button>
-            </div>
-            <div className="mt-3 text-2xl font-semibold text-texto-suave">—</div>
+      {(verComercial || verFinanceiro) && <FaixaEmpresa empresa={selecionada} />}
+
+      {verComercial && (
+        <Bloco titulo="Comercial" icone={Briefcase}>
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            {negociacao.map((e) => {
+              const lista = pedidos.filter((p) => p.etapa_id === e.id);
+              return (
+                <Indicador
+                  key={e.id}
+                  rotulo={e.nome}
+                  valor={lista.length}
+                  detalhe={formatarMoeda(soma(lista))}
+                  cor={lista.length ? "text-alerta" : ""}
+                  href={`/vendas/pedidos?etapa=${e.id}`}
+                  fonte="Pedidos parados hoje nesta etapa de negociação."
+                />
+              );
+            })}
+            <Indicador
+              rotulo="Aprovados na semana"
+              valor={confirmados?.ids.size ?? 0}
+              detalhe={formatarMoeda(soma(aprovados)) + (aprovadosEncerrados > 0 ? ` + ${aprovadosEncerrados} já encerrados` : "")}
+              cor="text-sucesso"
+              href={`/vendas/pedidos?confirmados_de=${segunda}&confirmados_ate=${hoje}`}
+              fonte={`Entraram em "${confirmados?.etapa?.nome ?? "produção"}" ${periodoSemana}.`}
+            />
+            <Indicador
+              rotulo="Entrega atrasada"
+              valor={atrasados.length}
+              detalhe={formatarMoeda(soma(atrasados))}
+              cor={atrasados.length ? "text-perigo" : ""}
+              href="/vendas/pedidos?atrasados=1"
+              fonte={`Pedidos em aberto com prazo de entrega antes de ${formatarData(hoje)}.`}
+            />
           </div>
-        ))}
-      </div>
+          <Fonte>Fonte: pedidos de venda (etapa atual e histórico de etapas) · {daEmpresa}.</Fonte>
+        </Bloco>
+      )}
+
+      {verFinanceiro && (
+        <Bloco titulo="Financeiro" icone={Landmark}>
+          <div className="grid gap-3 lg:grid-cols-3">
+            <div className="rounded-2xl bg-superficie px-5 py-4 shadow-[0_1px_3px_rgba(16,24,40,0.06)] lg:col-span-2">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-left text-xs text-texto-suave">
+                    <th className="pb-2 font-medium">Dia</th>
+                    <th className="pb-2 text-right font-medium">A pagar</th>
+                    <th className="pb-2 text-right font-medium">A receber</th>
+                    <th className="pb-2 text-right font-medium">Saldo do dia</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-borda/70">
+                  {dias.map((d) => (
+                    <tr key={d.dia}>
+                      <td className="py-2">
+                        {d.rotulo} <span className="text-xs text-texto-suave">{formatarData(d.dia)}</span>
+                      </td>
+                      <td className="py-2 text-right tabular-nums">
+                        <Link href={`/financeiro/pagar?de=${d.dia}&ate=${d.dia}&por=vencimento`} className="text-primaria hover:underline">
+                          {formatarMoeda(d.valor)}
+                        </Link>
+                        <span className="block text-xs text-texto-suave">{qtd(d.quantidade, "conta", "contas")}</span>
+                      </td>
+                      <td className="py-2 text-right text-texto-suave">—</td>
+                      <td className={`py-2 text-right tabular-nums ${d.valor > 0 ? "text-perigo" : ""}`}>{formatarMoeda(-d.valor)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <Indicador
+              rotulo="Contas a pagar vencidas"
+              valor={formatarMoeda(vencidas.reduce((s, t) => s + Number(t.valor), 0))}
+              detalhe={qtd(vencidas.length, "conta em aberto", "contas em aberto")}
+              cor={vencidas.length ? "text-perigo" : ""}
+              href="/financeiro/pagar?situacao=vencido"
+              fonte={`Em aberto com vencimento antes de ${formatarData(hoje)}.`}
+            />
+          </div>
+          <Fonte>
+            Fonte: contas a pagar em aberto pelo vencimento · {daEmpresa}. O contas a receber ainda não existe no sistema (próximo pacote);
+            até lá o saldo do dia mostra só as saídas.
+          </Fonte>
+        </Bloco>
+      )}
+
+      {verProducao && (
+        <Bloco titulo="Produção" icone={Factory}>
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            {producao.map((e) => {
+              const lista = pedidos.filter((p) => p.etapa_id === e.id);
+              return (
+                <Indicador
+                  key={e.id}
+                  rotulo={e.nome}
+                  valor={lista.length}
+                  detalhe={formatarMoeda(soma(lista))}
+                  href={`/vendas/pedidos?etapa=${e.id}`}
+                  fonte="Pedidos nesta etapa hoje."
+                />
+              );
+            })}
+            <Indicador
+              rotulo="Parados por falta de material"
+              valor={fila.filter((f) => !f.pode_produzir).length}
+              detalhe={formatarMoeda(fila.filter((f) => !f.pode_produzir).reduce((s, f) => s + f.valor, 0))}
+              cor={fila.some((f) => !f.pode_produzir) ? "text-alerta" : ""}
+              href="/producao/sequenciamento"
+              fonte="Pela fila de produção: estoque reservado na ordem sugerida."
+            />
+          </div>
+          <Fonte>
+            Fonte: pedidos de venda pela etapa atual · {verComercial ? daEmpresa : "todas as empresas"}; fila de produção calculada agora.
+          </Fonte>
+        </Bloco>
+      )}
+
+      {verCompras && (
+        <Bloco titulo="Compras" icone={ShoppingCart}>
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            <Indicador
+              rotulo="Comprar já"
+              valor={comprarJa.length}
+              detalhe={
+                comprarJa
+                  .slice(0, 3)
+                  .map((l) => l.item.codigo)
+                  .join(", ") || "nada vencido"
+              }
+              cor={comprarJa.length ? "text-perigo" : ""}
+              href="/compras/sugestoes"
+              fonte="Falta para pedidos em produção e a data limite (prazo do pedido menos reposição) já passou."
+            />
+            <Indicador
+              rotulo="Comprar nesta semana"
+              valor={comprarSemana.length}
+              detalhe={
+                comprarSemana
+                  .slice(0, 3)
+                  .map((l) => l.item.codigo)
+                  .join(", ") || "—"
+              }
+              href="/compras/sugestoes"
+              fonte={`Data limite até ${formatarData(somarDias(hoje, 7))}.`}
+            />
+          </div>
+          <Fonte>Fonte: pedidos em produção × ficha técnica, contra o estoque do grupo, calculado agora.</Fonte>
+        </Bloco>
+      )}
+
+      {verRh && (
+        <Bloco titulo="RH" icone={Users}>
+          <p className="text-sm text-texto-suave">
+            Alertas de férias, faltas e escala aparecem aqui assim que o cadastro de funcionários e o ponto forem lançados no sistema.
+          </p>
+        </Bloco>
+      )}
     </div>
   );
 }

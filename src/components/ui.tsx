@@ -153,3 +153,43 @@ export function FaixaEmpresa({ empresa }: { empresa: { nome: string } | null }) 
     </p>
   );
 }
+
+// De onde vem um número: a origem dos dados e o período usado. Todo valor
+// resumido das telas leva essa linha, e o próprio número abre os registros.
+export function Fonte({ children }: { children: React.ReactNode }) {
+  return <p className="text-xs leading-relaxed text-texto-suave">{children}</p>;
+}
+
+// Número resumido que abre a lista dos registros que o formam.
+export function Indicador({
+  rotulo,
+  valor,
+  detalhe,
+  href,
+  cor,
+  fonte,
+}: {
+  rotulo: string;
+  valor: React.ReactNode;
+  detalhe?: React.ReactNode;
+  href?: string;
+  cor?: string;
+  fonte?: React.ReactNode;
+}) {
+  const corpo = (
+    <>
+      <p className="text-sm text-texto-suave">{rotulo}</p>
+      <p className={`mt-1 text-xl font-semibold tabular-nums ${cor ?? ""}`}>{valor}</p>
+      {detalhe && <p className="text-xs text-texto-suave">{detalhe}</p>}
+      {fonte && <p className="mt-2 border-t border-borda/70 pt-2 text-[11px] leading-snug text-texto-suave">{fonte}</p>}
+    </>
+  );
+  const estilo = "block rounded-2xl bg-superficie px-5 py-4 shadow-[0_1px_3px_rgba(16,24,40,0.06)]";
+  return href ? (
+    <Link href={href} className={`${estilo} transition-shadow hover:shadow-[0_0_0_1.5px_var(--color-primaria)]`}>
+      {corpo}
+    </Link>
+  ) : (
+    <div className={estilo}>{corpo}</div>
+  );
+}

@@ -78,8 +78,9 @@ export const MENU: GrupoMenu[] = [
     titulo: "Vendas e E-commerce",
     icone: Store,
     telas: [
-      tela("vendas.pedidos", "Pedidos de venda", "Pedidos do Mercado Livre, Shopee e venda direta."),
+      tela("vendas.pedidos", "Pedidos de venda", "Pedidos do comercial e dos marketplaces, com o funil por etapa."),
       tela("vendas.clientes", "Clientes", "Cadastro de clientes."),
+      tela("vendas.etapas", "Etapas do pedido", "Etapas por onde o pedido passa, do orçamento à entrega."),
     ],
   },
   {

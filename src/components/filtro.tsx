@@ -16,15 +16,18 @@ export function Filtro({
   children,
   atalhos = [],
   placeholder = "Filtrar por qualquer informação da lista",
+  iniciais = {},
 }: {
   children: React.ReactNode;
   atalhos?: GrupoAtalho[];
   placeholder?: string;
+  // Atalho já marcado ao abrir (ex.: vindo de um número do painel): { Situação: "vencido" }.
+  iniciais?: Record<string, string>;
 }) {
   const area = useRef<HTMLDivElement>(null);
   const campo = useRef<HTMLInputElement>(null);
   const [texto, setTexto] = useState("");
-  const [escolhas, setEscolhas] = useState<Record<string, string>>({});
+  const [escolhas, setEscolhas] = useState<Record<string, string>>(iniciais);
   const [contagem, setContagem] = useState<{ visiveis: number; total: number } | null>(null);
 
   useEffect(() => {

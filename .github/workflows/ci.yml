@@ -17,6 +17,8 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run typecheck
+      - name: Testes do planejamento
+        run: npm test
       - run: npm run build
       - name: Pacote para o Cloudflare
         run: npm run cf:build
