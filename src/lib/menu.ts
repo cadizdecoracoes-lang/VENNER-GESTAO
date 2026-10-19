@@ -132,3 +132,11 @@ export const TODAS_TELAS: Tela[] = [PAINEL, ...MENU.flatMap((g) => g.telas)];
 export function telaPorHref(href: string): Tela | undefined {
   return TODAS_TELAS.find((t) => t.href === href);
 }
+
+export function telaPorCodigo(codigo: string): { tela: Tela; grupo: string } {
+  for (const g of MENU) {
+    const tela = g.telas.find((t) => t.codigo === codigo);
+    if (tela) return { tela, grupo: g.titulo };
+  }
+  throw new Error(`Tela desconhecida: ${codigo}`);
+}
