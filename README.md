@@ -41,6 +41,27 @@ Cadastrar no GitHub: repositório → Settings → Secrets and variables → Act
 
 Nunca envie esses valores por conversa ou e-mail.
 
+### Colocar o sistema no ar (Cloudflare, plano gratuito)
+
+Feito uma vez, na conta da Venner. Depois disso, cada Pull Request aprovado atualiza o sistema sozinho.
+
+1. Criar a conta em [dash.cloudflare.com](https://dash.cloudflare.com/sign-up) com o e-mail da Venner e confirmar o e-mail.
+2. **Workers & Pages → Create → Import a repository**. Conectar o GitHub da conta dona do repositório e escolher `VENNER-GESTAO`.
+3. Preencher:
+   - **Project name:** `venner-gestao`
+   - **Build command:** `npx opennextjs-cloudflare build`
+   - **Deploy command:** `npx opennextjs-cloudflare deploy`
+4. Em **Advanced settings → Build variables**, adicionar (os dois valores ficam no Supabase, em Project Settings → API Keys e Data API):
+
+| Nome | Valor |
+| --- | --- |
+| `NEXT_PUBLIC_SUPABASE_URL` | Project URL, `https://<id>.supabase.co` |
+| `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Publishable key, começa com `sb_publishable_` |
+
+   Esses dois valores são públicos por natureza (o navegador usa). A proteção dos dados é o login e as regras de acesso do banco. Nunca use aqui a chave `secret`.
+5. **Deploy**. Ao terminar, o Cloudflare mostra o endereço do sistema (`https://venner-gestao.<conta>.workers.dev`).
+6. No Supabase, **Authentication → URL Configuration → Site URL**: colar esse endereço.
+
 ### Primeiro acesso da diretoria
 
 1. Supabase → Authentication → Users → Add user, com o e-mail e uma senha.
@@ -53,7 +74,7 @@ set ativo = true,
 where email = 'email@da-diretoria';
 ```
 
-Os demais usuários são liberados depois pela tela Configurações → Usuários.
+Os demais usuários: o login é criado no Supabase (Authentication → Users → Add user) e liberado na tela Configurações → Usuários, com perfil e CNPJs.
 
 ## Rodar no computador (desenvolvimento)
 
