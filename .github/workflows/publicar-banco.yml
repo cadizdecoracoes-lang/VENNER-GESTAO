@@ -5,7 +5,7 @@ name: Publicar banco
 on:
   push:
     branches: [main]
-    paths: ["supabase/migrations/**"]
+    paths: ["supabase/migrations/**", ".github/workflows/publicar-banco.yml"]
   workflow_dispatch:
 
 concurrency: publicar-banco
@@ -36,5 +36,15 @@ jobs:
       - name: Aplicar migrações
         if: steps.segredos.outputs.pronto == 'true'
         run: |
-          supabase link --project-ref "$SUPABASE_PROJECT_ID" --password "$SUPABASE_DB_PASSWORD"
+          # O ID do projeto tem 20 letras minúsculas. Aceita também o segredo
+          # colado com espaços ou como endereço (https://<id>.supabase.co ou o
+          # link do painel), e extrai só o ID.
+          ref=$(printf '%s' "$SUPABASE_PROJECT_ID" | tr -d '[:space:]' | grep -oE '(^|[^a-z])[a-z]{20}([^a-z]|$)' | grep -oE '[a-z]{20}' | head -n1 || true)
+          if [ -z "$ref" ]; then
+            echo "::error::O segredo SUPABASE_PROJECT_ID não contém um ID de projeto válido (20 letras minúsculas, como em Project Settings → General → Project ID). Ele tem ${#SUPABASE_PROJECT_ID} caracteres. Corrija o segredo no GitHub e rode este fluxo de novo."
+            exit 1
+          fi
+          # A CLI também lê SUPABASE_PROJECT_ID do ambiente; passa só o ID limpo.
+          export SUPABASE_PROJECT_ID="$ref"
+          supabase link --project-ref "$ref" --password "$SUPABASE_DB_PASSWORD"
           supabase db push --password "$SUPABASE_DB_PASSWORD"
