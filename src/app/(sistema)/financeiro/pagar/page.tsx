@@ -20,6 +20,7 @@ import {
 import { carregarAcesso, pode } from "@/lib/acesso";
 import { carregarEmpresas, empresaSelecionada } from "@/lib/empresa";
 import { carregarCategoriasDespesa, carregarCentrosCusto, carregarFornecedores } from "@/lib/financeiro";
+import { hojeBrasil, somarDias } from "@/lib/datas";
 import { formatarData, formatarMoeda } from "@/lib/formato";
 import { type SituacaoTitulo } from "@/lib/rotulos";
 import { supabaseConfigurado } from "@/lib/supabase/config";
@@ -43,16 +44,8 @@ type Titulo = {
   plano_contas: { codigo: string; nome: string } | null;
   contas_bancarias: { nome: string } | null;
 };
-type Filtros = { novo?: string; pagar?: string; de?: string; ate?: string; por?: string };
+type Filtros = { novo?: string; pagar?: string; de?: string; ate?: string; por?: string; situacao?: string };
 const DATAS_PERIODO = { vencimento: "Vencimento", data_pagamento: "Pagamento" };
-
-// Datas no fuso de Brasília, para "vencido" bater com o dia de quem usa.
-const hojeBrasil = () => new Date().toLocaleDateString("sv-SE", { timeZone: "America/Sao_Paulo" });
-function somarDias(iso: string, dias: number) {
-  const d = new Date(`${iso}T12:00:00Z`);
-  d.setUTCDate(d.getUTCDate() + dias);
-  return d.toISOString().slice(0, 10);
-}
 
 async function carregar(empresa: string | null, periodo: Periodo): Promise<Titulo[]> {
   if (!supabaseConfigurado) return [];
@@ -275,6 +268,7 @@ export default async function PaginaContasPagar({ searchParams }: { searchParams
           },
         ]}
         placeholder="Filtrar por fornecedor, descrição, empresa, valor..."
+        iniciais={filtros.situacao ? { Situação: filtros.situacao } : {}}
       >
         <Tabela colunas={colunas} vazio="Nenhuma conta a pagar. Importe uma nota de fornecedor ou lance uma conta nova.">
           {titulos.map((t) => {

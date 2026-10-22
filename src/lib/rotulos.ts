@@ -102,3 +102,13 @@ export const ORIGENS_NOTA = {
   manual: "Manual",
 } as const;
 export type OrigemNota = keyof typeof ORIGENS_NOTA;
+
+export const FASES_PEDIDO = {
+  negociacao: "Negociação",
+  producao: "Produção",
+  expedicao: "Expedição",
+  encerrado: "Encerrado",
+} as const;
+export type FasePedido = keyof typeof FASES_PEDIDO;
+
+export const PRIORIDADES = { 0: "Normal", 1: "Alta", 2: "Urgente" } as const;
