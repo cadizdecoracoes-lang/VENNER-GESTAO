@@ -5,6 +5,8 @@ import { redirect } from "next/navigation";
 import { mensagemErro, semLinhas, SEM_BANCO, type Estado } from "@/lib/erros";
 import { supabaseConfigurado } from "@/lib/supabase/config";
 import { criarClienteServidor } from "@/lib/supabase/server";
+import { lerNumero } from "@/lib/formato";
+import { diasDaCondicao, dividirParcelas } from "@/lib/parcelas";
 
 type ItemForm = { item_id: string; quantidade: number; preco_unitario: number };
 
@@ -61,5 +63,23 @@ export async function mudarEtapa(id: string, _: Estado, form: FormData): Promise
   if (bloqueado) return bloqueado;
   revalidatePath("/vendas/pedidos");
   revalidatePath(`/vendas/pedidos/${id}`);
+  return { ok: Date.now() };
+}
+
+// Parcelas a receber do pedido: dias da condição de pagamento contados da data base.
+export async function gerarParcelas(id: string, _: Estado, form: FormData): Promise<Estado> {
+  if (!supabaseConfigurado) return SEM_BANCO;
+  const base = String(form.get("base") ?? "");
+  const total = lerNumero(form.get("total"));
+  const dias = diasDaCondicao(String(form.get("dias") ?? ""), 0);
+  if (!base) return { erro: "Informe a data de onde contam os dias (normalmente a da nota ou da entrega)." };
+  if (!(total > 0)) return { erro: "Informe o valor total a receber." };
+  if (dias.length > 24) return { erro: "No máximo 24 parcelas." };
+
+  const supabase = await criarClienteServidor();
+  const { error } = await supabase.rpc("gerar_receber_pedido", { pedido: id, parcelas: dividirParcelas(total, dias, base) });
+  if (error) return { erro: mensagemErro(error) };
+  revalidatePath(`/vendas/pedidos/${id}`);
+  revalidatePath("/financeiro/receber");
   return { ok: Date.now() };
 }

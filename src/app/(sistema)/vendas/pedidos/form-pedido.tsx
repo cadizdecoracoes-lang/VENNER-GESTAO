@@ -162,7 +162,17 @@ export function FormPedido({
                     <select
                       aria-label="Produto"
                       value={l.item_id}
-                      onChange={(e) => mudar(l.chave, "item_id", e.target.value)}
+                      onChange={(e) => {
+                        const preco = Number(porId.get(e.target.value)?.preco_venda ?? 0);
+                        // Preço de tabela do produto, quando a linha ainda está sem preço.
+                        setLinhas((atual) =>
+                          atual.map((x) =>
+                            x.chave === l.chave
+                              ? { ...x, item_id: e.target.value, preco: x.preco || preco <= 0 ? x.preco : paraTexto(preco) }
+                              : x,
+                          ),
+                        );
+                      }}
                       className={estiloCampo}
                     >
                       <option value="">Escolha o produto...</option>

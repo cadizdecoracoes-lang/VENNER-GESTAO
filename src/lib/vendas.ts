@@ -47,14 +47,14 @@ export async function carregarClientes(): Promise<{ id: string; nome: string }[]
   return (data ?? []).map((c) => ({ id: c.id, nome: c.nome_fantasia || c.nome }));
 }
 
-export type Produto = { id: string; codigo: string; descricao: string; unidade: string };
+export type Produto = { id: string; codigo: string; descricao: string; unidade: string; preco_venda: number };
 
 export async function carregarProdutosVenda(): Promise<Produto[]> {
   if (!supabaseConfigurado) return [];
   const supabase = await criarClienteServidor();
   const { data } = await supabase
     .from("itens")
-    .select("id, codigo, descricao, unidade")
+    .select("id, codigo, descricao, unidade, preco_venda")
     .eq("tipo", "produto_acabado")
     .eq("ativo", true)
     .order("codigo")

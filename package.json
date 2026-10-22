@@ -22,7 +22,8 @@
     "next": "^16.4.2",
     "pdfjs-dist": "^5.7.284",
     "react": "^19.3.1",
-    "react-dom": "^19.3.1"
+    "react-dom": "^19.3.1",
+    "read-excel-file": "^5.8.8"
   },
   "devDependencies": {
     "@opennextjs/cloudflare": "^1.20.12",
