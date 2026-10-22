@@ -1,6 +1,7 @@
 import { FileUp, Plus } from "lucide-react";
 import Link from "next/link";
 import { Filtro } from "@/components/filtro";
+import { ResumoPorEmpresa } from "@/components/por-empresa";
 import { FiltroPeriodo, lerPeriodo, type Periodo } from "@/components/periodo";
 import { FormAcao } from "@/components/form-acao";
 import {
@@ -289,6 +290,25 @@ export default async function PaginaContasReceber({ searchParams }: { searchPara
           fonte={periodo || pedido ? `${origem}. Valor efetivamente recebido.` : `Recebimentos com data desde ${formatarData(inicioMes)}.`}
         />
       </div>
+
+      {!selecionada && !pedido && empresas.length > 1 && (
+        <ResumoPorEmpresa
+          colunas={["Vencido", "Próximos 7 dias", "Em aberto", periodo ? "Recebido no período" : "Recebido neste mês"]}
+          filtros={["vencido", "semana", "aberto", "pago"]}
+          caminho="/financeiro/receber"
+          extra={manterPeriodo}
+          linhas={empresas.map((e) => {
+            const grupos = [vencidos, proximos, abertos, recebidos].map((l) => l.filter((t) => t.empresa_id === e.id));
+            return {
+              id: e.id,
+              nome: e.nome,
+              valores: grupos.map((g, i) => (i === 3 ? g.reduce((s, t) => s + Number(t.valor_recebido ?? 0), 0) : liquido(g))),
+              quantidades: grupos.map((g) => g.length),
+            };
+          })}
+          fonte={`Mesmos títulos dos quadros acima (${origem}), separados pelo CNPJ que recebe. A receber pelo valor líquido.`}
+        />
+      )}
 
       <Filtro
         atalhos={[
