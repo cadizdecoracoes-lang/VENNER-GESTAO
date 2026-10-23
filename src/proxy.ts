@@ -5,7 +5,9 @@ import { SUPABASE_KEY, SUPABASE_URL, supabaseConfigurado } from "@/lib/supabase/
 // Renova a sessão do Supabase a cada requisição e manda para /login quem não
 // estiver autenticado.
 export async function proxy(request: NextRequest) {
-  if (!supabaseConfigurado) return NextResponse.next();
+  // O robô do Tiny entra sem login (o banco confere a chave dele) e não gasta
+  // uma chamada à toa conferindo sessão.
+  if (!supabaseConfigurado || request.nextUrl.pathname === "/integracoes/robo") return NextResponse.next();
 
   let response = NextResponse.next({ request });
   const supabase = createServerClient(SUPABASE_URL, SUPABASE_KEY, {

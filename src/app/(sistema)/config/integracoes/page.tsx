@@ -22,6 +22,7 @@ import { NOME_CANAL, type Canal } from "@/lib/plataformas/tipos";
 import { supabaseConfigurado } from "@/lib/supabase/config";
 import { criarClienteServidor } from "@/lib/supabase/server";
 import { buscarVendas, escolherLocal, removerConta } from "./actions";
+import { type AplicativoTiny, CartaoTiny, type ContaTiny } from "./cartao-tiny";
 
 const TELA = "config.integracoes";
 const GUIA = "https://claude.ai/artifact/ABp37XYcittjSNPYVoNULc";
@@ -29,7 +30,7 @@ const GUIA = "https://claude.ai/artifact/ABp37XYcittjSNPYVoNULc";
 type Conta = {
   id: string;
   empresa_id: string;
-  canal: Canal;
+  canal: Canal | "tiny";
   conta_externa: string;
   apelido: string | null;
   expira_em: string | null;
@@ -47,7 +48,16 @@ export default async function PaginaIntegracoes({ searchParams }: { searchParams
 
   const filtros = await searchParams;
   const [empresas, locais] = await Promise.all([carregarEmpresas(), carregarLocais()]);
-  const contas = supabaseConfigurado ? (((await (await criarClienteServidor()).rpc("listar_integracoes")).data ?? []) as Conta[]) : [];
+  const supabase = supabaseConfigurado ? await criarClienteServidor() : null;
+  const [listadas, aplicativos, contasTiny] = supabase
+    ? await Promise.all([
+        supabase.rpc("listar_integracoes").then((r) => (r.data ?? []) as Conta[]),
+        supabase.rpc("aplicativo_tiny").then((r) => (r.data ?? []) as AplicativoTiny[]),
+        supabase.rpc("situacao_tiny").then((r) => (r.data ?? []) as ContaTiny[]),
+      ])
+    : [[], [], []];
+  // O Tiny tem cartão próprio; a tabela é das lojas (Mercado Livre e Shopee).
+  const contas = listadas.filter((c): c is Conta & { canal: Canal } => c.canal !== "tiny");
   const nomeEmpresa = new Map(empresas.map((e) => [e.id, e.nome]));
   const nomeLocal = new Map(locais.map((l) => [l.id, l.nome]));
   const hoje = hojeBrasil();
@@ -58,7 +68,12 @@ export default async function PaginaIntegracoes({ searchParams }: { searchParams
     <div className="space-y-6">
       <CabecalhoTela codigo={TELA} />
 
-      {filtros.ligada && (
+      {filtros.ligada === "tiny" && (
+        <p className="rounded-xl bg-sucesso/10 px-4 py-2.5 text-sm text-sucesso">
+          Tiny ligado. A primeira leitura começa em até 5 minutos; a carga completa leva algumas horas.
+        </p>
+      )}
+      {filtros.ligada && filtros.ligada !== "tiny" && (
         <p className="rounded-xl bg-sucesso/10 px-4 py-2.5 text-sm text-sucesso">
           Conta ligada. Escolha o local do estoque e busque as vendas.
         </p>
@@ -79,6 +94,14 @@ export default async function PaginaIntegracoes({ searchParams }: { searchParams
           )}
         </div>
       )}
+
+      <CartaoTiny
+        empresas={empresas}
+        aplicativos={aplicativos}
+        contas={contasTiny}
+        editar={pode(acesso, TELA, "editar")}
+        ligar={ligar}
+      />
 
       <div className="grid gap-4 lg:grid-cols-2">
         {(Object.keys(NOME_CANAL) as Canal[]).map((canal) => (

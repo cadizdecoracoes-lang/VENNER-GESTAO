@@ -3,6 +3,8 @@ import { carregarAcesso, pode } from "@/lib/acesso";
 import { aleatorio, COOKIE_LIGACAO, desafioPkce, enderecoRetorno, type Ligacao, origemPublica } from "@/lib/plataformas/ligacao";
 import { chavesML, mlConfigurado, urlAutorizacaoML } from "@/lib/plataformas/mercado-livre";
 import { shopeeConfigurado, urlAutorizacaoShopee } from "@/lib/plataformas/shopee";
+import { criarClienteServidor } from "@/lib/supabase/server";
+import { urlAutorizacaoTiny } from "@/lib/tiny/api";
 
 // Clique em "Ligar conta": manda a pessoa para a tela de autorização da plataforma.
 export async function GET(request: NextRequest, { params }: { params: Promise<{ canal: string }> }) {
@@ -23,6 +25,12 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     destino = urlAutorizacaoML(chavesML().appId, enderecoRetorno(origem, canal), ligacao.estado, await desafioPkce(ligacao.verificador));
   } else if (canal === "shopee" && shopeeConfigurado()) {
     destino = await urlAutorizacaoShopee(enderecoRetorno(origem, canal));
+  } else if (canal === "tiny") {
+    // Chaves do aplicativo coladas na tela de integrações, por empresa.
+    const { data } = await (await criarClienteServidor()).rpc("credenciais_tiny", { empresa });
+    const app = (data as { client_id: string }[] | null)?.[0];
+    if (!app) return voltar("Cole antes as chaves do aplicativo do Tiny desta empresa.");
+    destino = urlAutorizacaoTiny(app.client_id, enderecoRetorno(origem, canal), ligacao.estado);
   } else {
     return voltar("Essa plataforma ainda não tem as chaves do aplicativo no Cloudflare.");
   }
