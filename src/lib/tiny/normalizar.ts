@@ -199,6 +199,50 @@ export function produto(v: unknown): Produto | null {
   };
 }
 
+// Vendedor do Tiny: o nome e os contatos vêm do contato ligado a ele.
+export function vendedor(v: unknown): { id: number; nome: string; email: string | null; telefone: string | null; ativo: boolean } | null {
+  const d = obj(v);
+  const id = inteiro(d.id);
+  const c = obj(d.contato);
+  const nome = texto(c.nome) ?? texto(c.fantasia);
+  if (!id || !nome) return null;
+  return { id, nome, email: texto(c.email), telefone: texto(c.celular) ?? texto(c.telefone), ativo: !["I", "E"].includes(texto(d.situacao) ?? "") };
+}
+
+// Forma de recebimento ou de envio: id, nome e se está habilitada.
+export function formaSimples(v: unknown): { id: number; nome: string; ativo: boolean } | null {
+  const d = obj(v);
+  const id = inteiro(d.id);
+  const nome = texto(d.nome);
+  if (!id || !nome) return null;
+  return { id, nome, ativo: texto(d.situacao) !== "2" };
+}
+
+export type ListaPrecoLida = {
+  id: number;
+  nome: string;
+  acrescimo_desconto: number;
+  precos?: { produto_id: number; preco: number; preco_promocional: number | null }[];
+};
+
+export function listaPreco(v: unknown): ListaPrecoLida | null {
+  const d = obj(v);
+  const id = inteiro(d.id);
+  const nome = texto(d.descricao) ?? texto(d.nome);
+  if (!id || !nome) return null;
+  return { id, nome, acrescimo_desconto: numero(d.acrescimoDesconto) };
+}
+
+// Exceções da lista (preço próprio por produto). A documentação mostra um
+// objeto, mas o nome indica uma lista: aceita os dois.
+export function precosDaLista(v: unknown): NonNullable<ListaPrecoLida["precos"]> {
+  const e = obj(v).excecoes;
+  return (Array.isArray(e) ? e : e ? [e] : [])
+    .map(obj)
+    .map((x) => ({ produto_id: inteiro(x.idProduto) ?? 0, preco: numero(x.preco), preco_promocional: numero(x.precoPromocional) || null }))
+    .filter((x) => x.produto_id > 0 && x.preco > 0);
+}
+
 // O que muda na listagem e obriga a ler o detalhe de novo.
 export function assinatura(tipo: "receber" | "pagar" | "pedido" | "produto", v: unknown): string {
   const d = obj(v);

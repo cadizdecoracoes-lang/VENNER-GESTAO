@@ -75,6 +75,11 @@ export const MENU: GrupoMenu[] = [
         "Cada anúncio do Mercado Livre e da Shopee ligado ao produto (e quantas unidades leva, nos kits).",
       ),
       tela("vendas.etapas", "Etapas do pedido", "Etapas por onde o pedido passa, do orçamento à entrega."),
+      tela(
+        "vendas.cadastros",
+        "Cadastros do comercial",
+        "Vendedores, condições e formas de pagamento, listas de preço, transportadoras, formas de envio e naturezas de operação.",
+      ),
     ],
   },
   {

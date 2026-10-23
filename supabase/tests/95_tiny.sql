@@ -148,7 +148,7 @@ select pg_temp.esperar(
 select pg_temp.esperar(
   (select p.numero_externo || '|' || p.nota_fiscal || '|' || p.vendedor_externo || '|' || e.nome || '|' || p.prazo_recebimento_dias
    from pedidos_venda p join etapas_pedido e on e.id = p.etapa_id where p.tiny_id = 100)
-  = '301|446|CRISTIANE|Confirmado pelo cliente|45',
+  = '301|446|CRISTIANE|Aprovado|45',
   'pedido do Tiny com nota, vendedor e etapa');
 select pg_temp.esperar(
   (select string_agg(i.codigo || '=' || pi.quantidade::numeric(10, 0) || 'x' || pi.preco_unitario::numeric(10, 2), ',' order by i.codigo)
@@ -181,7 +181,7 @@ select pg_temp.esperar(
   'acesso renovado, leitura liberada e estado guardado');
 
 -- A fábrica avança o pedido aqui; o Tiny dizendo "aprovado" não faz voltar.
-update pedidos_venda set etapa_id = (select id from etapas_pedido where nome = 'Montagem') where tiny_id = 100;
+update pedidos_venda set etapa_id = (select id from etapas_pedido where nome = 'Preparando envio') where tiny_id = 100;
 -- Recebimento lançado aqui não volta para aberto pelo Tiny.
 update contas_receber set situacao = 'pago', data_recebimento = '2026-11-01', valor_recebido = 800,
   conta_bancaria_id = (select id from contas_bancarias where tiny_id = 501) where tiny_id = 2;
@@ -202,7 +202,7 @@ reset role;
 
 select pg_temp.esperar((select situacao from contas_receber where tiny_id = 2) = 'pago', 'recebimento daqui é mantido');
 select pg_temp.esperar(
-  (select e.nome from pedidos_venda p join etapas_pedido e on e.id = p.etapa_id where p.tiny_id = 100) = 'Montagem',
+  (select e.nome from pedidos_venda p join etapas_pedido e on e.id = p.etapa_id where p.tiny_id = 100) = 'Preparando envio',
   'etapa marcada aqui não volta');
 select pg_temp.esperar(
   (select sum(quantidade) from pedido_venda_itens pi join pedidos_venda p on p.id = pi.pedido_id where p.tiny_id = 100) = 4,

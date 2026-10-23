@@ -4,7 +4,7 @@
 // botão "Ler agora". A chave do robô é conferida pelo banco em cada chamada.
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { ApiTiny, renovarTiny, SemOrcamento } from "./api.ts";
-import { assinatura, categoria, contaFinanceira, data, pedido, produto, titulo } from "./normalizar.ts";
+import { assinatura, categoria, contaFinanceira, data, formaSimples, listaPreco, pedido, precosDaLista, produto, titulo, vendedor } from "./normalizar.ts";
 import { HISTORICO_DESDE, type Cursor, type EstadoLeitura, type Lote, type TipoFila } from "./tipos.ts";
 
 type Inicio = {
@@ -91,6 +91,7 @@ export async function lerTiny(
         if (e instanceof SemOrcamento) throw e;
         erros.push(e instanceof Error ? e.message : String(e));
       }
+      await lerCadastrosComerciais(tiny, supabase, integracao, chave, erros);
     }
 
     // 2. Listagens: o que mudou desde a última volta entra na fila.
@@ -135,6 +136,42 @@ export async function lerTiny(
   const fim = await supabase.rpc("robo_tiny_aplicar", { integracao, chave_robo: chave, lote });
   if (fim.error) throw new Error(fim.error.message);
   return { chamadas: api?.usadas ?? 0, resumo: fim.data, erro: lote.erro };
+}
+
+// Vendedores, formas de recebimento e de envio e listas de preço (uma vez por
+// dia, junto com as categorias). Cada um à parte: sem permissão de leitura em
+// um deles, os outros seguem.
+async function lerCadastrosComerciais(api: ApiTiny, supabase: SupabaseClient, integracao: string, chave: string, erros: string[]) {
+  const dados: Record<string, unknown[]> = {};
+  const ler = async (rotulo: string, f: () => Promise<unknown[]>) => {
+    try {
+      return await f();
+    } catch (e) {
+      if (e instanceof SemOrcamento) throw e;
+      erros.push(`${rotulo}: ${e instanceof Error ? e.message : String(e)}`);
+      return null;
+    }
+  };
+  const vendedores = await ler("Vendedores", async () => (await todasAsPaginas(api, "/vendedores", 2)).map(vendedor).filter((v) => v !== null));
+  if (vendedores) dados.vendedores = vendedores;
+  const formas = await ler("Formas de pagamento", async () => (await todasAsPaginas(api, "/formas-pagamento", 1)).map(formaSimples).filter((v) => v !== null));
+  if (formas) dados.formas_pagamento = formas;
+  const envio = await ler("Formas de envio", async () => (await todasAsPaginas(api, "/formas-envio", 1)).map(formaSimples).filter((v) => v !== null));
+  if (envio) dados.formas_envio = envio;
+  const listas = await ler("Listas de preço", async () => {
+    const todas = (await todasAsPaginas(api, "/listas-precos", 1)).map(listaPreco).filter((l) => l !== null);
+    // Preços próprios de cada lista, enquanto houver orçamento nesta leitura.
+    for (const l of todas) {
+      if (api.restantes() < 5) break;
+      const d = await api.ler(`/listas-precos/${l.id}`);
+      if (d) l.precos = precosDaLista(d);
+    }
+    return todas;
+  });
+  if (listas) dados.listas_preco = listas;
+  if (!Object.keys(dados).length) return;
+  const r = await supabase.rpc("robo_tiny_cadastros", { integracao, chave_robo: chave, dados });
+  if (r.error) erros.push(`Cadastros do comercial: ${r.error.message}`);
 }
 
 async function todasAsPaginas(api: ApiTiny, caminho: string, maximo: number): Promise<unknown[]> {

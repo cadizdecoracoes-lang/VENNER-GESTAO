@@ -2,7 +2,7 @@
 // completa com o Tiny e o banco simulados.
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { categoria, contato, data, pedido, produto, titulo } from "../src/lib/tiny/normalizar.ts";
+import { categoria, contato, data, formaSimples, listaPreco, pedido, precosDaLista, produto, titulo, vendedor } from "../src/lib/tiny/normalizar.ts";
 import { horarioTiny, lerTiny } from "../src/lib/tiny/robo.ts";
 import type { Lote } from "../src/lib/tiny/tipos.ts";
 
@@ -89,6 +89,18 @@ test("produto: matéria-prima, unidade, peso e preço", () => {
     produto({ id: 9, sku: "MP1", descricao: "Resina", tipo: "M", unidade: "kg", ncm: "3901.10.10", dimensoes: { pesoBruto: 0, pesoLiquido: 1.2 }, precos: { preco: 0 } }),
     { produto_id: 9, sku: "MP1", descricao: "Resina", tipo_item: "materia_prima", unidade: "KG", ncm: "3901.10.10", peso: 1.2, preco: null },
   );
+});
+
+test("cadastros do comercial: vendedor, formas e lista de preço", () => {
+  assert.deepEqual(vendedor({ id: 5, situacao: "A", contato: { nome: "CRISTIANE", email: "c@x", celular: "11 9" } }), {
+    id: 5, nome: "CRISTIANE", email: "c@x", telefone: "11 9", ativo: true,
+  });
+  assert.equal(vendedor({ id: 6, situacao: "I", contato: { nome: "X" } })?.ativo, false);
+  assert.equal(vendedor({ id: 7, contato: {} }), null);
+  assert.deepEqual(formaSimples({ id: 1, nome: "Boleto", situacao: "2" }), { id: 1, nome: "Boleto", ativo: false });
+  assert.deepEqual(listaPreco({ id: 9, descricao: "Distribuidor", acrescimoDesconto: -10 }), { id: 9, nome: "Distribuidor", acrescimo_desconto: -10 });
+  assert.deepEqual(precosDaLista({ excecoes: { idProduto: 3001, preco: 6.9, precoPromocional: 0 } }), [{ produto_id: 3001, preco: 6.9, preco_promocional: null }]);
+  assert.equal(precosDaLista({ excecoes: [{ idProduto: 1, preco: 2 }, { idProduto: null, preco: 3 }] }).length, 1);
 });
 
 // Leitura completa com o Tiny e o banco simulados.

@@ -42,7 +42,7 @@ select pg_temp.esperar((select count(*) from itens) > 0, 'comercial enxerga os p
 select set_config('teste.pedido', salvar_pedido_venda(pg_temp.pedido(current_setting('teste.industria')))::text, false);
 select pg_temp.esperar(
   (select etapa_nome || '|' || valor_total || '|' || (dias_atraso > 0) from pedidos_venda_resumo where id = current_setting('teste.pedido')::uuid)
-    = 'Emitido|300.00|true',
+    = 'Em aberto|300.00|true',
   'pedido nasce na primeira etapa com o total dos itens');
 select pg_temp.esperar_erro(
   $$select salvar_pedido_venda(pg_temp.pedido(current_setting('teste.comercio')))$$,
@@ -51,7 +51,7 @@ select pg_temp.esperar_erro(
   $$select salvar_pedido_venda(pg_temp.pedido(current_setting('teste.industria')) - 'itens')$$,
   'pelo menos um item', 'pedido sem itens é recusado');
 
-update pedidos_venda set etapa_id = (select id from etapas_pedido where nome = 'Confirmado pelo cliente')
+update pedidos_venda set etapa_id = (select id from etapas_pedido where nome = 'Aprovado')
 where id = current_setting('teste.pedido')::uuid;
 select pg_temp.esperar(
   (select count(*) from pedido_etapas_historico where pedido_id = current_setting('teste.pedido')::uuid) = 2,
@@ -67,9 +67,9 @@ reset role;
 set role authenticated;
 set request.jwt.claim.sub = '00000000-0000-0000-0000-00000000000d';
 select pg_temp.esperar((select count(*) from pedidos_venda) = 1, 'PCP vê os pedidos sem ter CNPJ liberado');
-update pedidos_venda set etapa_id = (select id from etapas_pedido where nome = 'Em produção');
+update pedidos_venda set etapa_id = (select id from etapas_pedido where nome = 'Preparando envio');
 select pg_temp.esperar(
-  (select etapa_nome from pedidos_venda_resumo) = 'Em produção', 'PCP muda a etapa do pedido');
+  (select etapa_nome from pedidos_venda_resumo) = 'Preparando envio', 'PCP muda a etapa do pedido');
 select pg_temp.esperar(
   (select jsonb_array_length(dados_planejamento() -> 'pedidos')) = 1,
   'planejamento traz os pedidos em fase de produção');

@@ -5,7 +5,7 @@ import { hojeBrasil } from "@/lib/datas";
 import { carregarEmpresas } from "@/lib/empresa";
 import { supabaseConfigurado } from "@/lib/supabase/config";
 import { criarClienteServidor } from "@/lib/supabase/server";
-import { carregarClientes, carregarProdutosVenda } from "@/lib/vendas";
+import { carregarClientes, carregarOpcoesPedido, carregarProdutosVenda } from "@/lib/vendas";
 import { salvarPedido } from "../../actions";
 import { FormPedido, type PedidoForm } from "../../form-pedido";
 
@@ -20,15 +20,25 @@ export default async function PaginaEditarPedido({ params }: { params: Promise<{
   const { data } = await supabase
     .from("pedidos_venda_resumo")
     .select(
-      "numero, fase, empresa_id, cliente_id, data_pedido, prazo_entrega, condicao_pagamento, prazo_recebimento_dias, prioridade, observacao",
+      "numero, fase, empresa_id, cliente_id, data_pedido, prazo_entrega, condicao_pagamento, prazo_recebimento_dias, prioridade, observacao, numero_ordem_compra, vendedor_cadastro_id, lista_preco_id, natureza_operacao_id, forma_pagamento_id, categoria_id, transportadora_id, forma_envio_id, frete_por_conta, valor_frete, valor_desconto, valor_outras_despesas, endereco_entrega, observacao_interna",
     )
     .eq("id", id)
     .maybeSingle();
   if (!data) notFound();
-  const { data: itens } = await supabase.from("pedido_venda_itens").select("item_id, quantidade, preco_unitario").eq("pedido_id", id);
-  const [empresas, clientes, produtos] = await Promise.all([carregarEmpresas(), carregarClientes(), carregarProdutosVenda()]);
+  const [{ data: itens }, { data: parcelas }, empresas, clientes, produtos, opcoes] = await Promise.all([
+    supabase.from("pedido_venda_itens").select("item_id, quantidade, preco_unitario, info_adicional").eq("pedido_id", id),
+    supabase.from("pedido_parcelas").select("dias, vencimento, valor, observacao").eq("pedido_id", id).order("numero"),
+    carregarEmpresas(),
+    carregarClientes(),
+    carregarProdutosVenda(),
+    carregarOpcoesPedido(),
+  ]);
   const pedido = {
     ...data,
+    valor_frete: Number(data.valor_frete),
+    valor_desconto: Number(data.valor_desconto),
+    valor_outras_despesas: Number(data.valor_outras_despesas),
+    parcelas: (parcelas ?? []).map((p) => ({ ...p, valor: Number(p.valor) })),
     itens: (itens ?? []).map((i) => ({ ...i, quantidade: Number(i.quantidade), preco_unitario: Number(i.preco_unitario) })),
   } as PedidoForm;
 
@@ -48,6 +58,7 @@ export default async function PaginaEditarPedido({ params }: { params: Promise<{
             empresas={empresas}
             clientes={clientes}
             produtos={produtos}
+            opcoes={opcoes}
             hoje={hojeBrasil()}
             voltar={`/vendas/pedidos/${id}`}
           />

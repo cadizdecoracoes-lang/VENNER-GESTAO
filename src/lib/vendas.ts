@@ -77,3 +77,67 @@ export async function confirmadosNoPeriodo(etapas: Etapa[], de: string, ate: str
     .limit(5000);
   return { etapa, ids: new Set((data ?? []).map((h) => h.pedido_id as string)) };
 }
+
+// Cadastros que o pedido usa (vêm do Tiny e da tela Cadastros do comercial).
+export type Opcao = { id: string; nome: string };
+export type ListaPreco = Opcao & { acrescimo_desconto: number; precos: Record<string, number> };
+export type OpcoesPedido = {
+  vendedores: Opcao[];
+  listas: ListaPreco[];
+  naturezas: Opcao[];
+  formasPagamento: Opcao[];
+  condicoes: (Opcao & { dias: number[] })[];
+  categorias: Opcao[];
+  transportadoras: Opcao[];
+  formasEnvio: Opcao[];
+};
+
+export async function carregarOpcoesPedido(): Promise<OpcoesPedido> {
+  const vazio: OpcoesPedido = {
+    vendedores: [],
+    listas: [],
+    naturezas: [],
+    formasPagamento: [],
+    condicoes: [],
+    categorias: [],
+    transportadoras: [],
+    formasEnvio: [],
+  };
+  if (!supabaseConfigurado) return vazio;
+  const supabase = await criarClienteServidor();
+  const ativos = (tabela: string, campo = "ativa", colunas = "id, nome") =>
+    supabase.from(tabela).select(colunas).eq(campo, true).order("nome").limit(2000);
+  const [vendedores, listas, precos, naturezas, formas, condicoes, categorias, transportadoras, envios] = await Promise.all([
+    ativos("vendedores", "ativo"),
+    ativos("listas_preco", "ativa", "id, nome, acrescimo_desconto"),
+    supabase.from("lista_preco_itens").select("lista_id, item_id, preco, preco_promocional").limit(20000),
+    ativos("naturezas_operacao"),
+    ativos("formas_pagamento"),
+    ativos("condicoes_pagamento", "ativa", "id, nome, dias"),
+    supabase.from("plano_contas").select("id, codigo, nome").eq("tipo", "receita").eq("ativa", true).order("codigo"),
+    ativos("transportadoras"),
+    ativos("formas_envio"),
+  ]);
+  // Preço próprio da lista: o promocional vale quando houver.
+  const porLista = new Map<string, Record<string, number>>();
+  for (const p of precos.data ?? []) {
+    const m = porLista.get(p.lista_id) ?? {};
+    m[p.item_id] = Number(p.preco_promocional ?? 0) > 0 ? Number(p.preco_promocional) : Number(p.preco);
+    porLista.set(p.lista_id, m);
+  }
+  const lista = <T,>(r: { data: unknown }) => (r.data ?? []) as T[];
+  return {
+    vendedores: lista<Opcao>(vendedores),
+    listas: lista<Opcao & { acrescimo_desconto: number }>(listas).map((l) => ({
+      ...l,
+      acrescimo_desconto: Number(l.acrescimo_desconto),
+      precos: porLista.get(l.id) ?? {},
+    })),
+    naturezas: lista<Opcao>(naturezas),
+    formasPagamento: lista<Opcao>(formas),
+    condicoes: lista<Opcao & { dias: number[] }>(condicoes),
+    categorias: lista<{ id: string; codigo: string; nome: string }>(categorias).map((c) => ({ id: c.id, nome: `${c.codigo} ${c.nome}` })),
+    transportadoras: lista<Opcao>(transportadoras),
+    formasEnvio: lista<Opcao>(envios),
+  };
+}

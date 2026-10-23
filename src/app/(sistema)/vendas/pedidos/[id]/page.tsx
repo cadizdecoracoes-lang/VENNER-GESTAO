@@ -24,6 +24,7 @@ import { diasDaCondicao } from "@/lib/parcelas";
 import { FASES_PEDIDO, PRIORIDADES, type FasePedido, type SituacaoTitulo } from "@/lib/rotulos";
 import { supabaseConfigurado } from "@/lib/supabase/config";
 import { criarClienteServidor } from "@/lib/supabase/server";
+import { CAMPOS_ENDERECO, FRETE_POR_CONTA } from "@/lib/cadastros-comercial";
 import { CAMPOS_PEDIDO, carregarEtapas, nomeCliente, type PedidoResumo } from "@/lib/vendas";
 import { gerarParcelas, mudarEtapa } from "../actions";
 
@@ -34,8 +35,46 @@ type ItemPedido = {
   quantidade: number;
   preco_unitario: number;
   valor_total: number;
+  info_adicional: string | null;
   itens: { codigo: string; descricao: string; unidade: string } | null;
 };
+type Nome = { nome: string } | null;
+// Campos que o pedido tem como no Tiny.
+type DadosTiny = {
+  numero_ordem_compra: string | null;
+  frete_por_conta: string | null;
+  valor_frete: number;
+  valor_desconto: number;
+  valor_outras_despesas: number;
+  codigo_rastreamento: string | null;
+  url_rastreamento: string | null;
+  endereco_entrega: Record<string, string> | null;
+  observacao_interna: string | null;
+  data_envio: string | null;
+  data_entregue: string | null;
+  nota_fiscal: string | null;
+  nota_fiscal_serie: string | null;
+  nota_fiscal_chave: string | null;
+  data_faturamento: string | null;
+  vendedores: Nome;
+  listas_preco: Nome;
+  naturezas_operacao: Nome;
+  formas_pagamento: Nome;
+  transportadoras: Nome;
+  formas_envio: Nome;
+  pedido_parcelas: { numero: number; dias: number | null; vencimento: string | null; valor: number; observacao: string | null }[];
+};
+const CAMPOS_TINY =
+  "numero_ordem_compra, frete_por_conta, valor_frete, valor_desconto, valor_outras_despesas, codigo_rastreamento, url_rastreamento, endereco_entrega, observacao_interna, data_envio, data_entregue, nota_fiscal, nota_fiscal_serie, nota_fiscal_chave, data_faturamento, vendedores(nome), listas_preco(nome), naturezas_operacao(nome), formas_pagamento(nome), transportadoras(nome), formas_envio(nome), pedido_parcelas(numero, dias, vencimento, valor, observacao)";
+
+function Dado({ rotulo, children }: { rotulo: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <dt className="text-texto-suave">{rotulo}</dt>
+      <dd>{children || "—"}</dd>
+    </div>
+  );
+}
 type Historico = { etapa: string; fase: FasePedido; em: string; usuario: string | null };
 type TituloPedido = {
   id: string;
@@ -60,10 +99,11 @@ export default async function PaginaPedido({ params }: { params: Promise<{ id: s
 
   const planeja = pode(acesso, "producao.sequenciamento", "ver") || pode(acesso, "compras.sugestoes", "ver");
   const veReceber = pode(acesso, "financeiro.receber", "ver");
-  const [{ data: itensData }, { data: historicoData }, etapas, empresas, plano, { data: titulosData }] = await Promise.all([
+  const [{ data: tinyData }, { data: itensData }, { data: historicoData }, etapas, empresas, plano, { data: titulosData }] = await Promise.all([
+    supabase.from("pedidos_venda").select(CAMPOS_TINY).eq("id", id).maybeSingle(),
     supabase
       .from("pedido_venda_itens")
-      .select("item_id, quantidade, preco_unitario, valor_total, itens(codigo, descricao, unidade)")
+      .select("item_id, quantidade, preco_unitario, valor_total, info_adicional, itens(codigo, descricao, unidade)")
       .eq("pedido_id", id),
     supabase.rpc("historico_pedido", { pedido: id }),
     carregarEtapas(),
@@ -78,6 +118,11 @@ export default async function PaginaPedido({ params }: { params: Promise<{ id: s
       : Promise.resolve({ data: null }),
   ]);
   const itens = (itensData ?? []) as unknown as ItemPedido[];
+  const tiny = tinyData as unknown as DadosTiny | null;
+  const totalGeral = tiny
+    ? Number(pedido.valor_total) + Number(tiny.valor_frete) + Number(tiny.valor_outras_despesas) - Number(tiny.valor_desconto)
+    : Number(pedido.valor_total);
+  const parcelasCombinadas = [...(tiny?.pedido_parcelas ?? [])].sort((a, b) => a.numero - b.numero);
   const titulos = ((titulosData ?? []) as TituloPedido[]).filter((t) => t.situacao !== "cancelado");
   const { data: custosData } = itens.length ? await supabase.rpc("custos_padrao", { itens: itens.map((i) => i.item_id) }) : { data: [] };
   const custoUnitario = new Map(((custosData ?? []) as { item_id: string; custo: number }[]).map((c) => [c.item_id, Number(c.custo)]));
@@ -184,6 +229,75 @@ export default async function PaginaPedido({ params }: { params: Promise<{ id: s
         </dl>
       </Cartao>
 
+      {tiny && (
+        <Cartao titulo="Dados do pedido">
+          <dl className="grid gap-4 text-sm sm:grid-cols-2 lg:grid-cols-4">
+            <Dado rotulo="Vendedor">{tiny.vendedores?.nome}</Dado>
+            <Dado rotulo="Nº da ordem de compra">{tiny.numero_ordem_compra}</Dado>
+            <Dado rotulo="Lista de preço">{tiny.listas_preco?.nome ?? "Padrão"}</Dado>
+            <Dado rotulo="Natureza de operação">{tiny.naturezas_operacao?.nome}</Dado>
+            <Dado rotulo="Forma de recebimento">{tiny.formas_pagamento?.nome}</Dado>
+            <Dado rotulo="Transportadora">{tiny.transportadoras?.nome}</Dado>
+            <Dado rotulo="Forma de envio">{tiny.formas_envio?.nome}</Dado>
+            <Dado rotulo="Frete por conta">{tiny.frete_por_conta && FRETE_POR_CONTA[tiny.frete_por_conta]}</Dado>
+            <Dado rotulo="Rastreio">
+              {tiny.url_rastreamento ? (
+                <a href={tiny.url_rastreamento} target="_blank" rel="noreferrer" className="text-primaria hover:underline">
+                  {tiny.codigo_rastreamento ?? "Abrir"}
+                </a>
+              ) : (
+                tiny.codigo_rastreamento
+              )}
+            </Dado>
+            <Dado rotulo="Nota fiscal">
+              {tiny.nota_fiscal &&
+                `nº ${tiny.nota_fiscal}${tiny.nota_fiscal_serie ? ` série ${tiny.nota_fiscal_serie}` : ""}${
+                  tiny.data_faturamento ? ` · ${formatarData(tiny.data_faturamento)}` : ""
+                }`}
+            </Dado>
+            <Dado rotulo="Enviado em">{tiny.data_envio && formatarData(tiny.data_envio)}</Dado>
+            <Dado rotulo="Entregue em">{tiny.data_entregue && formatarData(tiny.data_entregue)}</Dado>
+          </dl>
+          <dl className="mt-4 grid gap-4 border-t border-borda pt-4 text-sm sm:grid-cols-2 lg:grid-cols-5">
+            <Dado rotulo="Produtos">{formatarMoeda(Number(pedido.valor_total))}</Dado>
+            <Dado rotulo="Frete">{formatarMoeda(Number(tiny.valor_frete))}</Dado>
+            <Dado rotulo="Outras despesas">{formatarMoeda(Number(tiny.valor_outras_despesas))}</Dado>
+            <Dado rotulo="Desconto">{formatarMoeda(Number(tiny.valor_desconto))}</Dado>
+            <Dado rotulo="Total do pedido">
+              <span className="font-semibold tabular-nums">{formatarMoeda(totalGeral)}</span>
+            </Dado>
+          </dl>
+          {parcelasCombinadas.length > 0 && (
+            <div className="mt-4 border-t border-borda pt-4">
+              <p className="mb-2 text-sm font-medium">Parcelas combinadas</p>
+              <Tabela colunas={["Nº", "Dias", "Vencimento", "Valor", "Observação"]} embutida>
+                {parcelasCombinadas.map((p) => (
+                  <tr key={p.numero}>
+                    <Celula className="tabular-nums">{p.numero}</Celula>
+                    <Celula className="tabular-nums">{p.dias ?? "—"}</Celula>
+                    <Celula>{formatarData(p.vencimento)}</Celula>
+                    <Celula className="tabular-nums">{formatarMoeda(Number(p.valor))}</Celula>
+                    <Celula>{p.observacao ?? "—"}</Celula>
+                  </tr>
+                ))}
+              </Tabela>
+            </div>
+          )}
+          {(tiny.endereco_entrega || tiny.observacao_interna) && (
+            <dl className="mt-4 grid gap-4 border-t border-borda pt-4 text-sm sm:grid-cols-2">
+              {tiny.endereco_entrega && (
+                <Dado rotulo="Entregar em">
+                  {CAMPOS_ENDERECO.map((c) => tiny.endereco_entrega?.[c.nome])
+                    .filter(Boolean)
+                    .join(", ")}
+                </Dado>
+              )}
+              {tiny.observacao_interna && <Dado rotulo="Observações internas">{tiny.observacao_interna}</Dado>}
+            </dl>
+          )}
+        </Cartao>
+      )}
+
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="space-y-6 lg:col-span-2">
           <Cartao titulo="Produtos">
@@ -192,6 +306,7 @@ export default async function PaginaPedido({ params }: { params: Promise<{ id: s
                 <tr key={i.item_id}>
                   <Celula>
                     <span className="font-medium">{i.itens?.codigo}</span> · {i.itens?.descricao}
+                    {i.info_adicional && <span className="block text-xs text-texto-suave">{i.info_adicional}</span>}
                   </Celula>
                   <Celula className="whitespace-nowrap tabular-nums">
                     {formatarNumero(Number(i.quantidade))} {i.itens?.unidade}
@@ -326,7 +441,10 @@ export default async function PaginaPedido({ params }: { params: Promise<{ id: s
                   >
                     <input
                       name="dias"
-                      defaultValue={diasDaCondicao(pedido.condicao_pagamento, pedido.prazo_recebimento_dias).join("/")}
+                      defaultValue={(parcelasCombinadas.length && parcelasCombinadas.every((p) => p.dias !== null)
+                        ? parcelasCombinadas.map((p) => p.dias)
+                        : diasDaCondicao(pedido.condicao_pagamento, pedido.prazo_recebimento_dias)
+                      ).join("/")}
                       className={estiloCampo}
                     />
                   </Campo>
@@ -334,7 +452,7 @@ export default async function PaginaPedido({ params }: { params: Promise<{ id: s
                     <input name="base" type="date" defaultValue={hoje} className={estiloCampo} />
                   </Campo>
                   <Campo rotulo="Valor total (R$)">
-                    <input name="total" inputMode="decimal" defaultValue={Number(pedido.valor_total)} className={estiloCampo} />
+                    <input name="total" inputMode="decimal" defaultValue={totalGeral} className={estiloCampo} />
                   </Campo>
                 </FormAcao>
               ) : (
