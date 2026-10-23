@@ -1,17 +1,6 @@
 // Mapa de telas do sistema. O `codigo` de cada tela é o mesmo usado na tabela
 // `telas` do banco e nas permissões por perfil (ver supabase/migrations).
-import {
-  Factory,
-  Boxes,
-  ShoppingCart,
-  Store,
-  Landmark,
-  Users,
-  LineChart,
-  Settings,
-  LayoutDashboard,
-  type LucideIcon,
-} from "lucide-react";
+import { Factory, Boxes, ShoppingCart, Store, Landmark, Users, LineChart, Settings, LayoutDashboard, type LucideIcon } from "lucide-react";
 
 export type Tela = {
   codigo: string;
@@ -80,6 +69,11 @@ export const MENU: GrupoMenu[] = [
     telas: [
       tela("vendas.pedidos", "Pedidos de venda", "Pedidos do comercial e dos marketplaces, com o funil por etapa."),
       tela("vendas.clientes", "Clientes", "Cadastro de clientes."),
+      tela(
+        "vendas.anuncios",
+        "Anúncios das plataformas",
+        "Cada anúncio do Mercado Livre e da Shopee ligado ao produto (e quantas unidades leva, nos kits).",
+      ),
       tela("vendas.etapas", "Etapas do pedido", "Etapas por onde o pedido passa, do orçamento à entrega."),
     ],
   },
@@ -89,8 +83,12 @@ export const MENU: GrupoMenu[] = [
     icone: Landmark,
     telas: [
       tela("financeiro.pagar", "Contas a pagar", "Títulos a pagar por CNPJ."),
-      tela("financeiro.notas_fornecedor", "Notas de fornecedores", "XML ou PDF da nota do fornecedor: gera as contas a pagar e a entrada no estoque."),
-      tela("financeiro.receber", "Contas a receber", "Títulos a receber por CNPJ."),
+      tela(
+        "financeiro.notas_fornecedor",
+        "Notas de fornecedores",
+        "XML ou PDF da nota do fornecedor: gera as contas a pagar e a entrada no estoque.",
+      ),
+      tela("financeiro.receber", "Contas a receber", "Parcelas dos pedidos e vendas das plataformas, pelo valor que cai na conta."),
       tela("financeiro.conciliacao", "Conciliação bancária", "Extrato do banco casado com os lançamentos."),
       tela("financeiro.fluxo_caixa", "Fluxo de caixa", "Realizado (conciliado) e projetado, por CNPJ e consolidado."),
       tela("financeiro.contas_bancarias", "Contas bancárias", "Contas de cada CNPJ, com saldo inicial para a conciliação."),
@@ -127,6 +125,7 @@ export const MENU: GrupoMenu[] = [
       tela("config.empresas", "Empresas do grupo", "CNPJs, regime tributário e atividades."),
       tela("config.usuarios", "Usuários", "Quem acessa o sistema e com qual perfil."),
       tela("config.perfis", "Perfis de acesso", "Telas e ações liberadas para cada perfil."),
+      tela("config.integracoes", "Integrações", "Contas do Mercado Livre e lojas da Shopee ligadas ao sistema para buscar as vendas."),
       tela("config.atualizacoes", "Atualizações", "Histórico do que mudou no sistema e quando."),
     ],
   },

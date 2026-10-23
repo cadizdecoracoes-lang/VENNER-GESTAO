@@ -4,14 +4,37 @@ import { criarClienteServidor } from "@/lib/supabase/server";
 
 export type OpcaoCodigo = { id: string; codigo: string; nome: string };
 
-// Só as categorias de despesa sem subcategorias aceitam lançamento.
-export async function carregarCategoriasDespesa(): Promise<OpcaoCodigo[]> {
+// Só as categorias sem subcategorias aceitam lançamento.
+async function carregarCategorias(tipo: "despesa" | "receita"): Promise<OpcaoCodigo[]> {
   if (!supabaseConfigurado) return [];
   const supabase = await criarClienteServidor();
-  const { data } = await supabase.from("plano_contas").select("id, codigo, nome, pai_id, ativa").eq("tipo", "despesa").order("codigo");
+  const { data } = await supabase.from("plano_contas").select("id, codigo, nome, pai_id, ativa").eq("tipo", tipo).order("codigo");
   const lista = data ?? [];
   const maes = new Set(lista.map((c) => c.pai_id).filter(Boolean));
   return lista.filter((c) => c.ativa && !maes.has(c.id)).map((c) => ({ id: c.id, codigo: c.codigo, nome: c.nome }));
+}
+
+export const carregarCategoriasDespesa = () => carregarCategorias("despesa");
+export const carregarCategoriasReceita = () => carregarCategorias("receita");
+
+export async function carregarContasBancarias(empresa: string): Promise<{ id: string; nome: string }[]> {
+  if (!supabaseConfigurado) return [];
+  const supabase = await criarClienteServidor();
+  const { data } = await supabase
+    .from("contas_bancarias")
+    .select("id, nome")
+    .eq("empresa_id", empresa)
+    .eq("ativa", true)
+    .order("tipo")
+    .order("nome");
+  return data ?? [];
+}
+
+export async function carregarLocais(): Promise<{ id: string; nome: string }[]> {
+  if (!supabaseConfigurado) return [];
+  const supabase = await criarClienteServidor();
+  const { data } = await supabase.from("locais_estoque").select("id, nome").eq("ativo", true).order("nome");
+  return data ?? [];
 }
 
 export async function carregarCentrosCusto(): Promise<OpcaoCodigo[]> {

@@ -44,7 +44,7 @@ const arred = (v: number) => Math.round(v * 10000) / 10000;
 
 // Quantidade de componente por unidade do produto, já com a perda.
 function porUnidade(f: FichaPlan, c: FichaPlan["componentes"][number]): number {
-  return n(c.quantidade) / n(f.quantidade_base) / (1 - n(c.perda_percentual) / 100);
+  return (n(c.quantidade) / n(f.quantidade_base)) * (1 + n(c.perda_percentual) / 100);
 }
 
 // Nível mais baixo em que cada item aparece na estrutura (0 = produto vendido).

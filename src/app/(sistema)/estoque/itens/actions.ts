@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { mensagemErro, semLinhas, SEM_BANCO, type Estado } from "@/lib/erros";
-import { lerNumero } from "@/lib/formato";
+import { lerNumero, somenteDigitos } from "@/lib/formato";
 import { TIPOS_ITEM } from "@/lib/rotulos";
 import { supabaseConfigurado } from "@/lib/supabase/config";
 import { criarClienteServidor } from "@/lib/supabase/server";
@@ -11,7 +11,9 @@ import { criarClienteServidor } from "@/lib/supabase/server";
 export async function salvarItem(id: string | null, _: Estado, form: FormData): Promise<Estado> {
   if (!supabaseConfigurado) return SEM_BANCO;
 
-  const codigo = String(form.get("codigo") ?? "").trim().toUpperCase();
+  const codigo = String(form.get("codigo") ?? "")
+    .trim()
+    .toUpperCase();
   const descricao = String(form.get("descricao") ?? "").trim();
   const tipo = String(form.get("tipo"));
   if (!codigo || !descricao) return { erro: "Informe o código e a descrição." };
@@ -20,9 +22,13 @@ export async function salvarItem(id: string | null, _: Estado, form: FormData): 
   const estoqueMinimo = lerNumero(form.get("estoque_minimo"));
   const prazo = lerNumero(form.get("prazo_reposicao_dias"));
   const custo = lerNumero(form.get("custo_medio"));
-  if ([estoqueMinimo, prazo, custo].some((n) => Number.isNaN(n) || n < 0)) {
-    return { erro: "Estoque mínimo, prazo e custo precisam ser números positivos." };
+  const preco = lerNumero(form.get("preco_venda"));
+  const peso = lerNumero(form.get("peso_kg"));
+  if ([estoqueMinimo, prazo, custo, preco, peso].some((n) => Number.isNaN(n) || n < 0)) {
+    return { erro: "Estoque mínimo, prazo, custo, preço e peso precisam ser números positivos." };
   }
+  const ncm = somenteDigitos(form.get("ncm"));
+  if (ncm && ncm.length !== 8) return { erro: "O NCM tem 8 dígitos." };
 
   const dados = {
     codigo,
@@ -32,6 +38,9 @@ export async function salvarItem(id: string | null, _: Estado, form: FormData): 
     estoque_minimo: estoqueMinimo,
     prazo_reposicao_dias: Math.round(prazo),
     custo_medio: custo,
+    preco_venda: preco,
+    ncm: ncm || null,
+    peso_kg: String(form.get("peso_kg") ?? "").trim() ? peso : null,
     ativo: form.get("ativo") === "on",
   };
 

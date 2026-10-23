@@ -36,13 +36,28 @@ export default async function Painel() {
   const hoje = hojeBrasil();
   const segunda = inicioSemana(hoje);
   const verComercial = pode(acesso, "vendas.pedidos", "ver");
-  const verFinanceiro = pode(acesso, "financeiro.pagar", "ver");
+  const verPagar = pode(acesso, "financeiro.pagar", "ver");
+  const verReceber = pode(acesso, "financeiro.receber", "ver");
+  const verFinanceiro = verPagar || verReceber;
   const verProducao = pode(acesso, "producao.sequenciamento", "ver");
   const verCompras = pode(acesso, "compras.sugestoes", "ver");
   const verRh = ["rh.funcionarios", "rh.ponto", "rh.ferias"].some((t) => pode(acesso, t, "ver"));
   const supabase = supabaseConfigurado ? await criarClienteServidor() : null;
 
-  const [pedidos, etapas, titulos, plano] = await Promise.all([
+  // Títulos em aberto vencidos ou que vencem até depois de amanhã (a receber pelo líquido).
+  const titulosAte = (tabela: "contas_pagar" | "contas_receber", campo: string) => {
+    if (!supabase) return Promise.resolve([] as Titulo[]);
+    let c = supabase
+      .from(tabela)
+      .select(`valor:${campo}, vencimento`)
+      .eq("situacao", "aberto")
+      .lte("vencimento", somarDias(hoje, 2))
+      .limit(5000);
+    if (selecionada) c = c.eq("empresa_id", selecionada.id);
+    return c.then((r) => (r.data ?? []) as unknown as Titulo[]);
+  };
+
+  const [pedidos, etapas, titulos, receber, plano] = await Promise.all([
     (verComercial || verProducao) && supabase
       ? (() => {
           let c = supabase.from("pedidos_venda_resumo").select(CAMPOS_PEDIDO).neq("fase", "encerrado").limit(5000);
@@ -51,18 +66,8 @@ export default async function Painel() {
         })()
       : Promise.resolve([] as PedidoResumo[]),
     verComercial || verProducao ? carregarEtapas() : Promise.resolve([]),
-    verFinanceiro && supabase
-      ? (() => {
-          let c = supabase
-            .from("contas_pagar")
-            .select("valor, vencimento")
-            .eq("situacao", "aberto")
-            .lte("vencimento", somarDias(hoje, 2))
-            .limit(5000);
-          if (selecionada) c = c.eq("empresa_id", selecionada.id);
-          return c.then((r) => (r.data ?? []) as Titulo[]);
-        })()
-      : Promise.resolve([] as Titulo[]),
+    verPagar ? titulosAte("contas_pagar", "valor") : Promise.resolve([] as Titulo[]),
+    verReceber ? titulosAte("contas_receber", "valor_liquido") : Promise.resolve([] as Titulo[]),
     verProducao || verCompras ? carregarPlanejamento() : Promise.resolve(null),
   ]);
   const confirmados = verComercial ? await confirmadosNoPeriodo(etapas, segunda, hoje) : null;
@@ -79,14 +84,19 @@ export default async function Painel() {
   const aprovadosEncerrados = confirmados ? confirmados.ids.size - aprovados.length : 0;
 
   const vencidas = titulos.filter((t) => t.vencimento < hoje);
+  const vencidasReceber = receber.filter((t) => t.vencimento < hoje);
+  const somar = (l: Titulo[]) => l.reduce((s, t) => s + Number(t.valor), 0);
   const dias = [0, 1, 2].map((n) => {
     const dia = somarDias(hoje, n);
-    const lista = titulos.filter((t) => t.vencimento === dia);
+    const pagar = titulos.filter((t) => t.vencimento === dia);
+    const entrar = receber.filter((t) => t.vencimento === dia);
     return {
       dia,
       rotulo: n === 0 ? "Hoje" : n === 1 ? "Amanhã" : "Depois de amanhã",
-      quantidade: lista.length,
-      valor: lista.reduce((s, t) => s + Number(t.valor), 0),
+      quantidade: pagar.length,
+      valor: somar(pagar),
+      quantidadeReceber: entrar.length,
+      receber: somar(entrar),
     };
   });
 
@@ -163,30 +173,69 @@ export default async function Painel() {
                         {d.rotulo} <span className="text-xs text-texto-suave">{formatarData(d.dia)}</span>
                       </td>
                       <td className="py-2 text-right tabular-nums">
-                        <Link href={`/financeiro/pagar?de=${d.dia}&ate=${d.dia}&por=vencimento`} className="text-primaria hover:underline">
-                          {formatarMoeda(d.valor)}
-                        </Link>
-                        <span className="block text-xs text-texto-suave">{qtd(d.quantidade, "conta", "contas")}</span>
+                        {verPagar ? (
+                          <>
+                            <Link
+                              href={`/financeiro/pagar?de=${d.dia}&ate=${d.dia}&por=vencimento`}
+                              className="text-primaria hover:underline"
+                            >
+                              {formatarMoeda(d.valor)}
+                            </Link>
+                            <span className="block text-xs text-texto-suave">{qtd(d.quantidade, "conta", "contas")}</span>
+                          </>
+                        ) : (
+                          <span className="text-texto-suave">—</span>
+                        )}
                       </td>
-                      <td className="py-2 text-right text-texto-suave">—</td>
-                      <td className={`py-2 text-right tabular-nums ${d.valor > 0 ? "text-perigo" : ""}`}>{formatarMoeda(-d.valor)}</td>
+                      <td className="py-2 text-right tabular-nums">
+                        {verReceber ? (
+                          <>
+                            <Link
+                              href={`/financeiro/receber?de=${d.dia}&ate=${d.dia}&por=vencimento`}
+                              className="text-primaria hover:underline"
+                            >
+                              {formatarMoeda(d.receber)}
+                            </Link>
+                            <span className="block text-xs text-texto-suave">{qtd(d.quantidadeReceber, "conta", "contas")}</span>
+                          </>
+                        ) : (
+                          <span className="text-texto-suave">—</span>
+                        )}
+                      </td>
+                      <td className={`py-2 text-right tabular-nums ${d.receber - d.valor < 0 ? "text-perigo" : ""}`}>
+                        {verPagar && verReceber ? formatarMoeda(d.receber - d.valor) : "—"}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
-            <Indicador
-              rotulo="Contas a pagar vencidas"
-              valor={formatarMoeda(vencidas.reduce((s, t) => s + Number(t.valor), 0))}
-              detalhe={qtd(vencidas.length, "conta em aberto", "contas em aberto")}
-              cor={vencidas.length ? "text-perigo" : ""}
-              href="/financeiro/pagar?situacao=vencido"
-              fonte={`Em aberto com vencimento antes de ${formatarData(hoje)}.`}
-            />
+            <div className="space-y-3">
+              {verPagar && (
+                <Indicador
+                  rotulo="Contas a pagar vencidas"
+                  valor={formatarMoeda(somar(vencidas))}
+                  detalhe={qtd(vencidas.length, "conta em aberto", "contas em aberto")}
+                  cor={vencidas.length ? "text-perigo" : ""}
+                  href="/financeiro/pagar?situacao=vencido"
+                  fonte={`Em aberto com vencimento antes de ${formatarData(hoje)}.`}
+                />
+              )}
+              {verReceber && (
+                <Indicador
+                  rotulo="Contas a receber vencidas"
+                  valor={formatarMoeda(somar(vencidasReceber))}
+                  detalhe={qtd(vencidasReceber.length, "conta em aberto", "contas em aberto")}
+                  cor={vencidasReceber.length ? "text-alerta" : ""}
+                  href="/financeiro/receber?situacao=vencido"
+                  fonte={`Em aberto com vencimento antes de ${formatarData(hoje)}, pelo líquido.`}
+                />
+              )}
+            </div>
           </div>
           <Fonte>
-            Fonte: contas a pagar em aberto pelo vencimento · {daEmpresa}. O contas a receber ainda não existe no sistema (próximo pacote);
-            até lá o saldo do dia mostra só as saídas.
+            Fonte: contas a pagar e a receber em aberto pelo vencimento · {daEmpresa}. A receber pelo valor líquido (vendas das plataformas
+            já sem comissão e frete, na data em que o dinheiro é liberado). Saldo do dia = a receber − a pagar.
           </Fonte>
         </Bloco>
       )}

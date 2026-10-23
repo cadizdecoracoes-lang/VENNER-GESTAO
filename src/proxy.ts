@@ -25,7 +25,9 @@ export async function proxy(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  if (!user && !request.nextUrl.pathname.startsWith("/login")) {
+  // Avisos das plataformas chegam sem login e não leem nada.
+  const publico = request.nextUrl.pathname.startsWith("/login") || /^\/integracoes\/[a-z_]+\/aviso$/.test(request.nextUrl.pathname);
+  if (!user && !publico) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
     return NextResponse.redirect(url);

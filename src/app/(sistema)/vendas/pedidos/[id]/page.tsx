@@ -20,11 +20,12 @@ import { hojeBrasil } from "@/lib/datas";
 import { carregarEmpresas } from "@/lib/empresa";
 import { formatarData, formatarMoeda, formatarNumero } from "@/lib/formato";
 import { necessidadeMateriais, type DadosPlanejamento } from "@/lib/planejamento";
-import { FASES_PEDIDO, PRIORIDADES, type FasePedido } from "@/lib/rotulos";
+import { diasDaCondicao } from "@/lib/parcelas";
+import { FASES_PEDIDO, PRIORIDADES, type FasePedido, type SituacaoTitulo } from "@/lib/rotulos";
 import { supabaseConfigurado } from "@/lib/supabase/config";
 import { criarClienteServidor } from "@/lib/supabase/server";
 import { CAMPOS_PEDIDO, carregarEtapas, nomeCliente, type PedidoResumo } from "@/lib/vendas";
-import { mudarEtapa } from "../actions";
+import { gerarParcelas, mudarEtapa } from "../actions";
 
 const TELA = "vendas.pedidos";
 
@@ -36,6 +37,16 @@ type ItemPedido = {
   itens: { codigo: string; descricao: string; unidade: string } | null;
 };
 type Historico = { etapa: string; fase: FasePedido; em: string; usuario: string | null };
+type TituloPedido = {
+  id: string;
+  parcela: string | null;
+  valor: number;
+  tarifas: number;
+  valor_liquido: number;
+  vencimento: string;
+  situacao: SituacaoTitulo;
+  data_recebimento: string | null;
+};
 
 export default async function PaginaPedido({ params }: { params: Promise<{ id: string }> }) {
   const acesso = await carregarAcesso();
@@ -48,7 +59,8 @@ export default async function PaginaPedido({ params }: { params: Promise<{ id: s
   const pedido = data as unknown as PedidoResumo;
 
   const planeja = pode(acesso, "producao.sequenciamento", "ver") || pode(acesso, "compras.sugestoes", "ver");
-  const [{ data: itensData }, { data: historicoData }, etapas, empresas, plano] = await Promise.all([
+  const veReceber = pode(acesso, "financeiro.receber", "ver");
+  const [{ data: itensData }, { data: historicoData }, etapas, empresas, plano, { data: titulosData }] = await Promise.all([
     supabase
       .from("pedido_venda_itens")
       .select("item_id, quantidade, preco_unitario, valor_total, itens(codigo, descricao, unidade)")
@@ -57,8 +69,22 @@ export default async function PaginaPedido({ params }: { params: Promise<{ id: s
     carregarEtapas(),
     carregarEmpresas(),
     planeja ? supabase.rpc("dados_planejamento") : Promise.resolve({ data: null }),
+    veReceber
+      ? supabase
+          .from("contas_receber")
+          .select("id, parcela, valor, tarifas, valor_liquido, vencimento, situacao, data_recebimento")
+          .eq("pedido_id", id)
+          .order("vencimento")
+      : Promise.resolve({ data: null }),
   ]);
   const itens = (itensData ?? []) as unknown as ItemPedido[];
+  const titulos = ((titulosData ?? []) as TituloPedido[]).filter((t) => t.situacao !== "cancelado");
+  const { data: custosData } = itens.length ? await supabase.rpc("custos_padrao", { itens: itens.map((i) => i.item_id) }) : { data: [] };
+  const custoUnitario = new Map(((custosData ?? []) as { item_id: string; custo: number }[]).map((c) => [c.item_id, Number(c.custo)]));
+  const custoTotal = itens.reduce((s, i) => s + Number(i.quantidade) * (custoUnitario.get(i.item_id) ?? 0), 0);
+  const tarifas = titulos.reduce((s, t) => s + Number(t.tarifas), 0);
+  const receitaLiquida = Number(pedido.valor_total) - tarifas;
+  const margem = receitaLiquida - custoTotal;
   const historico = (historicoData ?? []) as Historico[];
   const hoje = hojeBrasil();
 
@@ -229,39 +255,134 @@ export default async function PaginaPedido({ params }: { params: Promise<{ id: s
           </Cartao>
         </div>
 
-        <Cartao titulo="Etapa do pedido">
-          <div className="space-y-5">
-            {pode(acesso, TELA, "editar") && (
-              <FormAcao key={pedido.etapa_id} acao={mudarEtapa.bind(null, pedido.id)} rotulo="Mudar etapa" secundario className="space-y-3">
-                <Campo rotulo="Nova etapa">
-                  <select name="etapa_id" defaultValue={pedido.etapa_id} className={estiloCampo}>
-                    {etapas
-                      .filter((e) => e.ativa || e.id === pedido.etapa_id)
-                      .map((e) => (
-                        <option key={e.id} value={e.id}>
-                          {e.nome} ({FASES_PEDIDO[e.fase]})
-                        </option>
-                      ))}
-                  </select>
-                </Campo>
-              </FormAcao>
-            )}
-            <ol className="space-y-3 border-l border-borda pl-4 text-sm">
-              {historico.map((h, k) => (
-                <li key={k} className="relative">
-                  <span
-                    className={`absolute -left-[21px] top-1.5 h-2.5 w-2.5 rounded-full ${k === historico.length - 1 ? "bg-primaria" : "bg-borda"}`}
-                  />
-                  <p className="font-medium">{h.etapa}</p>
-                  <p className="text-xs text-texto-suave">
-                    {new Date(h.em).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo", dateStyle: "short", timeStyle: "short" })}
-                    {h.usuario ? ` · ${h.usuario}` : ""}
-                  </p>
-                </li>
-              ))}
-            </ol>
-          </div>
-        </Cartao>
+        <div className="space-y-6">
+          <Cartao titulo="Margem do pedido">
+            <dl className="space-y-1.5 text-sm">
+              <div className="flex justify-between gap-4">
+                <dt className="text-texto-suave">Valor dos produtos</dt>
+                <dd className="tabular-nums">{formatarMoeda(Number(pedido.valor_total))}</dd>
+              </div>
+              {tarifas > 0 && (
+                <div className="flex justify-between gap-4">
+                  <dt className="text-texto-suave">Tarifas e frete da plataforma</dt>
+                  <dd className="tabular-nums">− {formatarMoeda(tarifas)}</dd>
+                </div>
+              )}
+              <div className="flex justify-between gap-4">
+                <dt className="text-texto-suave">Custo padrão dos produtos</dt>
+                <dd className="tabular-nums">− {formatarMoeda(custoTotal)}</dd>
+              </div>
+              <div className="flex justify-between gap-4 border-t border-borda pt-1.5 font-medium">
+                <dt>Margem</dt>
+                <dd className={`tabular-nums ${margem < 0 ? "text-perigo" : "text-sucesso"}`}>
+                  {formatarMoeda(margem)}
+                  {receitaLiquida > 0 && ` · ${formatarNumero(Math.round((margem / receitaLiquida) * 1000) / 10)}%`}
+                </dd>
+              </div>
+            </dl>
+            <div className="mt-3">
+              <Fonte>
+                Custo padrão de cada produto pela{" "}
+                <Link href="/producao/ficha-tecnica" className="text-primaria hover:underline">
+                  ficha técnica ativa
+                </Link>{" "}
+                (materiais com perda, pelo custo médio, mais as operações pelo custo hora do posto) ×{" "}
+                {itens
+                  .map(
+                    (i) =>
+                      `${formatarNumero(Number(i.quantidade))} ${i.itens?.codigo} a ${formatarMoeda(custoUnitario.get(i.item_id) ?? 0)}`,
+                  )
+                  .join(", ")}
+                . Margem % sobre o valor líquido. Não inclui impostos.
+              </Fonte>
+            </div>
+          </Cartao>
+
+          {veReceber && (
+            <Cartao
+              titulo="Contas a receber"
+              acoes={titulos.length > 0 ? <LinkAcao href={`/financeiro/receber?pedido=${pedido.id}`}>Abrir no financeiro</LinkAcao> : null}
+            >
+              {titulos.length > 0 ? (
+                <ul className="space-y-2 text-sm">
+                  {titulos.map((t) => (
+                    <li key={t.id} className="flex items-start justify-between gap-3">
+                      <span>
+                        {t.parcela ?? "Parcela única"} · vence {formatarData(t.vencimento)}
+                        {t.situacao === "pago" && (
+                          <span className="block text-xs text-sucesso">recebido em {formatarData(t.data_recebimento)}</span>
+                        )}
+                        {t.situacao === "aberto" && t.vencimento < hoje && <span className="block text-xs text-perigo">vencido</span>}
+                      </span>
+                      <span className="tabular-nums">{formatarMoeda(Number(t.valor_liquido))}</span>
+                    </li>
+                  ))}
+                </ul>
+              ) : pode(acesso, "financeiro.receber", "criar") ? (
+                <FormAcao acao={gerarParcelas.bind(null, pedido.id)} rotulo="Gerar parcelas" secundario className="space-y-3">
+                  <Campo
+                    rotulo="Prazos em dias"
+                    dica={`Pela condição "${pedido.condicao_pagamento ?? "não informada"}". Ex.: 30/60/90; 0 = à vista.`}
+                  >
+                    <input
+                      name="dias"
+                      defaultValue={diasDaCondicao(pedido.condicao_pagamento, pedido.prazo_recebimento_dias).join("/")}
+                      className={estiloCampo}
+                    />
+                  </Campo>
+                  <Campo rotulo="Contados a partir de" dica="Data da nota ou da entrega.">
+                    <input name="base" type="date" defaultValue={hoje} className={estiloCampo} />
+                  </Campo>
+                  <Campo rotulo="Valor total (R$)">
+                    <input name="total" inputMode="decimal" defaultValue={Number(pedido.valor_total)} className={estiloCampo} />
+                  </Campo>
+                </FormAcao>
+              ) : (
+                <p className="text-sm text-texto-suave">Nenhuma parcela gerada ainda.</p>
+              )}
+            </Cartao>
+          )}
+
+          <Cartao titulo="Etapa do pedido">
+            <div className="space-y-5">
+              {pode(acesso, TELA, "editar") && (
+                <FormAcao
+                  key={pedido.etapa_id}
+                  acao={mudarEtapa.bind(null, pedido.id)}
+                  rotulo="Mudar etapa"
+                  secundario
+                  className="space-y-3"
+                >
+                  <Campo rotulo="Nova etapa">
+                    <select name="etapa_id" defaultValue={pedido.etapa_id} className={estiloCampo}>
+                      {etapas
+                        .filter((e) => e.ativa || e.id === pedido.etapa_id)
+                        .map((e) => (
+                          <option key={e.id} value={e.id}>
+                            {e.nome} ({FASES_PEDIDO[e.fase]})
+                          </option>
+                        ))}
+                    </select>
+                  </Campo>
+                </FormAcao>
+              )}
+              <ol className="space-y-3 border-l border-borda pl-4 text-sm">
+                {historico.map((h, k) => (
+                  <li key={k} className="relative">
+                    <span
+                      className={`absolute -left-[21px] top-1.5 h-2.5 w-2.5 rounded-full ${k === historico.length - 1 ? "bg-primaria" : "bg-borda"}`}
+                    />
+                    <p className="font-medium">{h.etapa}</p>
+                    <p className="text-xs text-texto-suave">
+                      {new Date(h.em).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo", dateStyle: "short", timeStyle: "short" })}
+                      {h.usuario ? ` · ${h.usuario}` : ""}
+                    </p>
+                  </li>
+                ))}
+              </ol>
+            </div>
+          </Cartao>
+        </div>
       </div>
     </div>
   );

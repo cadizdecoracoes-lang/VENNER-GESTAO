@@ -1,6 +1,7 @@
 import { FileUp, Plus } from "lucide-react";
 import Link from "next/link";
 import { Filtro } from "@/components/filtro";
+import { ResumoPorEmpresa } from "@/components/por-empresa";
 import { FiltroPeriodo, lerPeriodo, type Periodo } from "@/components/periodo";
 import { FormAcao } from "@/components/form-acao";
 import {
@@ -253,6 +254,25 @@ export default async function PaginaContasPagar({ searchParams }: { searchParams
           <Resumo rotulo="Pago neste mês" valor={soma(pagosMes, "valor_pago")} quantidade={pagosMes.length} cor="text-sucesso" />
         )}
       </div>
+
+      {!selecionada && empresas.length > 1 && (
+        <ResumoPorEmpresa
+          colunas={["Vencido", "Próximos 7 dias", "Em aberto", periodo ? "Pago no período" : "Pago neste mês"]}
+          filtros={["vencido", "semana", "aberto", "pago"]}
+          caminho="/financeiro/pagar"
+          extra={periodo ? `&de=${periodo.de}&ate=${periodo.ate}&por=${periodo.por}` : ""}
+          linhas={empresas.map((e) => {
+            const grupos = [vencidos, proximos, abertos, periodo ? pagos : pagosMes].map((l) => l.filter((t) => t.empresa_id === e.id));
+            return {
+              id: e.id,
+              nome: e.nome,
+              valores: grupos.map((g, i) => soma(g, i === 3 ? "valor_pago" : "valor")),
+              quantidades: grupos.map((g) => g.length),
+            };
+          })}
+          fonte={`Mesmos títulos dos quadros acima (${periodo ? "período escolhido" : "em aberto e pagos dos últimos 120 dias"}), separados pelo CNPJ que paga.`}
+        />
+      )}
 
       <Filtro
         atalhos={[

@@ -19,7 +19,12 @@ const item = (id: string, tipo: string, saldo: number, extra: Partial<{ estoque_
 // PA = 1 SC + 2 MP-A; SC = 3 MP-B (10% de perda).
 function dados(): DadosPlanejamento {
   return {
-    itens: [item("PA", "produto_acabado", 1), item("SC", "subconjunto", 2), item("MPA", "materia_prima", 10, { estoque_minimo: 5, prazo_reposicao_dias: 7 }), item("MPB", "materia_prima", 9)],
+    itens: [
+      item("PA", "produto_acabado", 1),
+      item("SC", "subconjunto", 2),
+      item("MPA", "materia_prima", 10, { estoque_minimo: 5, prazo_reposicao_dias: 7 }),
+      item("MPB", "materia_prima", 9),
+    ],
     fichas: [
       {
         item_id: "PA",
@@ -44,7 +49,11 @@ function dados(): DadosPlanejamento {
     pedidos: [],
   };
 }
-const pedido = (numero: number, qtd: number, extra: Partial<{ prazo_entrega: string; valor: number; prioridade: number; prazo_recebimento_dias: number }> = {}) => ({
+const pedido = (
+  numero: number,
+  qtd: number,
+  extra: Partial<{ prazo_entrega: string; valor: number; prioridade: number; prazo_recebimento_dias: number }> = {},
+) => ({
   id: `p${numero}`,
   numero,
   empresa_id: "e",
@@ -62,14 +71,14 @@ test("necessidade desconta o estoque em cada nível da estrutura", () => {
   const d = dados();
   d.pedidos = [pedido(1, 6, { prazo_entrega: "2026-10-30" })];
   const linhas = new Map(necessidadeMateriais(d, "2026-10-19").map((l) => [l.item.id, l]));
-  // 6 PA - 1 em estoque = 5 a produzir; SC: 5 - 2 = 3; MPA: 5 x 2 = 10 (tem 10); MPB: 3 x 3 / 0,9 = 10 (tem 9).
+  // 6 PA - 1 em estoque = 5 a produzir; SC: 5 - 2 = 3; MPA: 5 x 2 = 10 (tem 10); MPB: 3 x 3 x 1,1 = 9,9 (tem 9).
   assert.equal(linhas.get("PA")!.falta, 5);
   assert.equal(linhas.get("SC")!.necessidade, 5);
   assert.equal(linhas.get("SC")!.falta, 3);
   assert.equal(linhas.get("MPA")!.falta, 0);
   assert.equal(linhas.get("MPA")!.sugestao, 5, "repõe o estoque mínimo");
   assert.equal(linhas.get("MPA")!.data_limite, "2026-10-23", "prazo do pedido menos 7 dias de reposição");
-  assert.equal(linhas.get("MPB")!.falta, 1);
+  assert.equal(linhas.get("MPB")!.falta, 0.9);
   assert.deepEqual(linhas.get("MPB")!.pedidos, [1]);
 });
 

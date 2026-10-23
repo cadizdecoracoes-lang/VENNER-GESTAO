@@ -33,6 +33,9 @@ type Item = {
   estoque_minimo: number;
   prazo_reposicao_dias: number;
   custo_medio: number;
+  preco_venda: number;
+  ncm: string | null;
+  peso_kg: number | null;
   ativo: boolean;
 };
 
@@ -45,7 +48,7 @@ async function carregar() {
   const supabase = await criarClienteServidor();
   const consulta = supabase
     .from("itens")
-    .select("id, codigo, descricao, tipo, unidade, estoque_minimo, prazo_reposicao_dias, custo_medio, ativo")
+    .select("id, codigo, descricao, tipo, unidade, estoque_minimo, prazo_reposicao_dias, custo_medio, preco_venda, ncm, peso_kg, ativo")
     .order("codigo")
     .limit(2000);
   const [{ data: itens }, { data: unidades }] = await Promise.all([
@@ -67,7 +70,7 @@ export default async function PaginaItens({ searchParams }: { searchParams: Prom
     const supabase = await criarClienteServidor();
     const { data } = await supabase
       .from("itens")
-      .select("id, codigo, descricao, tipo, unidade, estoque_minimo, prazo_reposicao_dias, custo_medio, ativo")
+      .select("id, codigo, descricao, tipo, unidade, estoque_minimo, prazo_reposicao_dias, custo_medio, preco_venda, ncm, peso_kg, ativo")
       .eq("id", filtros.editar)
       .maybeSingle();
     emEdicao = (data as Item | null) ?? undefined;
@@ -130,6 +133,15 @@ export default async function PaginaItens({ searchParams }: { searchParams: Prom
               <Campo rotulo="Custo médio (R$)" dica="Base do custo padrão da ficha técnica. Será atualizado pelas compras.">
                 <input name="custo_medio" inputMode="decimal" defaultValue={emEdicao?.custo_medio ?? 0} className={estiloCampo} />
               </Campo>
+              <Campo rotulo="Preço de venda (R$)" dica="Preço de tabela, sugerido nos pedidos das distribuidoras.">
+                <input name="preco_venda" inputMode="decimal" defaultValue={emEdicao?.preco_venda ?? 0} className={estiloCampo} />
+              </Campo>
+              <Campo rotulo="NCM" dica="8 dígitos, para a nota fiscal.">
+                <input name="ncm" inputMode="numeric" maxLength={10} defaultValue={emEdicao?.ncm ?? ""} className={estiloCampo} />
+              </Campo>
+              <Campo rotulo="Peso (kg)" dica="Com embalagem, para frete e etiqueta.">
+                <input name="peso_kg" inputMode="decimal" defaultValue={emEdicao?.peso_kg ?? ""} className={estiloCampo} />
+              </Campo>
             </div>
             <div className="flex items-center justify-between gap-4">
               <label className="flex items-center gap-2 text-sm">
@@ -149,7 +161,7 @@ export default async function PaginaItens({ searchParams }: { searchParams: Prom
         placeholder="Filtrar por código, descrição, tipo, unidade..."
       >
         <Tabela
-          colunas={["Código", "Descrição", "Tipo", "Un.", "Estoque mín.", "Reposição", "Custo médio", ""]}
+          colunas={["Código", "Descrição", "Tipo", "Un.", "Estoque mín.", "Reposição", "Custo médio", "Preço de venda", ""]}
           vazio="Nenhum item cadastrado ainda."
         >
           {itens.map((i) => (
@@ -163,6 +175,7 @@ export default async function PaginaItens({ searchParams }: { searchParams: Prom
               <Celula className="tabular-nums">{formatarNumero(i.estoque_minimo)}</Celula>
               <Celula className="tabular-nums">{i.prazo_reposicao_dias} dias</Celula>
               <Celula className="tabular-nums">{formatarMoeda(i.custo_medio)}</Celula>
+              <Celula className="tabular-nums">{Number(i.preco_venda) > 0 ? formatarMoeda(i.preco_venda) : "—"}</Celula>
               <Celula className="space-x-3 whitespace-nowrap text-right">
                 {verFicha && TIPOS_COM_FICHA.includes(i.tipo) && <LinkAcao href={`/producao/ficha-tecnica?item=${i.id}`}>Ficha</LinkAcao>}
                 {pode(acesso, TELA, "editar") && <LinkAcao href={`?editar=${i.id}`}>Editar</LinkAcao>}

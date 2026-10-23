@@ -10,7 +10,11 @@ import { criarClienteServidor } from "@/lib/supabase/server";
 const TELA = "estoque.movimentos";
 const DATAS_PERIODO = { data: "Data do movimento" };
 const TIPOS = { entrada: "Entrada", saida: "Saída", ajuste: "Ajuste" } as const;
-const ORIGENS: Record<string, string> = { nota_fornecedor: "Nota de fornecedor", inventario: "Inventário" };
+const ORIGENS: Record<string, string> = {
+  nota_fornecedor: "Nota de fornecedor",
+  inventario: "Inventário",
+  pedido_venda: "Pedido de venda",
+};
 
 type Movimento = {
   id: string;
@@ -45,6 +49,7 @@ async function carregar(item: string | undefined, periodo: Periodo, hoje: string
 
 function linkOrigem(m: Movimento) {
   if (m.origem_tipo === "nota_fornecedor" && m.origem_id) return `/financeiro/notas-fornecedor/${m.origem_id}`;
+  if (m.origem_tipo === "pedido_venda" && m.origem_id) return `/vendas/pedidos/${m.origem_id}`;
   return null;
 }
 
@@ -124,8 +129,8 @@ export default async function PaginaMovimentos({ searchParams }: { searchParams:
         </Tabela>
       </Filtro>
       <Fonte>
-        Cada linha é um registro de origem: entrada de nota de fornecedor, ajuste de inventário ou saída. Movimento não se apaga nem se
-        edita; corrige-se com outro ajuste.
+        Cada linha é um registro de origem: entrada de nota de fornecedor, ajuste de inventário ou saída por venda. Movimento não se apaga
+        nem se edita; corrige-se com outro ajuste.
       </Fonte>
     </div>
   );
