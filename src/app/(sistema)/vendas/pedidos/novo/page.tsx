@@ -2,7 +2,7 @@ import { CabecalhoTela, Cartao, SemAcesso } from "@/components/ui";
 import { carregarAcesso, pode } from "@/lib/acesso";
 import { hojeBrasil } from "@/lib/datas";
 import { carregarEmpresas, empresaSelecionada } from "@/lib/empresa";
-import { carregarClientes, carregarProdutosVenda } from "@/lib/vendas";
+import { carregarClientes, carregarOpcoesPedido, carregarProdutosVenda } from "@/lib/vendas";
 import { salvarPedido } from "../actions";
 import { FormPedido } from "../form-pedido";
 
@@ -11,11 +11,12 @@ const TELA = "vendas.pedidos";
 export default async function PaginaNovoPedido() {
   const acesso = await carregarAcesso();
   if (!pode(acesso, TELA, "criar")) return <SemAcesso codigo={TELA} />;
-  const [empresas, selecionada, clientes, produtos] = await Promise.all([
+  const [empresas, selecionada, clientes, produtos, opcoes] = await Promise.all([
     carregarEmpresas(),
     empresaSelecionada(),
     carregarClientes(),
     carregarProdutosVenda(),
+    carregarOpcoesPedido(),
   ]);
 
   return (
@@ -42,6 +43,7 @@ export default async function PaginaNovoPedido() {
           empresas={empresas}
           clientes={clientes}
           produtos={produtos}
+          opcoes={opcoes}
           hoje={hojeBrasil()}
           voltar="/vendas/pedidos"
         />
