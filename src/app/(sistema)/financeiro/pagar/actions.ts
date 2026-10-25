@@ -47,7 +47,9 @@ export async function novaConta(_: Estado, form: FormData): Promise<Estado> {
   const { error } = await supabase.from("contas_pagar").insert(linhas);
   if (error) return { erro: mensagemErro(error) };
   revalidatePath(CAMINHO);
-  redirect(CAMINHO);
+  // Veio do atalho da conciliação: volta para a linha do extrato.
+  const volta = texto("volta");
+  redirect(volta?.startsWith("/financeiro/conciliacao") ? volta : CAMINHO);
 }
 
 export async function pagarConta(id: string, _: Estado, form: FormData): Promise<Estado> {
