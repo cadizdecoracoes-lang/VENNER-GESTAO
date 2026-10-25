@@ -15,9 +15,11 @@ function Login() {
   }, [codigo]);
 
   const erro =
-    busca.get("erro") === "link" || busca.get("error_description")
-      ? "O link do e-mail expirou ou já foi usado. Peça um novo em “Esqueci minha senha”."
-      : undefined;
+    busca.get("erro") === "inatividade"
+      ? "Sua sessão foi encerrada depois de 15 minutos sem uso. Entre de novo."
+      : busca.get("erro") === "link" || busca.get("error_description")
+        ? "O link do e-mail expirou ou já foi usado. Peça um novo em “Esqueci minha senha”."
+        : undefined;
   return <FormLogin erroInicial={erro} />;
 }
 
