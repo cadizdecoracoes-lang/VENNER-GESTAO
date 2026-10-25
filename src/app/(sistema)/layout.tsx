@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import { AbasProvider } from "@/components/abas";
 import { BarraAbas } from "@/components/barra-abas";
 import { MenuLateral } from "@/components/menu-lateral";
+import { SaidaPorInatividade } from "@/components/saida-inatividade";
 import { SeletorEmpresa } from "@/components/seletor-empresa";
 import { Carregando } from "@/components/tela-cliente";
 import { type Acesso, carregarAcesso, telasVisiveis } from "@/lib/acesso";
@@ -40,6 +41,7 @@ export default function LayoutSistema({ children }: { children: React.ReactNode 
 
   return (
     <AbasProvider>
+      {supabaseConfigurado && <SaidaPorInatividade />}
       <div className="flex h-full">
         <MenuLateral telas={telasVisiveis(acesso)} />
         <div className="flex min-w-0 flex-1 flex-col">

@@ -1,5 +1,6 @@
 import { enderecoPublico } from "@/lib/endereco";
 import { criarClienteNavegador } from "@/lib/supabase/client";
+import { esquecerUso, marcarUso } from "@/lib/inatividade";
 import { redirect } from "@/lib/navegacao";
 
 export type EstadoLogin = { erro?: string; aviso?: string };
@@ -25,6 +26,7 @@ export async function entrar(_: EstadoLogin, form: FormData): Promise<EstadoLogi
     password: String(form.get("senha") ?? ""),
   });
   if (error) return { erro: motivo(error.message) };
+  marcarUso();
   redirect("/");
 }
 
@@ -52,11 +54,13 @@ export async function trocarSenha(_: EstadoLogin, form: FormData): Promise<Estad
   if (!user) return { erro: "O link expirou ou já foi usado. Peça um novo em “Esqueci minha senha”." };
   const { error } = await supabase.auth.updateUser({ password: senha });
   if (error) return { erro: motivo(error.message) };
+  marcarUso();
   redirect("/");
 }
 
 export async function sair() {
   const supabase = criarClienteNavegador();
   await supabase.auth.signOut();
+  esquecerUso();
   redirect("/login");
 }
