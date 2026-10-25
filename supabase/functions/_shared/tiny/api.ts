@@ -51,6 +51,85 @@ export const renovarTiny = (renovacao: string, clientId: string, segredo: string
 // Acabou o orçamento desta leitura (continua na próxima).
 export class SemOrcamento extends Error {}
 
+// Recusa do Tiny ou da SEFAZ numa gravação, com o texto para a tela.
+export class ErroTiny extends Error {
+  status: number;
+  constructor(status: number, mensagem: string) {
+    super(mensagem);
+    this.status = status;
+  }
+}
+
+// Junta a mensagem geral e as dos campos de uma resposta de erro do Tiny
+// ({ mensagem, detalhes: [{ campo, mensagem }] }), sem repetir.
+export function textoErroTiny(corpo: unknown, padrao: string): string {
+  const d = (corpo && typeof corpo === "object" ? corpo : {}) as { mensagem?: unknown; detalhes?: unknown };
+  const partes: string[] = [];
+  if (typeof d.mensagem === "string" && d.mensagem.trim()) partes.push(d.mensagem.trim());
+  for (const x of Array.isArray(d.detalhes) ? d.detalhes : []) {
+    const m = typeof x?.mensagem === "string" ? x.mensagem.trim() : "";
+    if (!m) continue;
+    const campo = typeof x?.campo === "string" && x.campo.trim() ? `${x.campo.trim()}: ` : "";
+    if (!partes.some((p) => p.includes(m))) partes.push(campo + m);
+  }
+  return partes.length ? partes.join(" · ") : padrao;
+}
+
+// Gravações no Tiny (gerar e autorizar nota, lançar contas, cancelar) e
+// download de arquivos. Só para as ações das telas, uma de cada vez.
+export class GravacaoTiny {
+  private token: string;
+  constructor(token: string) {
+    this.token = token;
+  }
+
+  private async pedir(metodo: string, caminho: string, corpo?: unknown, aceita = "application/json"): Promise<Response> {
+    let r: Response;
+    try {
+      r = await fetch(`${API}${caminho}`, {
+        method: metodo,
+        headers: {
+          authorization: `Bearer ${this.token}`,
+          accept: aceita,
+          ...(corpo === undefined ? {} : { "content-type": "application/json" }),
+        },
+        body: corpo === undefined ? undefined : JSON.stringify(corpo),
+      });
+    } catch {
+      throw new ErroTiny(0, "O Tiny não respondeu (sem conexão). Tente de novo em alguns minutos.");
+    }
+    if (r.ok) return r;
+    const d = await r.json().catch(() => ({}));
+    if (r.status === 401) throw new ErroTiny(401, "O Tiny recusou o acesso. Ligue a conta de novo em Configurações › Integrações.");
+    if (r.status === 403)
+      throw new ErroTiny(
+        403,
+        textoErroTiny(d, "") ||
+          `O aplicativo do Tiny não tem permissão para ${caminho.split("/")[1]}. Libere no aplicativo "Venner Gestão" do Tiny e clique em Ligar de novo em Configurações › Integrações.`,
+      );
+    if (r.status === 429) throw new ErroTiny(429, "O Tiny pediu para esperar (muitas chamadas por minuto). Tente de novo em um minuto.");
+    if (r.status === 502 || r.status === 503) throw new ErroTiny(r.status, textoErroTiny(d, "A SEFAZ ou o Tiny não responderam. Tente de novo em alguns minutos."));
+    throw new ErroTiny(r.status, textoErroTiny(d, `O Tiny respondeu ${r.status} em ${caminho}.`));
+  }
+
+  // null quando a resposta não tem corpo (204).
+  async json<T = Record<string, unknown>>(metodo: string, caminho: string, corpo?: unknown): Promise<T | null> {
+    const r = await this.pedir(metodo, caminho, corpo);
+    const texto = await r.text();
+    if (!texto.trim()) return null;
+    try {
+      return JSON.parse(texto) as T;
+    } catch {
+      return null;
+    }
+  }
+
+  async arquivo(caminho: string, tipo: string): Promise<Uint8Array> {
+    const r = await this.pedir("GET", caminho, undefined, tipo);
+    return new Uint8Array(await r.arrayBuffer());
+  }
+}
+
 export class ApiTiny {
   usadas = 0;
   private token: string;

@@ -112,3 +112,14 @@ export const FASES_PEDIDO = {
 export type FasePedido = keyof typeof FASES_PEDIDO;
 
 export const PRIORIDADES = { 0: "Normal", 1: "Alta", 2: "Urgente" } as const;
+
+// Nota fiscal de venda emitida pelo Tiny (notas_venda.situacao).
+export const SITUACOES_NF = {
+  gerada: "Gerada, não enviada",
+  enviada: "Esperando a SEFAZ",
+  autorizada: "Autorizada",
+  rejeitada: "Rejeitada",
+  denegada: "Denegada",
+  cancelada: "Cancelada",
+} as const;
+export type SituacaoNF = keyof typeof SITUACOES_NF;

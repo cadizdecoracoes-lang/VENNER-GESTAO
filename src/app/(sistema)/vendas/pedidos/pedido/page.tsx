@@ -29,6 +29,7 @@ import { criarClienteNavegador } from "@/lib/supabase/client";
 import { CAMPOS_PEDIDO, carregarEtapas, nomeCliente, type PedidoResumo } from "@/lib/vendas";
 import { gerarParcelas, mudarEtapa } from "../actions";
 import { TelaCliente } from "@/components/tela-cliente";
+import { CartaoNotaFiscal, type ArquivosNota, type NotaVenda } from "./nota-fiscal";
 
 const TELA = "vendas.pedidos";
 
@@ -63,7 +64,8 @@ async function PaginaPedido({ params }: { params: Promise<{ id: string }> }) {
 
   const planeja = pode(acesso, "producao.sequenciamento", "ver") || pode(acesso, "compras.sugestoes", "ver");
   const veReceber = pode(acesso, "financeiro.receber", "ver");
-  const [{ data: itensData }, { data: historicoData }, etapas, empresas, plano, { data: titulosData }] = await Promise.all([
+  const [{ data: itensData }, { data: historicoData }, etapas, empresas, plano, { data: titulosData }, { data: tinyData }, { data: notasData }] =
+    await Promise.all([
     supabase
       .from("pedido_venda_itens")
       .select("item_id, quantidade, preco_unitario, valor_total, itens(codigo, descricao, unidade)")
@@ -79,8 +81,29 @@ async function PaginaPedido({ params }: { params: Promise<{ id: string }> }) {
           .eq("pedido_id", id)
           .order("vencimento")
       : Promise.resolve({ data: null }),
+    supabase.from("pedidos_venda").select("tiny_id, nota_fiscal").eq("id", id).maybeSingle(),
+    supabase
+      .from("notas_venda")
+      .select(
+        "id, numero, serie, chave_acesso, situacao, mensagem, valor, emitida_em, link, contas_lancadas, justificativa_cancelamento, atualizada_em, danfe_arquivo, xml_arquivo, xml_cancelamento_arquivo",
+      )
+      .eq("pedido_id", id)
+      .order("criada_em", { ascending: false }),
   ]);
   const itens = (itensData ?? []) as unknown as ItemPedido[];
+  // Nota valendo primeiro; sem ela, a última cancelada ou denegada.
+  type LinhaNota = NotaVenda & { danfe_arquivo: string | null; xml_arquivo: string | null; xml_cancelamento_arquivo: string | null };
+  const notas = (notasData ?? []) as LinhaNota[];
+  const nota = notas.find((n) => n.situacao !== "cancelada" && n.situacao !== "denegada") ?? notas[0] ?? null;
+  const assinar = async (caminho: string | null) =>
+    caminho ? ((await supabase.storage.from("notas-venda").createSignedUrl(caminho, 3600)).data?.signedUrl ?? null) : null;
+  const arquivos: ArquivosNota = {
+    danfe: await assinar(nota?.danfe_arquivo ?? null),
+    xml: await assinar(nota?.xml_arquivo ?? null),
+    xmlCancelamento: await assinar(nota?.xml_cancelamento_arquivo ?? null),
+  };
+  const noTiny = (tinyData as { tiny_id: number | null } | null)?.tiny_id != null;
+  const notaDoTiny = (tinyData as { nota_fiscal: string | null } | null)?.nota_fiscal ?? null;
   const titulos = ((titulosData ?? []) as TituloPedido[]).filter((t) => t.situacao !== "cancelado");
   const { data: custosData } = itens.length ? await supabase.rpc("custos_padrao", { itens: itens.map((i) => i.item_id) }) : { data: [] };
   const custoUnitario = new Map(((custosData ?? []) as { item_id: string; custo: number }[]).map((c) => [c.item_id, Number(c.custo)]));
@@ -300,6 +323,15 @@ async function PaginaPedido({ params }: { params: Promise<{ id: string }> }) {
               </Fonte>
             </div>
           </Cartao>
+
+          <CartaoNotaFiscal
+            pedidoId={pedido.id}
+            noTiny={noTiny}
+            notaDoTiny={notaDoTiny}
+            nota={nota}
+            arquivos={arquivos}
+            podeEmitir={pode(acesso, TELA, "aprovar")}
+          />
 
           {veReceber && (
             <Cartao
