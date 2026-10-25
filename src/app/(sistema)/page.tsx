@@ -7,7 +7,7 @@ import { carregarAcesso, pode } from "@/lib/acesso";
 import { diaSemana, hojeBrasil, inicioSemana, somarDias } from "@/lib/datas";
 import { empresaSelecionada } from "@/lib/empresa";
 import { formatarData, formatarMoeda } from "@/lib/formato";
-import { filaProducao, necessidadeMateriais } from "@/lib/planejamento";
+import { comprado, filaProducao, necessidadeMateriais } from "@/lib/planejamento";
 import { carregarPlanejamento } from "@/lib/planejamento-servidor";
 import { supabaseConfigurado } from "@/lib/supabase/config";
 import { criarClienteNavegador } from "@/lib/supabase/client";
@@ -104,7 +104,7 @@ async function Painel() {
   });
 
   const fila = plano && verProducao ? filaProducao(plano, hoje) : [];
-  const compras = plano && verCompras ? necessidadeMateriais(plano, hoje).filter((l) => !l.produzido && l.falta > 0) : [];
+  const compras = plano && verCompras ? necessidadeMateriais(plano, hoje).filter((l) => comprado(l) && l.falta > 0) : [];
   const comprarJa = compras.filter((l) => l.data_limite && l.data_limite <= hoje);
   const comprarSemana = compras.filter((l) => l.data_limite && l.data_limite > hoje && l.data_limite <= somarDias(hoje, 7));
 

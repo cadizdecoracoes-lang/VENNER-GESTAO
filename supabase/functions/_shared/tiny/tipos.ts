@@ -75,10 +75,14 @@ export type Produto = {
   sku: string | null;
   descricao: string | null;
   tipo_item: "produto_acabado" | "materia_prima" | "servico";
+  // Tipo no Tiny: S simples, K kit, V com variações, F fabricado, M matéria-prima.
+  tipo_tiny: string | null;
   unidade: string | null;
   ncm: string | null;
   peso: number | null;
   preco: number | null;
+  // Componentes do kit ou da produção (produto fabricado) cadastrados no Tiny.
+  estrutura: { produto_id: number; sku: string | null; descricao: string | null; quantidade: number }[];
 };
 
 export type Categoria = { id: number; descricao: string; grupo: string; tipo: "receita" | "despesa"; ativa: boolean };

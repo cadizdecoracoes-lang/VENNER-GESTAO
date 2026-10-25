@@ -21,7 +21,7 @@ import { carregarAcesso, pode } from "@/lib/acesso";
 import { hojeBrasil } from "@/lib/datas";
 import { carregarEmpresas } from "@/lib/empresa";
 import { formatarData, formatarMoeda, formatarNumero } from "@/lib/formato";
-import { necessidadeMateriais, type DadosPlanejamento } from "@/lib/planejamento";
+import { comprado, necessidadeMateriais, type DadosPlanejamento } from "@/lib/planejamento";
 import { diasDaCondicao } from "@/lib/parcelas";
 import { FASES_PEDIDO, PRIORIDADES, type FasePedido, type SituacaoTitulo } from "@/lib/rotulos";
 import { supabaseConfigurado } from "@/lib/supabase/config";
@@ -115,7 +115,8 @@ async function PaginaPedido({ params }: { params: Promise<{ id: string }> }) {
         hoje,
       )
     : null;
-  const comprados = materiais?.filter((m) => !m.produzido) ?? [];
+  const comprados = materiais?.filter(comprado) ?? [];
+  const semFicha = materiais?.filter((m) => m.sem_ficha) ?? [];
   const faltando = comprados.filter((m) => m.falta > 0);
   const empresa = empresas.find((e) => e.id === pedido.empresa_id)?.nome;
   const atrasado = pedido.fase !== "encerrado" && pedido.dias_atraso > 0;
@@ -209,7 +210,11 @@ async function PaginaPedido({ params }: { params: Promise<{ id: string }> }) {
           <Cartao
             titulo="Matéria-prima para este pedido"
             acoes={
-              faltando.length > 0 ? (
+              semFicha.length > 0 ? (
+                <Etiqueta cor="alerta">
+                  {semFicha.length} sem ficha técnica
+                </Etiqueta>
+              ) : faltando.length > 0 ? (
                 <Etiqueta cor="alerta">
                   Falta {faltando.length} {faltando.length === 1 ? "item" : "itens"}
                 </Etiqueta>
@@ -225,7 +230,7 @@ async function PaginaPedido({ params }: { params: Promise<{ id: string }> }) {
                 <Tabela
                   colunas={["Item", "Necessário", "Em estoque (grupo)", "Falta"]}
                   embutida
-                  vazio="Os produtos deste pedido ainda não têm ficha técnica ativa."
+                  vazio={semFicha.length ? "Sem matéria-prima calculada: falta a ficha técnica dos produtos abaixo." : "Nenhuma matéria-prima nas fichas técnicas."}
                 >
                   {comprados.map((m) => (
                     <tr key={m.item.id}>
@@ -244,6 +249,22 @@ async function PaginaPedido({ params }: { params: Promise<{ id: string }> }) {
                     </tr>
                   ))}
                 </Tabela>
+                {semFicha.length > 0 && (
+                  <div className="rounded-xl bg-alerta/10 px-4 py-2.5 text-sm">
+                    <p className="font-medium">
+                      {semFicha.length} {semFicha.length === 1 ? "produto sem ficha técnica" : "produtos sem ficha técnica"}: a matéria-prima
+                      deles não entra na conta.
+                    </p>
+                    <p className="mt-1">
+                      {semFicha.map((m, k) => (
+                        <span key={m.item.id}>
+                          {k > 0 && ", "}
+                          <LinkAcao href={`/producao/ficha-tecnica?item=${m.item.id}`}>{m.item.codigo}</LinkAcao>
+                        </span>
+                      ))}
+                    </p>
+                  </div>
+                )}
                 <Fonte>
                   Quantidades dos produtos × ficha técnica ativa de cada um (com a perda, em todos os níveis), descontando o produto acabado
                   e os subconjuntos já em estoque. Estoque = soma das movimentações de todos os locais. Considera só este pedido: a divisão

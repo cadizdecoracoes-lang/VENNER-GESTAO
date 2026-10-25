@@ -186,16 +186,27 @@ export function produto(v: unknown): Produto | null {
   const id = inteiro(d.id);
   if (!id) return null;
   const dim = obj(d.dimensoes);
-  const tipo = texto(d.tipo);
+  const tipo = texto(d.tipo)?.toUpperCase() ?? null;
+  // Kit: lista "kit"; fabricado: "producao.produtos". Os dois no mesmo formato.
+  const linhas = tipo === "K" ? lista(d.kit) : tipo === "F" ? lista(obj(d.producao).produtos) : [];
+  const estrutura = linhas
+    .map(obj)
+    .map((l) => {
+      const p = obj(l.produto);
+      return { produto_id: inteiro(p.id) ?? 0, sku: texto(p.sku), descricao: texto(p.descricao), quantidade: numero(l.quantidade) };
+    })
+    .filter((c) => c.produto_id > 0 && c.produto_id !== id && c.quantidade > 0);
   return {
     produto_id: id,
     sku: texto(d.sku),
     descricao: texto(d.descricao),
     tipo_item: tipo === "M" ? "materia_prima" : "produto_acabado",
+    tipo_tiny: tipo,
     unidade: texto(d.unidade)?.toUpperCase().slice(0, 6) ?? null,
     ncm: texto(d.ncm),
     peso: numero(dim.pesoBruto) || numero(dim.pesoLiquido) || null,
     preco: numero(obj(d.precos).preco) || null,
+    estrutura,
   };
 }
 
