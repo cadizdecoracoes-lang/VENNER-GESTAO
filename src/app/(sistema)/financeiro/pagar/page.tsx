@@ -45,7 +45,10 @@ type Titulo = {
   plano_contas: { codigo: string; nome: string } | null;
   contas_bancarias: { nome: string } | null;
 };
-type Filtros = { novo?: string; pagar?: string; de?: string; ate?: string; por?: string; situacao?: string };
+type Filtros = { novo?: string; pagar?: string; de?: string; ate?: string; por?: string; situacao?: string } & Preenchido;
+// Atalho da conciliação bancária: abre a conta nova já preenchida com a linha do extrato.
+type Preenchido = { empresa?: string; descricao?: string; valor?: string; vencimento?: string; volta?: string };
+
 const DATAS_PERIODO = { vencimento: "Vencimento", data_pagamento: "Pagamento" };
 
 async function carregar(empresa: string | null, periodo: Periodo): Promise<Titulo[]> {
@@ -138,9 +141,10 @@ export default async function PaginaContasPagar({ searchParams }: { searchParams
       {criando && (
         <Cartao titulo="Nova conta a pagar">
           <FormAcao acao={novaConta} rotulo="Salvar" className="space-y-4">
+            {filtros.volta && <input type="hidden" name="volta" value={filtros.volta} />}
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
               <Campo rotulo="Empresa que paga" className="sm:col-span-2">
-                <select name="empresa_id" required defaultValue={selecionada?.id ?? ""} className={estiloCampo}>
+                <select name="empresa_id" required defaultValue={filtros.empresa ?? selecionada?.id ?? ""} className={estiloCampo}>
                   <option value="" disabled>
                     Escolha...
                   </option>
@@ -162,7 +166,7 @@ export default async function PaginaContasPagar({ searchParams }: { searchParams
                 </select>
               </Campo>
               <Campo rotulo="Descrição" className="sm:col-span-2">
-                <input name="descricao" required placeholder="Ex.: Aluguel do galpão" className={estiloCampo} />
+                <input name="descricao" required defaultValue={filtros.descricao} placeholder="Ex.: Aluguel do galpão" className={estiloCampo} />
               </Campo>
               <Campo rotulo="Categoria financeira">
                 <select name="categoria_id" required defaultValue="" className={estiloCampo}>
@@ -187,10 +191,10 @@ export default async function PaginaContasPagar({ searchParams }: { searchParams
                 </select>
               </Campo>
               <Campo rotulo="Valor de cada parcela (R$)">
-                <input name="valor" required inputMode="decimal" className={estiloCampo} />
+                <input name="valor" required inputMode="decimal" defaultValue={filtros.valor?.replace(".", ",")} className={estiloCampo} />
               </Campo>
               <Campo rotulo="Vencimento (1ª parcela)">
-                <input name="vencimento" type="date" required defaultValue={hoje} className={estiloCampo} />
+                <input name="vencimento" type="date" required defaultValue={filtros.vencimento ?? hoje} className={estiloCampo} />
               </Campo>
               <Campo rotulo="Parcelas" dica="Uma por mês, no mesmo dia.">
                 <input name="parcelas" type="number" min={1} max={120} defaultValue={1} className={estiloCampo} />
