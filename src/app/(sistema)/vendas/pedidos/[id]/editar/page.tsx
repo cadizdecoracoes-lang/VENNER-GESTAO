@@ -33,7 +33,7 @@ export default async function PaginaEditarPedido({ params }: { params: Promise<{
   } as PedidoForm;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-3">
       <CabecalhoTela codigo={TELA} />
       <Cartao titulo={`Editar pedido nº ${data.numero}`}>
         {data.fase !== "negociacao" ? (

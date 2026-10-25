@@ -64,8 +64,8 @@ export default async function PaginaCategorias({ searchParams }: { searchParams:
   const podeCriar = pode(acesso, TELA, "criar");
 
   return (
-    <div className="space-y-6">
-      <CabecalhoTela codigo={TELA}>
+    <div className="space-y-3">
+      <CabecalhoTela codigo={TELA} ajuda="As contas a pagar e a receber usam as categorias sem subcategorias (as mais detalhadas). As categorias em negrito somam as de baixo nos relatórios. Elas valem para todo o grupo; o CNPJ fica em cada lançamento.">
         {podeCriar && !mostrarForm && (
           <Link href="?novo=1" className={estiloBotao}>
             <Plus size={16} /> Nova categoria principal
@@ -89,7 +89,7 @@ export default async function PaginaCategorias({ searchParams }: { searchParams:
             rotulo="Salvar"
             className="space-y-4"
           >
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
               <Campo rotulo="Código" dica="Números separados por ponto, ex.: 4.07.">
                 <input
                   name="codigo"
@@ -135,11 +135,6 @@ export default async function PaginaCategorias({ searchParams }: { searchParams:
           </FormAcao>
         </Cartao>
       )}
-
-      <p className="text-sm text-texto-suave">
-        As contas a pagar e a receber usam as categorias sem subcategorias (as mais detalhadas). As categorias em negrito somam as de baixo
-        nos relatórios. Elas valem para todo o grupo; o CNPJ fica em cada lançamento.
-      </p>
 
       <Filtro
         atalhos={[

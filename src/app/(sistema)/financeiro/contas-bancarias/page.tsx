@@ -8,7 +8,6 @@ import {
   Cartao,
   Celula,
   Etiqueta,
-  FaixaEmpresa,
   LinkAcao,
   SemAcesso,
   Tabela,
@@ -70,8 +69,8 @@ export default async function PaginaContasBancarias({ searchParams }: { searchPa
   const hoje = new Date().toISOString().slice(0, 10);
 
   return (
-    <div className="space-y-6">
-      <CabecalhoTela codigo={TELA}>
+    <div className="space-y-3">
+      <CabecalhoTela codigo={TELA} empresa={selecionada}>
         {pode(acesso, TELA, "criar") && !mostrarForm && (
           <Link href="?novo=1" className={estiloBotao}>
             <Plus size={16} /> Nova conta
@@ -82,7 +81,7 @@ export default async function PaginaContasBancarias({ searchParams }: { searchPa
       {mostrarForm && (
         <Cartao titulo={emEdicao ? `Editar ${emEdicao.nome}` : "Nova conta bancária"}>
           <FormAcao key={emEdicao?.id ?? "novo"} acao={salvarConta.bind(null, emEdicao?.id ?? null)} rotulo="Salvar" className="space-y-4">
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
               <Campo rotulo="Empresa (CNPJ)" className="sm:col-span-2">
                 <select name="empresa_id" required defaultValue={emEdicao?.empresa_id ?? selecionada?.id ?? ""} className={estiloCampo}>
                   <option value="" disabled>
@@ -151,7 +150,6 @@ export default async function PaginaContasBancarias({ searchParams }: { searchPa
         </Cartao>
       )}
 
-      <FaixaEmpresa empresa={selecionada} />
 
       {blocos.length === 0 && (
         <Tabela
@@ -169,25 +167,25 @@ export default async function PaginaContasBancarias({ searchParams }: { searchPa
         ]}
         placeholder="Filtrar por conta, banco, agência..."
       >
-        <div className="space-y-6">
+        <div className="space-y-3">
           {blocos.map(({ empresa, contas: daEmpresa }) => (
             <div key={empresa.id} data-bloco-filtro>
               <Cartao
                 titulo={empresa.nome}
-                acoes={<span className="text-sm tabular-nums text-texto-suave">Saldos iniciais: {formatarMoeda(soma(daEmpresa))}</span>}
+                acoes={<span className="text-xs tabular-nums text-texto-suave">Saldos iniciais: {formatarMoeda(soma(daEmpresa))}</span>}
               >
                 <Tabela embutida colunas={["Conta", "Banco", "Agência / conta", "Saldo inicial", ""]}>
                   {daEmpresa.map((c) => (
                     <tr key={c.id} data-tags={`${c.tipo} ${c.ativa ? "ativo" : "inativo"}`} className={c.ativa ? "" : "text-texto-suave"}>
                       <Celula>
-                        <span className="font-medium">{c.nome}</span> {!c.ativa && <Etiqueta>Inativa</Etiqueta>}
-                        <span className="block text-xs text-texto-suave">{TIPOS_CONTA_BANCARIA[c.tipo]}</span>
+                        <span className="font-medium">{c.nome}</span>
+                        <span className="text-xs text-texto-suave"> · {TIPOS_CONTA_BANCARIA[c.tipo]}</span> {!c.ativa && <Etiqueta>Inativa</Etiqueta>}
                       </Celula>
                       <Celula>{[c.banco_codigo, c.banco_nome].filter(Boolean).join(" · ") || "—"}</Celula>
                       <Celula className="tabular-nums">{[c.agencia, c.conta].filter(Boolean).join(" / ") || "—"}</Celula>
                       <Celula className="whitespace-nowrap tabular-nums">
                         {formatarMoeda(c.saldo_inicial)}
-                        <span className="block text-xs text-texto-suave">em {formatarData(c.data_saldo_inicial)}</span>
+                        <span className="text-xs text-texto-suave"> em {formatarData(c.data_saldo_inicial)}</span>
                       </Celula>
                       <Celula className="text-right">
                         {pode(acesso, TELA, "editar") && <LinkAcao href={`?editar=${c.id}`}>Editar</LinkAcao>}
@@ -202,7 +200,7 @@ export default async function PaginaContasBancarias({ searchParams }: { searchPa
       </Filtro>
 
       {!selecionada && blocos.length > 1 && (
-        <div className="flex justify-between rounded-2xl bg-superficie px-5 py-3 font-medium shadow-[0_1px_3px_rgba(16,24,40,0.06)]">
+        <div className="flex justify-between rounded-xl bg-superficie px-4 py-2 text-sm font-medium shadow-[0_1px_3px_rgba(16,24,40,0.06)]">
           <span>Saldos iniciais do grupo ({blocos.length} empresas)</span>
           <span className="tabular-nums">{formatarMoeda(soma(contas))}</span>
         </div>

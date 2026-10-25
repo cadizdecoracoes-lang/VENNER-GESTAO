@@ -62,7 +62,7 @@ export default async function PaginaEmpresas({ searchParams }: { searchParams: P
   const mostrarForm = (novo && pode(acesso, TELA, "criar")) || (emEdicao && pode(acesso, TELA, "editar"));
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-3">
       <CabecalhoTela codigo={TELA}>
         {pode(acesso, TELA, "criar") && !mostrarForm && (
           <Link href="?novo=1" className={estiloBotao}>
@@ -73,14 +73,14 @@ export default async function PaginaEmpresas({ searchParams }: { searchParams: P
 
       {mostrarForm && (
         <Cartao titulo={emEdicao ? `Editar ${emEdicao.nome_fantasia ?? emEdicao.razao_social}` : "Nova empresa"}>
-          <div className="grid gap-6 lg:grid-cols-[1fr_16rem]">
+          <div className="grid gap-3 lg:grid-cols-[1fr_16rem]">
             <FormAcao
               key={emEdicao?.id ?? "nova"}
               acao={salvarEmpresa.bind(null, emEdicao?.id ?? null)}
               rotulo="Salvar"
               className="space-y-4"
             >
-              <div className="grid gap-4 sm:grid-cols-2">
+              <div className="grid gap-3 sm:grid-cols-2">
                 <Campo rotulo="Razão social">
                   <input name="razao_social" required defaultValue={emEdicao?.razao_social} className={estiloCampo} />
                 </Campo>

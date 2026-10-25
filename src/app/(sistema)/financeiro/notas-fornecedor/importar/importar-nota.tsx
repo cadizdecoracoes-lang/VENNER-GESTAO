@@ -119,7 +119,7 @@ export function ImportarNota({ empresas, fornecedores, categorias, centros, ulti
     );
 
   return (
-    <FormAcao acao={importarNota} rotulo="Lançar nota" className="space-y-6">
+    <FormAcao acao={importarNota} rotulo="Lançar nota" className="space-y-3">
       <Cartao titulo="Arquivo da nota">
         <label className="flex cursor-pointer flex-col items-center gap-2 rounded-xl bg-fundo px-6 py-8 text-center text-sm text-texto-suave hover:bg-primaria-suave/50">
           <FileUp size={28} className="text-primaria" />
@@ -157,7 +157,7 @@ export function ImportarNota({ empresas, fornecedores, categorias, centros, ulti
           )}
 
           <Cartao titulo="Dados da nota" acoes={<Etiqueta cor="primaria">Lida do {nota.origem.toUpperCase()}</Etiqueta>}>
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
               <Campo rotulo="Empresa que comprou" className="sm:col-span-2">
                 <select value={empresa} onChange={(e) => setEmpresa(e.target.value)} required className={estiloCampo}>
                   <option value="" disabled>
@@ -244,7 +244,7 @@ export function ImportarNota({ empresas, fornecedores, categorias, centros, ulti
           )}
 
           <Cartao titulo="Contas a pagar">
-            <div className="grid gap-4 sm:grid-cols-2">
+            <div className="grid gap-3 sm:grid-cols-2">
               <Campo
                 rotulo="Categoria financeira"
                 dica={categoria && fornecedor !== NOVO ? "Sugerida pela última nota deste fornecedor." : undefined}

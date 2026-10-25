@@ -92,7 +92,7 @@ async function ListaProdutos() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-3">
       <CabecalhoTela codigo={TELA} />
       <Filtro
         atalhos={[
@@ -209,13 +209,13 @@ async function DetalheFicha({ acesso, itemId, versao }: { acesso: Acesso; itemId
   const proximaSequencia = (operacoes.at(-1)?.sequencia ?? 0) + 10;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-3">
       <div className="space-y-3">
         <Voltar />
-        <div className="flex flex-wrap items-end justify-between gap-4">
-          <div>
-            <p className="text-sm text-texto-suave">Ficha técnica · {TIPOS_ITEM[item.tipo]}</p>
-            <h1 className="text-2xl font-semibold">
+        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+          <div className="flex flex-wrap items-baseline gap-x-2">
+            <span className="text-xs text-texto-suave">Ficha técnica · {TIPOS_ITEM[item.tipo]} /</span>
+            <h1 className="text-lg font-semibold leading-tight">
               {item.codigo} <span className="font-normal text-texto-suave">· {item.descricao}</span>
             </h1>
           </div>
@@ -253,8 +253,8 @@ async function DetalheFicha({ acesso, itemId, versao }: { acesso: Acesso; itemId
           <p className="text-texto-suave">Este produto ainda não tem ficha técnica.</p>
         </Cartao>
       ) : (
-        <div className="grid gap-6 xl:grid-cols-[1fr_20rem]">
-          <div className="space-y-6">
+        <div className="grid gap-3 xl:grid-cols-[1fr_20rem]">
+          <div className="space-y-3">
             {ficha.status !== "rascunho" && (
               <p className="rounded-xl bg-primaria-suave px-4 py-2.5 text-sm text-primaria">
                 {ficha.status === "ativa" ? "Esta é a versão em uso na produção" : "Versão substituída, mantida como histórico"}. Para
@@ -402,7 +402,7 @@ async function DetalheFicha({ acesso, itemId, versao }: { acesso: Acesso; itemId
             </Cartao>
           </div>
 
-          <div className="space-y-6">
+          <div className="space-y-3">
             {custo && (
               <Cartao titulo="Custo padrão por unidade">
                 <dl className="space-y-2 text-sm">

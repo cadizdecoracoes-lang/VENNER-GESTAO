@@ -6,8 +6,6 @@ import {
   CabecalhoTela,
   Celula,
   Etiqueta,
-  FaixaEmpresa,
-  Fonte,
   LinkAcao,
   SemAcesso,
   Tabela,
@@ -93,8 +91,8 @@ export default async function PaginaPedidos({ searchParams }: { searchParams: Pr
   const colunas = ["Nº", "Data", ...(selecionada ? [] : ["Empresa"]), "Cliente", "Etapa", "Prazo", "Valor", ""];
 
   return (
-    <div className="space-y-6">
-      <CabecalhoTela codigo={TELA}>
+    <div className="space-y-3">
+      <CabecalhoTela codigo={TELA} empresa={selecionada}>
         {pode(acesso, "producao.sequenciamento", "ver") && (
           <Link href="/producao/sequenciamento" className={estiloBotaoSecundario}>
             <ListOrdered size={16} /> Fila de produção
@@ -107,33 +105,27 @@ export default async function PaginaPedidos({ searchParams }: { searchParams: Pr
         )}
       </CabecalhoTela>
 
-      <FaixaEmpresa empresa={selecionada} />
-      <FiltroPeriodo periodo={periodo} hoje={hoje} campos={DATAS_PERIODO} semPeriodo="Em aberto e recentes" />
-
-      <section className="space-y-2">
-        <div className="grid grid-cols-[repeat(auto-fill,minmax(9.5rem,1fr))] gap-3">
-          {funil.map(({ etapa, quantidade, valor }) => {
-            const marcado = etapaFiltro?.id === etapa.id;
-            return (
-              <Link
-                key={etapa.id}
-                href={marcado ? linkEtapa() : linkEtapa(etapa.id)}
-                className={`rounded-2xl px-4 py-3 shadow-[0_1px_3px_rgba(16,24,40,0.06)] transition-shadow ${marcado ? "bg-primaria-suave shadow-[0_0_0_1.5px_var(--color-primaria)]" : "bg-superficie hover:shadow-[0_0_0_1.5px_var(--color-primaria)]"}`}
-              >
-                <p className="truncate text-xs text-texto-suave" title={etapa.nome}>
-                  {etapa.nome}
-                </p>
-                <p className="mt-1 text-xl font-semibold tabular-nums">{quantidade}</p>
-                <p className="text-xs tabular-nums text-texto-suave">{formatarMoeda(valor)}</p>
-              </Link>
-            );
-          })}
-        </div>
-        <Fonte>
-          Funil: quantidade e valor (soma dos itens) dos pedidos de venda pela etapa atual · {textoPeriodo}
-          {selecionada ? ` · só ${selecionada.nome}` : " · todas as empresas que você vê"}. Clique numa etapa para ver os pedidos dela.
-        </Fonte>
-      </section>
+      {/* Funil numa faixa fina: cada etapa com quantidade e valor; clicar filtra a lista. */}
+      <div
+        className="flex overflow-x-auto rounded-xl bg-superficie shadow-[0_1px_3px_rgba(16,24,40,0.06)] [scrollbar-width:thin]"
+        title={`Funil: quantidade e valor (soma dos itens) dos pedidos de venda pela etapa atual · ${textoPeriodo}${selecionada ? ` · só ${selecionada.nome}` : " · todas as empresas que você vê"}. Clique numa etapa para ver os pedidos dela.`}
+      >
+        {funil.map(({ etapa, quantidade, valor }) => {
+          const marcado = etapaFiltro?.id === etapa.id;
+          return (
+            <Link
+              key={etapa.id}
+              href={marcado ? linkEtapa() : linkEtapa(etapa.id)}
+              className={`min-w-28 flex-1 border-b-2 px-3 py-1.5 transition-colors first:rounded-l-xl last:rounded-r-xl ${marcado ? "border-primaria bg-primaria-suave/60" : "border-transparent hover:bg-fundo"}`}
+            >
+              <span className={`block truncate text-xs ${marcado ? "font-medium text-primaria" : "text-texto-suave"}`} title={etapa.nome}>
+                {etapa.nome} <span className="tabular-nums opacity-80">({quantidade})</span>
+              </span>
+              <span className="block whitespace-nowrap text-sm font-semibold tabular-nums">{formatarMoeda(valor)}</span>
+            </Link>
+          );
+        })}
+      </div>
 
       {etapaFiltro && (
         <p className="text-sm">
@@ -153,6 +145,7 @@ export default async function PaginaPedidos({ searchParams }: { searchParams: Pr
       )}
 
       <Filtro
+        ferramentas={<FiltroPeriodo periodo={periodo} hoje={hoje} campos={DATAS_PERIODO} semPeriodo="Em aberto e recentes" />}
         atalhos={[
           {
             rotulo: "Fase",

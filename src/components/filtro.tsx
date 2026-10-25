@@ -10,16 +10,36 @@ import { useEffect, useRef, useState } from "react";
 
 export type GrupoAtalho = { rotulo: string; opcoes: { valor: string; rotulo: string }[] };
 
+// Situações com número: uma faixa fina acima da lista que é, ao mesmo tempo, o
+// resumo (valor e quantidade) e o filtro. Substitui os cartões de resumo.
+export type OpcaoSituacao = {
+  valor: string;
+  rotulo: string;
+  total?: string;
+  quantidade?: number;
+  cor?: "perigo" | "sucesso" | "alerta";
+  // De onde vem o número; aparece ao passar o mouse.
+  dica?: string;
+};
+export type GrupoSituacao = { rotulo: string; opcoes: OpcaoSituacao[] };
+
+const COR_SITUACAO = { perigo: "text-perigo", sucesso: "text-sucesso", alerta: "text-alerta" };
+
 const normalizar = (t: string) => t.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
 
 export function Filtro({
   children,
   atalhos = [],
+  situacoes,
+  ferramentas,
   placeholder = "Filtrar por qualquer informação da lista",
   iniciais = {},
 }: {
   children: React.ReactNode;
   atalhos?: GrupoAtalho[];
+  situacoes?: GrupoSituacao;
+  // Controles extras na mesma linha da busca (ex.: o período).
+  ferramentas?: React.ReactNode;
   placeholder?: string;
   // Atalho já marcado ao abrir (ex.: vindo de um número do painel): { Situação: "vencido" }.
   iniciais?: Record<string, string>;
@@ -70,10 +90,45 @@ export function Filtro({
 
   const filtrando = texto.trim() !== "" || Object.values(escolhas).some(Boolean);
 
+  const situacaoAtual = situacoes ? (escolhas[situacoes.rotulo] ?? "") : "";
+
   return (
-    <div className="space-y-3">
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-        <div className="relative w-full max-w-sm">
+    <div className="space-y-2">
+      {situacoes && (
+        <div
+          role="group"
+          aria-label={situacoes.rotulo}
+          className="flex overflow-x-auto rounded-xl bg-superficie shadow-[0_1px_3px_rgba(16,24,40,0.06)] [scrollbar-width:thin]"
+        >
+          {situacoes.opcoes.map((o) => {
+            const ativo = situacaoAtual === o.valor;
+            return (
+              <button
+                key={o.valor || "todas"}
+                type="button"
+                title={o.dica}
+                aria-pressed={ativo}
+                onClick={() => setEscolhas((atual) => ({ ...atual, [situacoes.rotulo]: o.valor }))}
+                className={`min-w-28 flex-1 border-b-2 px-3 py-1.5 text-left transition-colors first:rounded-l-xl last:rounded-r-xl ${
+                  ativo ? "border-primaria bg-primaria-suave/60" : "border-transparent hover:bg-fundo"
+                }`}
+              >
+                <span className={`block truncate text-xs ${ativo ? "font-medium text-primaria" : "text-texto-suave"}`}>
+                  {o.rotulo}
+                  {o.quantidade !== undefined && <span className="ml-1 tabular-nums opacity-80">({o.quantidade})</span>}
+                </span>
+                {o.total !== undefined && (
+                  <span className={`block whitespace-nowrap text-sm font-semibold tabular-nums ${o.cor && o.quantidade ? COR_SITUACAO[o.cor] : ""}`}>
+                    {o.total}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+      )}
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+        <div className="relative w-full max-w-xs">
           <Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-texto-suave" />
           <input
             ref={campo}
@@ -81,7 +136,7 @@ export function Filtro({
             onChange={(e) => setTexto(e.target.value)}
             placeholder={placeholder}
             aria-label="Filtrar lista"
-            className="w-full rounded-lg bg-superficie py-2 pl-9 pr-8 text-sm shadow-[0_0_0_1px_var(--color-borda)] outline-none placeholder:text-texto-suave/70 focus:shadow-[0_0_0_1.5px_var(--color-primaria)]"
+            className="w-full rounded-lg bg-superficie py-1.5 pl-9 pr-8 text-sm shadow-[0_0_0_1px_var(--color-borda)] outline-none placeholder:text-texto-suave/70 focus:shadow-[0_0_0_1.5px_var(--color-primaria)]"
           />
           {texto && (
             <button
@@ -95,7 +150,8 @@ export function Filtro({
           )}
         </div>
         {atalhos.map((g) => (
-          <div key={g.rotulo} className="flex items-center gap-1 text-sm" role="group" aria-label={g.rotulo}>
+          <div key={g.rotulo} className="flex items-center gap-0.5 text-[13px]" role="group" aria-label={g.rotulo}>
+            <span className="mr-1 text-xs text-texto-suave">{g.rotulo}</span>
             {[{ valor: "", rotulo: "Todos" }, ...g.opcoes].map((o) => {
               const ativo = (escolhas[g.rotulo] ?? "") === o.valor;
               return (
@@ -103,7 +159,7 @@ export function Filtro({
                   key={o.valor || "todos"}
                   type="button"
                   onClick={() => setEscolhas((atual) => ({ ...atual, [g.rotulo]: o.valor }))}
-                  className={`rounded-full px-3 py-1 transition-colors ${ativo ? "bg-primaria-suave font-medium text-primaria" : "text-texto-suave hover:bg-superficie hover:text-texto"}`}
+                  className={`rounded-full px-2.5 py-0.5 transition-colors ${ativo ? "bg-primaria-suave font-medium text-primaria" : "text-texto-suave hover:bg-superficie hover:text-texto"}`}
                 >
                   {o.rotulo}
                 </button>
@@ -111,6 +167,7 @@ export function Filtro({
             })}
           </div>
         ))}
+        {ferramentas}
         {contagem && contagem.total > 0 && (
           <span className="ml-auto text-xs text-texto-suave">
             {filtrando

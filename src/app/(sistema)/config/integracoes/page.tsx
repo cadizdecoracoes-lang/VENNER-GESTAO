@@ -65,7 +65,7 @@ export default async function PaginaIntegracoes({ searchParams }: { searchParams
   const semAnuncio = filtros.sem_anuncio?.split(",").filter(Boolean) ?? [];
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-3">
       <CabecalhoTela codigo={TELA} />
 
       {filtros.ligada === "tiny" && (
@@ -103,7 +103,7 @@ export default async function PaginaIntegracoes({ searchParams }: { searchParams
         ligar={ligar}
       />
 
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className="grid gap-3 lg:grid-cols-2">
         {(Object.keys(NOME_CANAL) as Canal[]).map((canal) => (
           <Cartao
             key={canal}

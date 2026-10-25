@@ -79,7 +79,7 @@ export default async function PaginaItens({ searchParams }: { searchParams: Prom
   const verFicha = pode(acesso, "producao.ficha_tecnica", "ver");
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-3">
       <CabecalhoTela codigo={TELA}>
         {pode(acesso, TELA, "criar") && !mostrarForm && (
           <Link href="?novo=1" className={estiloBotao}>
@@ -91,7 +91,7 @@ export default async function PaginaItens({ searchParams }: { searchParams: Prom
       {mostrarForm && (
         <Cartao titulo={emEdicao ? `Editar ${emEdicao.codigo}` : "Novo item"}>
           <FormAcao key={emEdicao?.id ?? "novo"} acao={salvarItem.bind(null, emEdicao?.id ?? null)} rotulo="Salvar" className="space-y-4">
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
               <Campo rotulo="Código">
                 <input name="codigo" required defaultValue={emEdicao?.codigo} className={`${estiloCampo} uppercase`} />
               </Campo>

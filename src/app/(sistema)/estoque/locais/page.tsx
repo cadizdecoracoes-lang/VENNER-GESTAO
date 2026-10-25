@@ -41,7 +41,7 @@ export default async function PaginaLocais({ searchParams }: { searchParams: Pro
   const mostrarForm = (novo && pode(acesso, TELA, "criar")) || (emEdicao && pode(acesso, TELA, "editar"));
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-3">
       <CabecalhoTela codigo={TELA}>
         {pode(acesso, TELA, "criar") && !mostrarForm && (
           <Link href="?novo=1" className={estiloBotao}>

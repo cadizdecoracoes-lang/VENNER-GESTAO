@@ -108,7 +108,7 @@ export default async function PaginaNota({
   const caminho = `/financeiro/notas-fornecedor/${n.id}`;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-3">
       <CabecalhoTela codigo={TELA}>
         <Link href="/financeiro/notas-fornecedor" className={estiloBotaoSecundario}>
           Voltar

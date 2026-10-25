@@ -48,3 +48,15 @@ O GitHub (`.github/workflows/ci.yml`) roda tudo isso em cada pacote. Rode `typec
 - Sem `.env.local`, as telas abrem em modo de demonstração, sem login.
 - Valores e datas no formato brasileiro (helpers em `src/lib/formato.ts` e `src/lib/datas.ts`).
 - Cada empresa (CNPJ) é separada; a empresa escolhida fica em cookie (`src/lib/empresa-cookie.ts`).
+
+## Visual das telas (regra para toda tela nova ou revisada)
+
+O destaque é dos lançamentos. O que fica acima da lista tem de ser fino e discreto; a lista deve aparecer já na primeira tela, sem rolar.
+
+- Cabeçalho numa linha só: `CabecalhoTela` (módulo / título, botões à direita). Não escreva subtítulo nem parágrafo explicativo: a descrição da tela aparece ao passar o mouse no título e textos longos vão em `ajuda` (ícone ⓘ).
+- Telas separadas por CNPJ passam `empresa={selecionada}` ao `CabecalhoTela`, que mostra a etiqueta pequena "Grupo (consolidado)" ou o nome da empresa. Não use faixa colorida de aviso.
+- Números de resumo numa faixa fina, nunca em cartões altos. Em listas com situação (pagar, receber, pedidos), use `Filtro` com `situacoes`: a mesma faixa mostra valor e quantidade e filtra a lista ao clicar. Fora disso, `Indicador` (compacto; a origem do número vai em `fonte`, que vira dica).
+- Período (`FiltroPeriodo`) vai na linha da busca, pelo `ferramentas` do `Filtro`; as datas livres ficam recolhidas em "Outras datas…".
+- Quadros secundários (ex.: `ResumoPorEmpresa`) ficam recolhidos numa linha.
+- Linhas de tabela de uma linha só sempre que der (complementos em texto pequeno na mesma linha, não embaixo). Use `Tabela`, `Celula`, `Cartao`, `estiloCampo`, `estiloBotao` de `src/components/ui.tsx`, que já têm os espaçamentos enxutos; não reponha `p-5`, `p-6`, `space-y-6`, `text-2xl` ou `rounded-2xl` nas telas.
+- Formulários: o "Cancelar" vai ao lado do "Salvar" (`FormAcao` com `extra`).

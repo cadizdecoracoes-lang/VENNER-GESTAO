@@ -1,7 +1,7 @@
 import { FileUp } from "lucide-react";
 import Link from "next/link";
 import { Filtro } from "@/components/filtro";
-import { CabecalhoTela, Celula, Etiqueta, FaixaEmpresa, LinkAcao, SemAcesso, Tabela, estiloBotao } from "@/components/ui";
+import { CabecalhoTela, Celula, Etiqueta, LinkAcao, SemAcesso, Tabela, estiloBotao } from "@/components/ui";
 import { carregarAcesso, pode } from "@/lib/acesso";
 import { carregarEmpresas, empresaSelecionada } from "@/lib/empresa";
 import { formatarData, formatarMoeda } from "@/lib/formato";
@@ -56,8 +56,8 @@ export default async function PaginaNotasFornecedor() {
   const colunas = ["Emissão", ...(selecionada ? [] : ["Empresa"]), "Fornecedor", "Nota", "Valor", "Estoque", ""];
 
   return (
-    <div className="space-y-6">
-      <CabecalhoTela codigo={TELA}>
+    <div className="space-y-3">
+      <CabecalhoTela codigo={TELA} empresa={selecionada}>
         {pode(acesso, TELA, "criar") && (
           <Link href="/financeiro/notas-fornecedor/importar" className={estiloBotao}>
             <FileUp size={16} /> Importar nota
@@ -65,7 +65,6 @@ export default async function PaginaNotasFornecedor() {
         )}
       </CabecalhoTela>
 
-      <FaixaEmpresa empresa={selecionada} />
 
       <Filtro
         atalhos={[

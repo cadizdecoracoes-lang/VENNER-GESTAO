@@ -15,6 +15,7 @@ export function FormAcao({
   discreto = false,
   confirmar,
   className,
+  extra,
   children,
 }: {
   acao: (estado: Estado, form: FormData) => Promise<Estado>;
@@ -26,6 +27,8 @@ export function FormAcao({
   discreto?: boolean;
   confirmar?: string;
   className?: string;
+  // Ao lado do botão de enviar (ex.: o "Cancelar"), para não gastar uma linha a mais.
+  extra?: React.ReactNode;
   children?: React.ReactNode;
 }) {
   const [estado, enviar, pendente] = useActionState(acao, {});
@@ -57,6 +60,7 @@ export function FormAcao({
         >
           {pendente ? enviando : rotulo}
         </button>
+        {extra}
         {estado.erro && <p className="text-sm text-perigo">{estado.erro}</p>}
       </div>
     </form>

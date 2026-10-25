@@ -64,7 +64,7 @@ export default async function PaginaMovimentos({ searchParams }: { searchParams:
   const total = movimentos.reduce((s, m) => s + Number(m.quantidade), 0);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-3">
       <CabecalhoTela codigo={TELA} />
       {filtros.item && (
         <div className="rounded-xl bg-primaria-suave px-4 py-3 text-sm text-primaria">

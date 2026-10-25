@@ -8,7 +8,6 @@ import {
   Cartao,
   Celula,
   Etiqueta,
-  FaixaEmpresa,
   LinkAcao,
   SemAcesso,
   Tabela,
@@ -69,8 +68,8 @@ export default async function PaginaAnuncios({ searchParams }: { searchParams: P
     kits.set(`${a.empresa_id}|${a.canal}|${a.codigo}`, (kits.get(`${a.empresa_id}|${a.canal}|${a.codigo}`) ?? 0) + 1);
 
   return (
-    <div className="space-y-6">
-      <CabecalhoTela codigo={TELA}>
+    <div className="space-y-3">
+      <CabecalhoTela codigo={TELA} empresa={selecionada}>
         {pode(acesso, TELA, "criar") && !mostrarForm && (
           <Link href="?novo=1" className={estiloBotao}>
             <Plus size={16} /> Ligar anúncio
@@ -81,12 +80,17 @@ export default async function PaginaAnuncios({ searchParams }: { searchParams: P
       {mostrarForm && (
         <Cartao titulo={emEdicao ? `Editar anúncio ${emEdicao.codigo}` : "Ligar anúncio a um produto"}>
           <FormAcao
+            extra={
+              <Link href={voltar ? "/financeiro/receber/importar" : "/vendas/anuncios"} className={estiloBotaoSecundario}>
+                Cancelar
+              </Link>
+            }
             key={emEdicao?.id ?? "novo"}
             acao={salvarAnuncio.bind(null, emEdicao?.id ?? null, voltar)}
             rotulo="Salvar"
             className="space-y-4"
           >
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
               <Campo rotulo="Empresa dona do anúncio" className="sm:col-span-2">
                 <select name="empresa_id" required defaultValue={emEdicao?.empresa_id ?? selecionada?.id ?? ""} className={estiloCampo}>
                   <option value="" disabled>
@@ -133,16 +137,10 @@ export default async function PaginaAnuncios({ searchParams }: { searchParams: P
             <p className="text-xs text-texto-suave">
               Kit com produtos diferentes: ligue o mesmo código uma vez para cada produto. O valor da venda é dividido entre eles.
             </p>
-            <div className="flex justify-end">
-              <Link href={voltar ? "/financeiro/receber/importar" : "/vendas/anuncios"} className={estiloBotaoSecundario}>
-                Cancelar
-              </Link>
-            </div>
           </FormAcao>
         </Cartao>
       )}
 
-      <FaixaEmpresa empresa={selecionada} />
 
       <Filtro
         atalhos={[{ rotulo: "Plataforma", opcoes: Object.entries(NOME_CANAL).map(([valor, rotulo]) => ({ valor, rotulo })) }]}

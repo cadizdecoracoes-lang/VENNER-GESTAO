@@ -56,13 +56,13 @@ export default async function PaginaSugestoes() {
   const pedidosConsiderados = dados?.pedidos.length ?? 0;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-3">
       <CabecalhoTela codigo={TELA} />
       {!dados ? (
         <p className="text-texto-suave">Não foi possível ler o planejamento.</p>
       ) : (
         <>
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <Indicador
               rotulo="Comprar já (prazo vencido)"
               valor={atrasadas.length}

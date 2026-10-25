@@ -16,23 +16,26 @@ export default async function LayoutSistema({ children }: { children: React.Reac
       <div className="flex h-full">
         <MenuLateral telas={telasVisiveis(acesso)} />
         <div className="flex min-w-0 flex-1 flex-col">
-          <BarraAbas />
-          <header className="flex h-12 items-center justify-end gap-4 border-b border-borda/70 bg-superficie px-6">
-            <SeletorEmpresa empresas={empresas} valor={selecionada?.id ?? null} />
-            {email ? (
-              <form action={sair} className="flex items-center gap-2 text-sm text-texto-suave">
-                <span>{email}</span>
-                <button className="rounded-lg p-1.5 hover:bg-fundo" aria-label="Sair">
-                  <LogOut size={16} />
-                </button>
-              </form>
-            ) : (
-              <span className="rounded-full bg-alerta/10 px-3 py-1 text-xs text-alerta">
-                Demonstração: banco de dados ainda não conectado
-              </span>
-            )}
+          {/* Uma faixa só no topo: abas abertas à esquerda, empresa e usuário à direita. */}
+          <header className="flex h-10 shrink-0 items-stretch gap-3 border-b border-borda/70 bg-superficie pl-3 pr-4">
+            <BarraAbas />
+            <div className="flex shrink-0 items-center gap-3">
+              <SeletorEmpresa empresas={empresas} valor={selecionada?.id ?? null} />
+              {email ? (
+                <form action={sair} className="flex items-center gap-1 text-xs text-texto-suave">
+                  <span className="hidden max-w-48 truncate xl:inline" title={email}>
+                    {email}
+                  </span>
+                  <button className="rounded-lg p-1.5 hover:bg-fundo" aria-label="Sair" title={`Sair (${email})`}>
+                    <LogOut size={15} />
+                  </button>
+                </form>
+              ) : (
+                <span className="rounded-full bg-alerta/10 px-3 py-0.5 text-xs text-alerta">Demonstração: sem banco de dados</span>
+              )}
+            </div>
           </header>
-          <main className="flex-1 overflow-y-auto p-6">
+          <main className="flex-1 overflow-y-auto px-5 py-3">
             {acesso.ativo ? (
               children
             ) : (

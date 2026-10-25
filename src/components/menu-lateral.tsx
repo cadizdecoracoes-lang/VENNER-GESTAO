@@ -38,8 +38,8 @@ export function MenuLateral({ telas }: { telas: string[] | null }) {
 
   return (
     <aside className={`flex shrink-0 flex-col border-r border-borda/60 bg-lateral transition-[width] ${recolhido ? "w-16" : "w-64"}`}>
-      <div className="flex h-14 items-center justify-between px-4">
-        {!recolhido && <span className="text-lg font-semibold">Venner</span>}
+      <div className="flex h-10 items-center justify-between px-4">
+        {!recolhido && <span className="font-semibold">Venner</span>}
         <button
           onClick={() => setRecolhido(!recolhido)}
           className="rounded-lg p-1.5 text-texto-suave hover:bg-white/70"
