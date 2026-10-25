@@ -2,7 +2,7 @@
 // Rodam com: npm test (node --test, sem dependências).
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { filaProducao, necessidadeMateriais, type DadosPlanejamento } from "../src/lib/planejamento.ts";
+import { comprado, filaProducao, necessidadeMateriais, type DadosPlanejamento } from "../src/lib/planejamento.ts";
 
 const item = (id: string, tipo: string, saldo: number, extra: Partial<{ estoque_minimo: number; prazo_reposicao_dias: number }> = {}) => ({
   id,
@@ -113,4 +113,17 @@ test("pedido bloqueado não reserva material de quem vem depois", () => {
   assert.equal(fila[0].pedido.numero, 2);
   assert.equal(fila[0].pode_produzir, true);
   assert.equal(fila[1].pode_produzir, false);
+});
+
+test("produto vendido sem ficha técnica não vira compra", () => {
+  const d = dados();
+  d.itens.push(item("KIT", "produto_acabado", 0), item("EMB", "embalagem", 0));
+  d.pedidos = [{ ...pedido(1, 1), itens: [{ item_id: "KIT", quantidade: 30, valor_total: 300 }, { item_id: "EMB", quantidade: 30, valor_total: 0 }] }];
+  const linhas = new Map(necessidadeMateriais(d, "2026-10-19").map((l) => [l.item.id, l]));
+  assert.equal(linhas.get("KIT")!.sem_ficha, true);
+  assert.equal(linhas.get("KIT")!.falta, 30);
+  assert.equal(comprado(linhas.get("KIT")!), false, "o kit não entra na sugestão de compra");
+  assert.equal(linhas.get("EMB")!.sem_ficha, false);
+  assert.equal(comprado(linhas.get("EMB")!), true, "embalagem sem ficha é comprada");
+  assert.equal(comprado(linhas.get("PA") ?? { ...linhas.get("EMB")!, produzido: true }), false);
 });
