@@ -12,7 +12,7 @@ Sistema de gestão do Grupo Venner (produção, estoque, compras, vendas, financ
 - Nunca faça push direto na `main`. Toda mudança vai num ramo próprio e vira um pacote (PR). O Alexandre faz o merge quando as verificações estão verdes.
 - O merge na `main` publica sozinho: o workflow `publicar-banco.yml` aplica as migrações e publica as Edge Functions no Supabase de produção, e o `publicar-telas.yml` publica as telas no GitHub Pages. Não rode deploy nem `supabase db push` à mão.
 - Nunca leia, copie nem peça por chat valores de `.env*`, `.dev.vars` ou segredos (Supabase, Tiny, Mercado Livre, Shopee).
-- A integração com Tiny, Mercado Livre e Shopee é só leitura. Não crie nada que escreva nessas plataformas sem pedido explícito.
+- A integração com Tiny, Mercado Livre e Shopee é só leitura, com uma exceção pedida pelo Alexandre: a NF de venda (gerar, autorizar, lançar contas e cancelar nota no Tiny, `_shared/tiny/notas.ts`). Não crie mais nada que escreva nessas plataformas sem pedido explícito.
 
 ## Comandos
 
@@ -30,7 +30,7 @@ O GitHub (`.github/workflows/ci.yml`) roda tudo isso em cada pacote. Rode `typec
 - `src/app/(sistema)/<modulo>/...`: telas, uma pasta por módulo (vendas, financeiro, estoque, producao, compras, rh, config).
 - `src/lib/menu.ts`: mapa de telas. O `codigo` de cada tela (ex.: `financeiro.receber`) é o mesmo da tabela `telas` e das permissões por perfil no banco.
 - `src/lib/`: regras puras (planejamento, parcelas, nfe, formato) e clientes do Supabase em `src/lib/supabase/`.
-- `supabase/functions/`: Edge Functions do Supabase (Deno), publicadas pelo `publicar-banco.yml` no merge. `robo-tiny` é chamada pelo próprio banco (pg_cron + pg_net) a cada 5 minutos; `integracoes` faz o que precisa das chaves dos aplicativos (ligar conta, buscar vendas, ler o Tiny agora); `integracoes-retorno` recebe a volta das plataformas. Segredos (`ML_APP_ID`, `ML_SECRET_KEY`, `SHOPEE_PARTNER_ID`, `SHOPEE_PARTNER_KEY`) ficam nos segredos das Edge Functions do Supabase.
+- `supabase/functions/`: Edge Functions do Supabase (Deno), publicadas pelo `publicar-banco.yml` no merge. `robo-tiny` é chamada pelo próprio banco (pg_cron + pg_net) a cada 5 minutos; `integracoes` faz o que precisa das chaves dos aplicativos (ligar conta, buscar vendas, ler o Tiny agora, emitir e cancelar a NF de venda pelo Tiny); `integracoes-retorno` recebe a volta das plataformas. Segredos (`ML_APP_ID`, `ML_SECRET_KEY`, `SHOPEE_PARTNER_ID`, `SHOPEE_PARTNER_KEY`) ficam nos segredos das Edge Functions do Supabase.
 - `supabase/functions/_shared`: código usado pelas funções e também pelos testes ou telas (leitura do Tiny, Mercado Livre/Shopee, datas). Imports sempre com `.ts`; `src/lib/datas.ts` e `src/lib/plataformas/tipos.ts` só reexportam daqui. Confira as funções com `deno check --config supabase/functions/<nome>/deno.json supabase/functions/<nome>/index.ts`.
 - `supabase/migrations/`: uma migração por pacote, nome `AAAAMMDD0000NN_assunto.sql`, com cabeçalho explicando o que muda.
 - `supabase/tests/`: testes SQL numerados (`00_stub_supabase.sql` simula o Supabase; os demais rodam em ordem depois das migrações).

@@ -4,6 +4,7 @@ import { supabaseConfigurado } from "@/lib/supabase/config";
 import { criarClienteNavegador } from "@/lib/supabase/client";
 import { lerNumero } from "@/lib/formato";
 import { diasDaCondicao, dividirParcelas } from "@/lib/parcelas";
+import { chamarFuncao } from "@/lib/supabase/funcoes";
 
 type ItemForm = { item_id: string; quantidade: number; preco_unitario: number };
 
@@ -79,4 +80,33 @@ export async function gerarParcelas(id: string, _: Estado, form: FormData): Prom
   revalidatePath(`/vendas/pedidos/pedido?id=${id}`);
   revalidatePath("/financeiro/receber");
   return { ok: Date.now() };
+}
+
+// Nota fiscal pelo Tiny (Edge Function integracoes): emitir, trazer a
+// situação, o DANFE e o XML, ou cancelar. Rejeição da SEFAZ volta gravada na
+// nota (a tela mostra o motivo); só falha de comunicação vira erro aqui.
+async function acaoNota(id: string, corpo: Record<string, unknown>): Promise<Estado> {
+  if (!supabaseConfigurado) return SEM_BANCO;
+  const supabase = criarClienteNavegador();
+  try {
+    await chamarFuncao(supabase, "integracoes", { ...corpo, pedido: id });
+  } catch (e) {
+    revalidatePath(`/vendas/pedidos/pedido?id=${id}`);
+    return { erro: e instanceof Error ? e.message : "O Tiny não respondeu. Tente de novo em alguns minutos." };
+  }
+  revalidatePath(`/vendas/pedidos/pedido?id=${id}`);
+  revalidatePath("/vendas/pedidos");
+  revalidatePath("/financeiro/receber");
+  return { ok: Date.now() };
+}
+
+export const emitirNotaFiscal = (id: string, _: Estado, form: FormData) =>
+  acaoNota(id, { acao: "emitir_nf", enviar_email: form.get("enviar_email") === "on" });
+
+export const atualizarNotaFiscal = (id: string) => acaoNota(id, { acao: "atualizar_nf" });
+
+export async function cancelarNotaFiscal(id: string, _: Estado, form: FormData): Promise<Estado> {
+  const justificativa = String(form.get("justificativa") ?? "").trim();
+  if (justificativa.length < 15) return { erro: "Escreva o motivo do cancelamento (pelo menos 15 letras)." };
+  return acaoNota(id, { acao: "cancelar_nf", justificativa });
 }

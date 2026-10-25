@@ -1,13 +1,15 @@
 // Ações das telas com o Tiny, o Mercado Livre e a Shopee que precisam das
 // chaves dos aplicativos (segredos desta função) ou falam com as plataformas.
 // Cada chamada usa o login de quem clicou: o banco confere o perfil.
-// Corpo: { acao: "situacao" | "conectar" | "concluir" | "sincronizar" | "ler_tiny", ... }.
+// Corpo: { acao: "situacao" | "conectar" | "concluir" | "sincronizar" | "ler_tiny"
+//   | "emitir_nf" | "atualizar_nf" | "cancelar_nf", ... }.
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { aleatorio, CANAIS, type CanalLigacao, desafioPkce, enderecoRetorno } from "../_shared/plataformas/ligacao.ts";
 import { chavesML, mlConfigurado, type Tokens, trocarCodigoML, urlAutorizacaoML } from "../_shared/plataformas/mercado-livre.ts";
 import { shopeeConfigurado, trocarCodigoShopee, urlAutorizacaoShopee } from "../_shared/plataformas/shopee.ts";
 import { sincronizarConta } from "../_shared/plataformas/sincronizar.ts";
 import { trocarCodigoTiny, urlAutorizacaoTiny } from "../_shared/tiny/api.ts";
+import { cancelarNota, emitirNota } from "../_shared/tiny/notas.ts";
 import { lerTiny } from "../_shared/tiny/robo.ts";
 import { clienteDoPedido, CORS, json, mensagem, SUPABASE_URL } from "../_shared/supabase.ts";
 
@@ -118,6 +120,38 @@ const acoes: Record<string, (supabase: SupabaseClient, corpo: Corpo) => Promise<
       return await sincronizarConta(supabase, integracao, desde, dias);
     } catch (e) {
       throw new Recusa(mensagem(e) || "A plataforma não respondeu. Tente de novo em alguns minutos.");
+    }
+  },
+
+  // Nota fiscal do pedido de venda pelo Tiny: emitir, trazer a situação
+  // (DANFE, XML e contas) ou cancelar.
+  async emitir_nf(supabase, corpo) {
+    const pedido = String(corpo.pedido ?? "");
+    if (!UUID.test(pedido)) throw new Recusa("Pedido inválido.");
+    try {
+      return await emitirNota(supabase, pedido, { autorizar: true, enviarEmail: corpo.enviar_email === true });
+    } catch (e) {
+      throw new Recusa(mensagem(e));
+    }
+  },
+
+  async atualizar_nf(supabase, corpo) {
+    const pedido = String(corpo.pedido ?? "");
+    if (!UUID.test(pedido)) throw new Recusa("Pedido inválido.");
+    try {
+      return await emitirNota(supabase, pedido, { autorizar: false });
+    } catch (e) {
+      throw new Recusa(mensagem(e));
+    }
+  },
+
+  async cancelar_nf(supabase, corpo) {
+    const pedido = String(corpo.pedido ?? "");
+    if (!UUID.test(pedido)) throw new Recusa("Pedido inválido.");
+    try {
+      return await cancelarNota(supabase, pedido, String(corpo.justificativa ?? ""));
+    } catch (e) {
+      throw new Recusa(mensagem(e));
     }
   },
 
