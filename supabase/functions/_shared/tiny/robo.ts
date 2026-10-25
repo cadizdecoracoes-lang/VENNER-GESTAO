@@ -1,6 +1,6 @@
 // Uma leitura do Tiny: renova o acesso, lê o detalhe do que ficou pendente,
 // percorre as listagens atrás do que mudou e grava tudo de uma vez no banco.
-// Chamada a cada 5 minutos pelo Supabase (rota /integracoes/robo) ou pelo
+// Chamada a cada 5 minutos pelo Supabase (Edge Function robo-tiny) ou pelo
 // botão "Ler agora". A chave do robô é conferida pelo banco em cada chamada.
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { ApiTiny, renovarTiny, SemOrcamento } from "./api.ts";

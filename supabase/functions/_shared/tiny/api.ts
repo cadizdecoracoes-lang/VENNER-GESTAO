@@ -1,6 +1,6 @@
 // Acesso à API v3 do Tiny (Olist ERP): autorização da conta (OAuth) e
-// leituras com orçamento de chamadas. O Cloudflare gratuito permite 50
-// chamadas externas por acesso e o Tiny, 60 leituras por minuto por conta.
+// leituras com orçamento de chamadas. O Tiny permite 60 leituras por minuto
+// por conta, e o robô roda a cada 5 minutos.
 
 const API = "https://api.tiny.com.br/public-api/v3";
 const CONTAS = "https://accounts.tiny.com.br/realms/tiny/protocol/openid-connect";

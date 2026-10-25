@@ -1,10 +1,10 @@
 // Busca as vendas de uma conta ligada (Mercado Livre ou Shopee) e importa no
-// sistema, renovando o acesso quando vencido. Roda só no servidor: as chaves
+// sistema, renovando o acesso quando vencido. Roda na Edge Function integracoes: as chaves
 // saem do banco pela função acesso_integracao, que confere o perfil.
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { buscarVendasML, renovarML, type Tokens } from "./mercado-livre";
-import { buscarVendasShopee, renovarShopee } from "./shopee";
-import type { Canal, VendaImportada } from "./tipos";
+import { buscarVendasML, renovarML, type Tokens } from "./mercado-livre.ts";
+import { buscarVendasShopee, renovarShopee } from "./shopee.ts";
+import type { Canal, VendaImportada } from "./tipos.ts";
 
 type Acesso = {
   empresa_id: string;

@@ -3,12 +3,13 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { mensagemErro, SEM_BANCO, type Estado } from "@/lib/erros";
-import { sincronizarConta } from "@/lib/plataformas/sincronizar";
 import { supabaseConfigurado } from "@/lib/supabase/config";
+import { chamarFuncao } from "@/lib/supabase/funcoes";
 import { criarClienteServidor } from "@/lib/supabase/server";
-import { lerTiny } from "@/lib/tiny/robo";
 
 const CAMINHO = "/config/integracoes";
+
+type Resultado = { importadas: number; repetidas: number; semAnuncio: string[]; puladas: number };
 
 export async function escolherLocal(id: string, _: Estado, form: FormData): Promise<Estado> {
   if (!supabaseConfigurado) return SEM_BANCO;
@@ -29,7 +30,8 @@ export async function buscarVendas(id: string, _: Estado, form: FormData): Promi
   const supabase = await criarClienteServidor();
   let r;
   try {
-    r = await sincronizarConta(supabase, id, desde, dias);
+    // A busca roda na Edge Function integracoes, onde ficam as chaves dos aplicativos.
+    r = await chamarFuncao<Resultado>(supabase, "integracoes", { acao: "sincronizar", integracao: id, desde, dias });
   } catch (e) {
     return { erro: e instanceof Error ? e.message : "A plataforma não respondeu. Tente de novo em alguns minutos." };
   }
@@ -68,17 +70,14 @@ export async function salvarChavesTiny(_: Estado, form: FormData): Promise<Estad
 export async function lerTinyAgora(id: string): Promise<Estado> {
   if (!supabaseConfigurado) return SEM_BANCO;
   const supabase = await criarClienteServidor();
-  const chave = await supabase.rpc("chave_robo_tiny", { integracao: id });
-  if (chave.error) return { erro: mensagemErro(chave.error) };
-  let r;
   try {
-    // Orçamento menor que o do robô: esta tela já gastou algumas chamadas.
-    r = await lerTiny(supabase, id, chave.data as string, 30);
+    // A leitura com erro parcial também volta como erro, com o texto do robô.
+    await chamarFuncao(supabase, "integracoes", { acao: "ler_tiny", integracao: id });
   } catch (e) {
+    revalidatePath(CAMINHO);
     return { erro: e instanceof Error ? e.message : "O Tiny não respondeu. Tente de novo em alguns minutos." };
   }
   revalidatePath(CAMINHO);
-  if (r.erro) return { erro: r.erro };
   return { ok: Date.now() };
 }
 

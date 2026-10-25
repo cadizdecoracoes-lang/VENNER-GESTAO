@@ -5,9 +5,7 @@ import { SUPABASE_KEY, SUPABASE_URL, supabaseConfigurado } from "@/lib/supabase/
 // Renova a sessão do Supabase a cada requisição e manda para /login quem não
 // estiver autenticado.
 export async function proxy(request: NextRequest) {
-  // O robô do Tiny entra sem login (o banco confere a chave dele) e não gasta
-  // uma chamada à toa conferindo sessão.
-  if (!supabaseConfigurado || request.nextUrl.pathname === "/integracoes/robo") return NextResponse.next();
+  if (!supabaseConfigurado) return NextResponse.next();
 
   let response = NextResponse.next({ request });
   const supabase = createServerClient(SUPABASE_URL, SUPABASE_KEY, {
@@ -27,9 +25,7 @@ export async function proxy(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  // Avisos das plataformas chegam sem login e não leem nada.
-  const publico = request.nextUrl.pathname.startsWith("/login") || /^\/integracoes\/[a-z_]+\/aviso$/.test(request.nextUrl.pathname);
-  if (!user && !publico) {
+  if (!user && !request.nextUrl.pathname.startsWith("/login")) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
     return NextResponse.redirect(url);

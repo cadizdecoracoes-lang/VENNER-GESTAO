@@ -1,13 +1,14 @@
 // Ligação direta com a Shopee (Open Platform v2): autorização da loja, renovação
 // do acesso e busca dos pedidos com o repasse. As chaves do app vêm dos
-// segredos SHOPEE_PARTNER_ID e SHOPEE_PARTNER_KEY do Cloudflare.
+// segredos SHOPEE_PARTNER_ID e SHOPEE_PARTNER_KEY das Edge Functions do Supabase.
+import { ambiente } from "../ambiente.ts";
 import { somarDias } from "../datas.ts";
 import { arred2, type VendaImportada } from "./tipos.ts";
 import type { Tokens } from "./mercado-livre.ts";
 
 const API = "https://partner.shopeemobile.com";
 
-export const chavesShopee = () => ({ partnerId: process.env.SHOPEE_PARTNER_ID ?? "", partnerKey: process.env.SHOPEE_PARTNER_KEY ?? "" });
+export const chavesShopee = () => ({ partnerId: ambiente("SHOPEE_PARTNER_ID"), partnerKey: ambiente("SHOPEE_PARTNER_KEY") });
 export const shopeeConfigurado = () => !!(chavesShopee().partnerId && chavesShopee().partnerKey);
 
 // Assinatura HMAC-SHA256 (hexadecimal) exigida em toda chamada.

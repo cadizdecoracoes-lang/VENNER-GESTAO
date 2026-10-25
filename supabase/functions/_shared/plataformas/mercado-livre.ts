@@ -1,13 +1,14 @@
 // Ligação direta com o Mercado Livre (API): autorização da conta (OAuth com
 // PKCE), renovação do acesso e busca das vendas. As chaves da aplicação vêm
-// dos segredos ML_APP_ID e ML_SECRET_KEY do Cloudflare.
+// dos segredos ML_APP_ID e ML_SECRET_KEY das Edge Functions do Supabase.
+import { ambiente } from "../ambiente.ts";
 import { somarDias } from "../datas.ts";
 import { arred2, type VendaImportada } from "./tipos.ts";
 
 const API = "https://api.mercadolibre.com";
 const AUTORIZACAO = "https://auth.mercadolivre.com.br/authorization";
 
-export const chavesML = () => ({ appId: process.env.ML_APP_ID ?? "", secret: process.env.ML_SECRET_KEY ?? "" });
+export const chavesML = () => ({ appId: ambiente("ML_APP_ID"), secret: ambiente("ML_SECRET_KEY") });
 export const mlConfigurado = () => !!(chavesML().appId && chavesML().secret);
 
 export type Tokens = { access_token: string; refresh_token: string | null; expira_em: string; conta: string; apelido: string | null };

@@ -1,7 +1,13 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { carregarEmpresas } from "@/lib/empresa";
 import { COOKIE_EMPRESA } from "@/lib/empresa-cookie";
-import { origemPublica } from "@/lib/plataformas/ligacao";
+
+// Endereço público do sistema como o navegador o vê.
+function origemPublica(request: NextRequest): string {
+  const host = request.headers.get("x-forwarded-host") ?? request.headers.get("host") ?? request.nextUrl.host;
+  const protocolo = request.headers.get("x-forwarded-proto") ?? request.nextUrl.protocol.replace(":", "");
+  return `${protocolo}://${host}`;
+}
 
 // Troca a empresa do seletor do topo e volta para a tela (links do resumo por empresa).
 export async function GET(request: NextRequest) {
