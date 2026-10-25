@@ -1,6 +1,8 @@
+"use client";
+
 import { Pencil, Printer } from "lucide-react";
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound } from "@/lib/navegacao";
 import { FormAcao } from "@/components/form-acao";
 import {
   CabecalhoTela,
@@ -23,9 +25,10 @@ import { necessidadeMateriais, type DadosPlanejamento } from "@/lib/planejamento
 import { diasDaCondicao } from "@/lib/parcelas";
 import { FASES_PEDIDO, PRIORIDADES, type FasePedido, type SituacaoTitulo } from "@/lib/rotulos";
 import { supabaseConfigurado } from "@/lib/supabase/config";
-import { criarClienteServidor } from "@/lib/supabase/server";
+import { criarClienteNavegador } from "@/lib/supabase/client";
 import { CAMPOS_PEDIDO, carregarEtapas, nomeCliente, type PedidoResumo } from "@/lib/vendas";
 import { gerarParcelas, mudarEtapa } from "../actions";
+import { TelaCliente } from "@/components/tela-cliente";
 
 const TELA = "vendas.pedidos";
 
@@ -48,12 +51,12 @@ type TituloPedido = {
   data_recebimento: string | null;
 };
 
-export default async function PaginaPedido({ params }: { params: Promise<{ id: string }> }) {
+async function PaginaPedido({ params }: { params: Promise<{ id: string }> }) {
   const acesso = await carregarAcesso();
   if (!pode(acesso, TELA, "ver")) return <SemAcesso codigo={TELA} />;
   const { id } = await params;
   if (!supabaseConfigurado) notFound();
-  const supabase = await criarClienteServidor();
+  const supabase = criarClienteNavegador();
   const { data } = await supabase.from("pedidos_venda_resumo").select(CAMPOS_PEDIDO).eq("id", id).maybeSingle();
   if (!data) notFound();
   const pedido = data as unknown as PedidoResumo;
@@ -120,11 +123,11 @@ export default async function PaginaPedido({ params }: { params: Promise<{ id: s
   return (
     <div className="space-y-6">
       <CabecalhoTela codigo={TELA}>
-        <Link href={`/impressao/pedido/${pedido.id}`} target="_blank" className={estiloBotaoSecundario}>
+        <Link href={`/impressao/pedido?id=${pedido.id}`} target="_blank" className={estiloBotaoSecundario}>
           <Printer size={16} /> Imprimir
         </Link>
         {pode(acesso, TELA, "editar") && pedido.fase === "negociacao" && (
-          <Link href={`/vendas/pedidos/${pedido.id}/editar`} className={estiloBotaoSecundario}>
+          <Link href={`/vendas/pedidos/editar?id=${pedido.id}`} className={estiloBotaoSecundario}>
             <Pencil size={16} /> Editar
           </Link>
         )}
@@ -386,4 +389,8 @@ export default async function PaginaPedido({ params }: { params: Promise<{ id: s
       </div>
     </div>
   );
+}
+
+export default function Pagina() {
+  return <TelaCliente montar={PaginaPedido} />;
 }

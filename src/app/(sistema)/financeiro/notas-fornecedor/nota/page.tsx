@@ -1,6 +1,8 @@
+"use client";
+
 import { FileText } from "lucide-react";
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound } from "@/lib/navegacao";
 import { FormAcao } from "@/components/form-acao";
 import {
   Campo,
@@ -18,8 +20,9 @@ import { carregarAcesso, pode } from "@/lib/acesso";
 import { formatarData, formatarDocumento, formatarMoeda, formatarNumero } from "@/lib/formato";
 import { ORIGENS_NOTA, SITUACOES_TITULO, type OrigemNota, type SituacaoTitulo } from "@/lib/rotulos";
 import { supabaseConfigurado } from "@/lib/supabase/config";
-import { criarClienteServidor } from "@/lib/supabase/server";
+import { criarClienteNavegador } from "@/lib/supabase/client";
 import { darEntrada, vincularItem } from "../actions";
+import { TelaCliente } from "@/components/tela-cliente";
 
 const TELA = "financeiro.notas_fornecedor";
 
@@ -71,7 +74,7 @@ function Variacao({ pct }: { pct: number | null }) {
   );
 }
 
-export default async function PaginaNota({
+async function PaginaNota({
   params,
   searchParams,
 }: {
@@ -83,7 +86,7 @@ export default async function PaginaNota({
   if (!supabaseConfigurado) notFound();
   const [{ id }, { vincular }] = await Promise.all([params, searchParams]);
 
-  const supabase = await criarClienteServidor();
+  const supabase = criarClienteNavegador();
   const [{ data: nota }, { data: linhas }, { data: itens }, { data: locais }, { data: titulos }] = await Promise.all([
     supabase
       .from("notas_fornecedor")
@@ -105,7 +108,8 @@ export default async function PaginaNota({
   const porId = new Map(((itens ?? []) as Item[]).map((i) => [i.id, i]));
   const faltam = lista.filter((l) => !l.item_id).length;
   const podeEditar = pode(acesso, TELA, "editar") && !n.entrada_em;
-  const caminho = `/financeiro/notas-fornecedor/${n.id}`;
+  // XML ou PDF da nota por um link temporário do Storage (a regra de acesso por CNPJ vale para o arquivo também).
+  const arquivo = n.arquivo ? (await supabase.storage.from("notas-fornecedor").createSignedUrl(n.arquivo, 3600)).data?.signedUrl : null;
 
   return (
     <div className="space-y-6">
@@ -118,9 +122,9 @@ export default async function PaginaNota({
       <Cartao
         titulo={`NF ${n.numero}${n.serie ? ` · série ${n.serie}` : ""} · ${n.fornecedores?.nome ?? ""}`}
         acoes={
-          n.arquivo && (
+          arquivo && (
             <a
-              href={`${caminho}/arquivo`}
+              href={arquivo}
               target="_blank"
               rel="noreferrer"
               className="inline-flex items-center gap-1 text-sm text-primaria hover:underline"
@@ -310,4 +314,8 @@ export default async function PaginaNota({
       )}
     </div>
   );
+}
+
+export default function Pagina() {
+  return <TelaCliente montar={PaginaNota} />;
 }

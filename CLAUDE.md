@@ -1,6 +1,6 @@
 # Venner Gestão
 
-Sistema de gestão do Grupo Venner (produção, estoque, compras, vendas, financeiro por CNPJ, RH). Next.js 16 + React 19 + Tailwind 4 nas telas, Supabase (Postgres com Row Level Security) no banco, hospedado no Cloudflare Workers via `@opennextjs/cloudflare`.
+Sistema de gestão do Grupo Venner (produção, estoque, compras, vendas, financeiro por CNPJ, RH). Next.js 16 + React 19 + Tailwind 4 nas telas, geradas como site estático (`output: "export"`) e publicadas no GitHub Pages; Supabase (Postgres com Row Level Security, login, Storage e Edge Functions) para todo o resto. Não há servidor próprio.
 
 ## Quem usa e como falar
 
@@ -10,7 +10,7 @@ Sistema de gestão do Grupo Venner (produção, estoque, compras, vendas, financ
 ## Regras de entrega
 
 - Nunca faça push direto na `main`. Toda mudança vai num ramo próprio e vira um pacote (PR). O Alexandre faz o merge quando as verificações estão verdes.
-- O merge na `main` publica sozinho: o workflow `publicar-banco.yml` aplica as migrações no Supabase de produção e o Cloudflare publica as telas. Não rode deploy nem `supabase db push` à mão.
+- O merge na `main` publica sozinho: o workflow `publicar-banco.yml` aplica as migrações e publica as Edge Functions no Supabase de produção, e o `publicar-telas.yml` publica as telas no GitHub Pages. Não rode deploy nem `supabase db push` à mão.
 - Nunca leia, copie nem peça por chat valores de `.env*`, `.dev.vars` ou segredos (Supabase, Tiny, Mercado Livre, Shopee).
 - A integração com Tiny, Mercado Livre e Shopee é só leitura. Não crie nada que escreva nessas plataformas sem pedido explícito.
 
@@ -22,7 +22,6 @@ Sistema de gestão do Grupo Venner (produção, estoque, compras, vendas, financ
 | Testes das regras de cálculo (`tests/*.test.ts`) | `npm test` |
 | Migrações + testes do banco num Postgres temporário | `npm run test:banco` |
 | Build das telas | `npm run build` |
-| Build para o Cloudflare | `npm run cf:build` |
 
 O GitHub (`.github/workflows/ci.yml`) roda tudo isso em cada pacote. Rode `typecheck`, `npm test` e `test:banco` antes de entregar.
 
@@ -49,3 +48,8 @@ O GitHub (`.github/workflows/ci.yml`) roda tudo isso em cada pacote. Rode `typec
 - Sem `.env.local`, as telas abrem em modo de demonstração, sem login.
 - Valores e datas no formato brasileiro (helpers em `src/lib/formato.ts` e `src/lib/datas.ts`).
 - Cada empresa (CNPJ) é separada; a empresa escolhida fica em cookie (`src/lib/empresa-cookie.ts`).
+- Tudo roda no navegador: não use `"use server"`, rotas de API, `cookies()`/`headers()` nem páginas com `[id]` (o site é estático). Tela de um registro recebe o id por `?id=` (ex.: `/vendas/pedidos/pedido?id=...`).
+- Cada `page.tsx` é `"use client"`: a função assíncrona que lê os dados e devolve a tela é passada para `<TelaCliente montar={...} />` (`src/components/tela-cliente.tsx`), que refaz a tela quando o endereço muda ou depois de gravar.
+- Ações de gravação (`actions.ts`) são funções comuns no navegador. `revalidatePath`, `redirect` e `notFound` vêm de `src/lib/navegacao.ts` (mesmos nomes do Next).
+- O que precisa de segredo ou de falar com outra plataforma vai numa Edge Function (`supabase/functions`), chamada com `chamarFuncao` (`src/lib/supabase/funcoes.ts`).
+- Links montados à mão (fora do `Link` do Next) usam `comBase` de `src/lib/endereco.ts`: no GitHub Pages o site fica em `/VENNER-GESTAO`.

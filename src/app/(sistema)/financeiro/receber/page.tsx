@@ -1,3 +1,5 @@
+"use client";
+
 import { FileUp, Plus } from "lucide-react";
 import Link from "next/link";
 import { Filtro } from "@/components/filtro";
@@ -28,8 +30,9 @@ import { formatarData, formatarMoeda } from "@/lib/formato";
 import { CANAIS, type SituacaoTitulo } from "@/lib/rotulos";
 import { carregarClientes } from "@/lib/vendas";
 import { supabaseConfigurado } from "@/lib/supabase/config";
-import { criarClienteServidor } from "@/lib/supabase/server";
+import { criarClienteNavegador } from "@/lib/supabase/client";
 import { cancelarConta, estornarRecebimento, novaConta, receberConta, reabrirConta } from "./actions";
+import { TelaCliente } from "@/components/tela-cliente";
 
 const TELA = "financeiro.receber";
 
@@ -71,7 +74,7 @@ const DATAS_PERIODO = { vencimento: "Vencimento", data_recebimento: "Recebimento
 
 async function carregar(empresa: string | null, periodo: Periodo, pedido: string | null): Promise<Titulo[]> {
   if (!supabaseConfigurado) return [];
-  const supabase = await criarClienteServidor();
+  const supabase = criarClienteNavegador();
   let consulta = supabase
     .from("contas_receber")
     .select(
@@ -92,7 +95,7 @@ async function carregar(empresa: string | null, periodo: Periodo, pedido: string
   return ((await consulta).data ?? []) as unknown as Titulo[];
 }
 
-export default async function PaginaContasReceber({ searchParams }: { searchParams: Promise<Filtros> }) {
+async function PaginaContasReceber({ searchParams }: { searchParams: Promise<Filtros> }) {
   const acesso = await carregarAcesso();
   if (!pode(acesso, TELA, "ver")) return <SemAcesso codigo={TELA} />;
 
@@ -255,7 +258,7 @@ export default async function PaginaContasReceber({ searchParams }: { searchPara
 
       {pedido ? (
         <p className="text-sm">
-          {origem}. <LinkAcao href={`/vendas/pedidos/${pedido}`}>Abrir o pedido</LinkAcao> ·{" "}
+          {origem}. <LinkAcao href={`/vendas/pedidos/pedido?id=${pedido}`}>Abrir o pedido</LinkAcao> ·{" "}
           <LinkAcao href="/financeiro/receber">Ver todas as contas</LinkAcao>
         </p>
       ) : (
@@ -355,7 +358,7 @@ export default async function PaginaContasReceber({ searchParams }: { searchPara
                 {!selecionada && <Celula className="whitespace-nowrap text-texto-suave">{nomeEmpresa.get(t.empresa_id) ?? "—"}</Celula>}
                 <Celula>
                   {t.pedido_id ? (
-                    <Link href={`/vendas/pedidos/${t.pedido_id}`} className="font-medium text-primaria hover:underline">
+                    <Link href={`/vendas/pedidos/pedido?id=${t.pedido_id}`} className="font-medium text-primaria hover:underline">
                       {t.descricao}
                     </Link>
                   ) : (
@@ -439,4 +442,8 @@ export default async function PaginaContasReceber({ searchParams }: { searchPara
       </Fonte>
     </div>
   );
+}
+
+export default function Pagina() {
+  return <TelaCliente montar={PaginaContasReceber} />;
 }

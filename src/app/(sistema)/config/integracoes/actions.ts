@@ -1,11 +1,8 @@
-"use server";
-
-import { revalidatePath } from "next/cache";
-import { redirect } from "next/navigation";
+import { redirect, revalidatePath } from "@/lib/navegacao";
 import { mensagemErro, SEM_BANCO, type Estado } from "@/lib/erros";
 import { supabaseConfigurado } from "@/lib/supabase/config";
 import { chamarFuncao } from "@/lib/supabase/funcoes";
-import { criarClienteServidor } from "@/lib/supabase/server";
+import { criarClienteNavegador } from "@/lib/supabase/client";
 
 const CAMINHO = "/config/integracoes";
 
@@ -15,7 +12,7 @@ export async function escolherLocal(id: string, _: Estado, form: FormData): Prom
   if (!supabaseConfigurado) return SEM_BANCO;
   const local = String(form.get("local") ?? "");
   if (!local) return { erro: "Escolha o local." };
-  const supabase = await criarClienteServidor();
+  const supabase = criarClienteNavegador();
   const { error } = await supabase.rpc("ajustar_integracao", { integracao: id, local });
   if (error) return { erro: mensagemErro(error) };
   revalidatePath(CAMINHO);
@@ -27,7 +24,7 @@ export async function buscarVendas(id: string, _: Estado, form: FormData): Promi
   const desde = String(form.get("desde") ?? "");
   const dias = Math.max(0, Math.min(120, Number(form.get("dias")) || 0));
   if (!/^\d{4}-\d{2}-\d{2}$/.test(desde)) return { erro: "Informe a data de início." };
-  const supabase = await criarClienteServidor();
+  const supabase = criarClienteNavegador();
   let r;
   try {
     // A busca roda na Edge Function integracoes, onde ficam as chaves dos aplicativos.
@@ -44,7 +41,7 @@ export async function buscarVendas(id: string, _: Estado, form: FormData): Promi
 
 export async function removerConta(id: string): Promise<Estado> {
   if (!supabaseConfigurado) return SEM_BANCO;
-  const supabase = await criarClienteServidor();
+  const supabase = criarClienteNavegador();
   const { error } = await supabase.rpc("remover_integracao", { integracao: id });
   if (error) return { erro: mensagemErro(error) };
   revalidatePath(CAMINHO);
@@ -56,7 +53,7 @@ export async function salvarChavesTiny(_: Estado, form: FormData): Promise<Estad
   if (!supabaseConfigurado) return SEM_BANCO;
   const empresa = String(form.get("empresa") ?? "");
   if (!empresa) return { erro: "Escolha a empresa dona da conta do Tiny." };
-  const supabase = await criarClienteServidor();
+  const supabase = criarClienteNavegador();
   const { error } = await supabase.rpc("salvar_aplicativo_tiny", {
     empresa,
     cliente: String(form.get("client_id") ?? ""),
@@ -69,7 +66,7 @@ export async function salvarChavesTiny(_: Estado, form: FormData): Promise<Estad
 
 export async function lerTinyAgora(id: string): Promise<Estado> {
   if (!supabaseConfigurado) return SEM_BANCO;
-  const supabase = await criarClienteServidor();
+  const supabase = criarClienteNavegador();
   try {
     // A leitura com erro parcial também volta como erro, com o texto do robô.
     await chamarFuncao(supabase, "integracoes", { acao: "ler_tiny", integracao: id });
@@ -85,7 +82,7 @@ export async function ajustarPagarTiny(id: string, _: Estado, form: FormData): P
   if (!supabaseConfigurado) return SEM_BANCO;
   const ate = String(form.get("ate") ?? "");
   if (ate && !/^\d{4}-\d{2}-\d{2}$/.test(ate)) return { erro: "Data inválida." };
-  const supabase = await criarClienteServidor();
+  const supabase = criarClienteNavegador();
   const { error } = await supabase.rpc("ajustar_robo_tiny", { integracao: id, ler_contas_pagar_ate: ate || null });
   if (error) return { erro: mensagemErro(error) };
   revalidatePath(CAMINHO);

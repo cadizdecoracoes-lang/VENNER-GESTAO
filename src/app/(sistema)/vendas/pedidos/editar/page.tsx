@@ -1,22 +1,25 @@
-import { notFound } from "next/navigation";
+"use client";
+
+import { notFound } from "@/lib/navegacao";
 import { CabecalhoTela, Cartao, SemAcesso } from "@/components/ui";
 import { carregarAcesso, pode } from "@/lib/acesso";
 import { hojeBrasil } from "@/lib/datas";
 import { carregarEmpresas } from "@/lib/empresa";
 import { supabaseConfigurado } from "@/lib/supabase/config";
-import { criarClienteServidor } from "@/lib/supabase/server";
+import { criarClienteNavegador } from "@/lib/supabase/client";
 import { carregarClientes, carregarProdutosVenda } from "@/lib/vendas";
-import { salvarPedido } from "../../actions";
-import { FormPedido, type PedidoForm } from "../../form-pedido";
+import { salvarPedido } from "../actions";
+import { FormPedido, type PedidoForm } from "../form-pedido";
+import { TelaCliente } from "@/components/tela-cliente";
 
 const TELA = "vendas.pedidos";
 
-export default async function PaginaEditarPedido({ params }: { params: Promise<{ id: string }> }) {
+async function PaginaEditarPedido({ params }: { params: Promise<{ id: string }> }) {
   const acesso = await carregarAcesso();
   if (!pode(acesso, TELA, "editar")) return <SemAcesso codigo={TELA} />;
   const { id } = await params;
   if (!supabaseConfigurado) notFound();
-  const supabase = await criarClienteServidor();
+  const supabase = criarClienteNavegador();
   const { data } = await supabase
     .from("pedidos_venda_resumo")
     .select(
@@ -49,10 +52,14 @@ export default async function PaginaEditarPedido({ params }: { params: Promise<{
             clientes={clientes}
             produtos={produtos}
             hoje={hojeBrasil()}
-            voltar={`/vendas/pedidos/${id}`}
+            voltar={`/vendas/pedidos/pedido?id=${id}`}
           />
         )}
       </Cartao>
     </div>
   );
+}
+
+export default function Pagina() {
+  return <TelaCliente montar={PaginaEditarPedido} />;
 }

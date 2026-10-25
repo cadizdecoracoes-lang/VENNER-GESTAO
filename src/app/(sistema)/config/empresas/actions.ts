@@ -1,12 +1,9 @@
-"use server";
-
-import { revalidatePath } from "next/cache";
-import { redirect } from "next/navigation";
+import { redirect, revalidatePath } from "@/lib/navegacao";
 import { mensagemErro, semLinhas, SEM_BANCO, type Estado } from "@/lib/erros";
 import { cnpjValido, somenteDigitos } from "@/lib/formato";
 import { REGIMES } from "@/lib/rotulos";
 import { supabaseConfigurado } from "@/lib/supabase/config";
-import { criarClienteServidor } from "@/lib/supabase/server";
+import { criarClienteNavegador } from "@/lib/supabase/client";
 
 export async function salvarEmpresa(id: string | null, _: Estado, form: FormData): Promise<Estado> {
   if (!supabaseConfigurado) return SEM_BANCO;
@@ -27,7 +24,7 @@ export async function salvarEmpresa(id: string | null, _: Estado, form: FormData
     ativa: form.get("ativa") === "on",
   };
 
-  const supabase = await criarClienteServidor();
+  const supabase = criarClienteNavegador();
   const { data, error } = id
     ? await supabase.from("empresas").update(dados).eq("id", id).select("id")
     : await supabase.from("empresas").insert(dados).select("id");

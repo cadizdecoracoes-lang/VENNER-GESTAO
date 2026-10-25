@@ -1,3 +1,5 @@
+"use client";
+
 import { Plus } from "lucide-react";
 import Link from "next/link";
 import { CamposPessoa } from "@/components/campos-pessoa";
@@ -20,8 +22,9 @@ import { carregarAcesso, pode } from "@/lib/acesso";
 import { formatarDocumento } from "@/lib/formato";
 import type { DadosPessoa } from "@/lib/pessoa";
 import { supabaseConfigurado } from "@/lib/supabase/config";
-import { criarClienteServidor } from "@/lib/supabase/server";
+import { criarClienteNavegador } from "@/lib/supabase/client";
 import { salvarFornecedor } from "./actions";
+import { TelaCliente } from "@/components/tela-cliente";
 
 const TELA = "compras.fornecedores";
 const CAMPOS =
@@ -32,7 +35,7 @@ type Filtros = { editar?: string; novo?: string };
 
 async function carregar(): Promise<Fornecedor[]> {
   if (!supabaseConfigurado) return [];
-  const supabase = await criarClienteServidor();
+  const supabase = criarClienteNavegador();
   const consulta = supabase.from("fornecedores").select(CAMPOS).order("nome").limit(2000);
   const { data } = await consulta;
   return (data ?? []) as Fornecedor[];
@@ -40,12 +43,12 @@ async function carregar(): Promise<Fornecedor[]> {
 
 async function buscar(id: string): Promise<Fornecedor | undefined> {
   if (!supabaseConfigurado) return undefined;
-  const supabase = await criarClienteServidor();
+  const supabase = criarClienteNavegador();
   const { data } = await supabase.from("fornecedores").select(CAMPOS).eq("id", id).maybeSingle();
   return (data as Fornecedor | null) ?? undefined;
 }
 
-export default async function PaginaFornecedores({ searchParams }: { searchParams: Promise<Filtros> }) {
+async function PaginaFornecedores({ searchParams }: { searchParams: Promise<Filtros> }) {
   const acesso = await carregarAcesso();
   if (!pode(acesso, TELA, "ver")) return <SemAcesso codigo={TELA} />;
 
@@ -125,4 +128,8 @@ export default async function PaginaFornecedores({ searchParams }: { searchParam
       </Filtro>
     </div>
   );
+}
+
+export default function Pagina() {
+  return <TelaCliente montar={PaginaFornecedores} />;
 }

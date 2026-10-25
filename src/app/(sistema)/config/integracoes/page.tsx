@@ -1,3 +1,5 @@
+"use client";
+
 import { FormAcao } from "@/components/form-acao";
 import {
   CabecalhoTela,
@@ -19,10 +21,11 @@ import { carregarLocais } from "@/lib/financeiro";
 import { NOME_CANAL, type Canal } from "@/lib/plataformas/tipos";
 import { supabaseConfigurado } from "@/lib/supabase/config";
 import { chamarFuncao } from "@/lib/supabase/funcoes";
-import { criarClienteServidor } from "@/lib/supabase/server";
+import { criarClienteNavegador } from "@/lib/supabase/client";
 import { buscarVendas, escolherLocal, removerConta } from "./actions";
 import { type AplicativoTiny, CartaoTiny, type ContaTiny } from "./cartao-tiny";
 import { ConcluirLigacao, LigarConta, type VoltaDaPlataforma } from "./ligar-conta";
+import { TelaCliente } from "@/components/tela-cliente";
 
 const TELA = "config.integracoes";
 const GUIA = "https://claude.ai/artifact/ABp37XYcittjSNPYVoNULc";
@@ -50,14 +53,14 @@ type Situacao = Record<Canal, boolean> & { retorno: Record<Canal | "tiny", strin
 
 const DIAS_PADRAO: Record<Canal, number> = { mercado_livre: 15, shopee: 10 };
 
-export default async function PaginaIntegracoes({ searchParams }: { searchParams: Promise<Filtros> }) {
+async function PaginaIntegracoes({ searchParams }: { searchParams: Promise<Filtros> }) {
   const acesso = await carregarAcesso();
   const ligar = pode(acesso, TELA, "editar") || pode(acesso, "financeiro.receber", "criar");
   if (!pode(acesso, TELA, "ver") && !ligar) return <SemAcesso codigo={TELA} />;
 
   const filtros = await searchParams;
   const [empresas, locais] = await Promise.all([carregarEmpresas(), carregarLocais()]);
-  const supabase = supabaseConfigurado ? await criarClienteServidor() : null;
+  const supabase = supabaseConfigurado ? criarClienteNavegador() : null;
   const [listadas, aplicativos, contasTiny] = supabase
     ? await Promise.all([
         supabase.rpc("listar_integracoes").then((r) => (r.data ?? []) as Conta[]),
@@ -257,4 +260,8 @@ export default async function PaginaIntegracoes({ searchParams }: { searchParams
       </Fonte>
     </div>
   );
+}
+
+export default function Pagina() {
+  return <TelaCliente montar={PaginaIntegracoes} />;
 }

@@ -1,10 +1,7 @@
-"use server";
-
-import { revalidatePath } from "next/cache";
-import { redirect } from "next/navigation";
+import { redirect, revalidatePath } from "@/lib/navegacao";
 import { mensagemErro, semLinhas, SEM_BANCO, type Estado } from "@/lib/erros";
 import { supabaseConfigurado } from "@/lib/supabase/config";
-import { criarClienteServidor } from "@/lib/supabase/server";
+import { criarClienteNavegador } from "@/lib/supabase/client";
 import { lerNumero } from "@/lib/formato";
 import { diasDaCondicao, dividirParcelas } from "@/lib/parcelas";
 
@@ -45,24 +42,24 @@ export async function salvarPedido(id: string | null, _: Estado, form: FormData)
     observacao: String(form.get("observacao") ?? ""),
     itens,
   };
-  const supabase = await criarClienteServidor();
+  const supabase = criarClienteNavegador();
   const { data, error } = await supabase.rpc("salvar_pedido_venda", { dados });
   if (error) return { erro: error.code === "42501" ? "Seu perfil não pode lançar pedidos nesta empresa." : mensagemErro(error) };
   revalidatePath("/vendas/pedidos");
-  redirect(`/vendas/pedidos/${data}`);
+  redirect(`/vendas/pedidos/pedido?id=${data}`);
 }
 
 export async function mudarEtapa(id: string, _: Estado, form: FormData): Promise<Estado> {
   if (!supabaseConfigurado) return SEM_BANCO;
   const etapa = String(form.get("etapa_id") ?? "");
   if (!etapa) return { erro: "Escolha a etapa." };
-  const supabase = await criarClienteServidor();
+  const supabase = criarClienteNavegador();
   const { data, error } = await supabase.from("pedidos_venda").update({ etapa_id: etapa }).eq("id", id).select("id");
   if (error) return { erro: mensagemErro(error) };
   const bloqueado = semLinhas(data);
   if (bloqueado) return bloqueado;
   revalidatePath("/vendas/pedidos");
-  revalidatePath(`/vendas/pedidos/${id}`);
+  revalidatePath(`/vendas/pedidos/pedido?id=${id}`);
   return { ok: Date.now() };
 }
 
@@ -76,10 +73,10 @@ export async function gerarParcelas(id: string, _: Estado, form: FormData): Prom
   if (!(total > 0)) return { erro: "Informe o valor total a receber." };
   if (dias.length > 24) return { erro: "No máximo 24 parcelas." };
 
-  const supabase = await criarClienteServidor();
+  const supabase = criarClienteNavegador();
   const { error } = await supabase.rpc("gerar_receber_pedido", { pedido: id, parcelas: dividirParcelas(total, dias, base) });
   if (error) return { erro: mensagemErro(error) };
-  revalidatePath(`/vendas/pedidos/${id}`);
+  revalidatePath(`/vendas/pedidos/pedido?id=${id}`);
   revalidatePath("/financeiro/receber");
   return { ok: Date.now() };
 }

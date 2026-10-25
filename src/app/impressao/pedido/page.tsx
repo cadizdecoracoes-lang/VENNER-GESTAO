@@ -1,9 +1,12 @@
-import { notFound } from "next/navigation";
+"use client";
+
+import { notFound } from "@/lib/navegacao";
 import { carregarAcesso, pode } from "@/lib/acesso";
 import { formatarData, formatarDocumento, formatarMoeda, formatarNumero } from "@/lib/formato";
 import { supabaseConfigurado } from "@/lib/supabase/config";
-import { criarClienteServidor } from "@/lib/supabase/server";
-import { BotaoImprimir } from "../../botao-imprimir";
+import { criarClienteNavegador } from "@/lib/supabase/client";
+import { BotaoImprimir } from "../botao-imprimir";
+import { TelaCliente } from "@/components/tela-cliente";
 
 // Pedido de venda no padrão da Venner, para imprimir ou salvar em PDF e mandar
 // ao cliente. Fica fora do layout do sistema (sem menu) para sair limpo no papel.
@@ -15,11 +18,11 @@ type Item = {
   itens: { codigo: string; descricao: string; unidade: string } | null;
 };
 
-export default async function ImprimirPedido({ params }: { params: Promise<{ id: string }> }) {
+async function ImprimirPedido({ params }: { params: Promise<{ id: string }> }) {
   const acesso = await carregarAcesso();
   if (!supabaseConfigurado || !pode(acesso, "vendas.pedidos", "ver")) notFound();
   const { id } = await params;
-  const supabase = await criarClienteServidor();
+  const supabase = criarClienteNavegador();
   const { data: pedido } = await supabase
     .from("pedidos_venda_resumo")
     .select(
@@ -140,4 +143,8 @@ export default async function ImprimirPedido({ params }: { params: Promise<{ id:
       </article>
     </div>
   );
+}
+
+export default function Pagina() {
+  return <TelaCliente montar={ImprimirPedido} />;
 }

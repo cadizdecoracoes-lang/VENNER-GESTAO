@@ -2,7 +2,7 @@
 import { somarDias } from "@/lib/datas";
 import type { TituloCandidato } from "@/lib/extrato";
 import { supabaseConfigurado } from "@/lib/supabase/config";
-import { criarClienteServidor } from "@/lib/supabase/server";
+import { criarClienteNavegador } from "@/lib/supabase/client";
 
 export type ContaConciliacao = { id: string; empresa_id: string; nome: string; banco_nome: string | null; tipo: string };
 
@@ -29,7 +29,7 @@ export const nomePessoa = (p: Pessoa) => (p ? p.nome_fantasia || p.nome : null);
 
 export async function carregarContas(empresa: string | null): Promise<ContaConciliacao[]> {
   if (!supabaseConfigurado) return [];
-  const supabase = await criarClienteServidor();
+  const supabase = criarClienteNavegador();
   let q = supabase.from("contas_bancarias").select("id, empresa_id, nome, banco_nome, tipo").eq("ativa", true).order("nome");
   if (empresa) q = q.eq("empresa_id", empresa);
   return ((await q).data ?? []) as ContaConciliacao[];
@@ -39,7 +39,7 @@ export async function carregarContas(empresa: string | null): Promise<ContaConci
 export async function carregarPendentes(empresa: string | null): Promise<Map<string, number>> {
   const mapa = new Map<string, number>();
   if (!supabaseConfigurado) return mapa;
-  const supabase = await criarClienteServidor();
+  const supabase = criarClienteNavegador();
   let q = supabase.from("extrato_lancamentos").select("conta_bancaria_id").eq("situacao", "pendente").limit(20000);
   if (empresa) q = q.eq("empresa_id", empresa);
   for (const l of (await q).data ?? []) mapa.set(l.conta_bancaria_id, (mapa.get(l.conta_bancaria_id) ?? 0) + 1);
@@ -48,7 +48,7 @@ export async function carregarPendentes(empresa: string | null): Promise<Map<str
 
 export async function carregarLinhas(conta: string, situacao: string, mes: string | null): Promise<LinhaConciliacao[]> {
   if (!supabaseConfigurado) return [];
-  const supabase = await criarClienteServidor();
+  const supabase = criarClienteNavegador();
   let q = supabase
     .from("extrato_lancamentos")
     .select(
@@ -74,7 +74,7 @@ export async function carregarCandidatos(
   folgaPago = 3,
 ): Promise<TituloCandidato[]> {
   if (!supabaseConfigurado) return [];
-  const supabase = await criarClienteServidor();
+  const supabase = criarClienteNavegador();
   const [pa, pp, ra, rp] = await Promise.all([
     supabase
       .from("contas_pagar")
@@ -128,7 +128,7 @@ export async function carregarCandidatos(
 // Saldo que o banco informou no último extrato e o do sistema no mesmo dia.
 export async function carregarConferencia(conta: ContaConciliacao) {
   if (!supabaseConfigurado) return null;
-  const supabase = await criarClienteServidor();
+  const supabase = criarClienteNavegador();
   const { data: imp } = await supabase
     .from("extrato_importacoes")
     .select("saldo_final, periodo_ate, criado_em, origem, arquivo")
@@ -161,7 +161,7 @@ export async function carregarIndicadores(conta: string, mes: string): Promise<[
   const vazio = (x: string): IndicadorMes => ({ mes: x, linhas: 0, resolvidas: 0, entradas: 0, saidas: 0 });
   const r: [IndicadorMes, IndicadorMes] = [vazio(mes), vazio(anterior)];
   if (!supabaseConfigurado) return r;
-  const supabase = await criarClienteServidor();
+  const supabase = criarClienteNavegador();
   const { data } = await supabase
     .from("extrato_lancamentos")
     .select("data, valor, situacao")

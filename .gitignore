@@ -9,10 +9,5 @@ next-env.d.ts
 supabase/.temp/
 supabase/.branches/
 
-# Cloudflare
-.open-next/
-.wrangler/
-.dev.vars
-
 # Trava do Deno gerada ao conferir as funções (o Supabase usa a própria versão)
 supabase/functions/**/deno.lock

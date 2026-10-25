@@ -1,3 +1,5 @@
+"use client";
+
 import { Briefcase, Factory, Landmark, ShoppingCart, Users } from "lucide-react";
 import Link from "next/link";
 import { FaixaEmpresa, Fonte, Indicador } from "@/components/ui";
@@ -8,8 +10,9 @@ import { formatarData, formatarMoeda } from "@/lib/formato";
 import { filaProducao, necessidadeMateriais } from "@/lib/planejamento";
 import { carregarPlanejamento } from "@/lib/planejamento-servidor";
 import { supabaseConfigurado } from "@/lib/supabase/config";
-import { criarClienteServidor } from "@/lib/supabase/server";
+import { criarClienteNavegador } from "@/lib/supabase/client";
 import { CAMPOS_PEDIDO, carregarEtapas, confirmadosNoPeriodo, type PedidoResumo } from "@/lib/vendas";
+import { TelaCliente } from "@/components/tela-cliente";
 
 // Painel em blocos por área. Cada número abre os registros que o formam e
 // diz de onde vem e qual período usa.
@@ -30,7 +33,7 @@ const qtd = (n: number, um: string, varios: string) => `${n} ${n === 1 ? um : va
 
 type Titulo = { valor: number; vencimento: string };
 
-export default async function Painel() {
+async function Painel() {
   const acesso = await carregarAcesso();
   const selecionada = await empresaSelecionada();
   const hoje = hojeBrasil();
@@ -42,7 +45,7 @@ export default async function Painel() {
   const verProducao = pode(acesso, "producao.sequenciamento", "ver");
   const verCompras = pode(acesso, "compras.sugestoes", "ver");
   const verRh = ["rh.funcionarios", "rh.ponto", "rh.ferias"].some((t) => pode(acesso, t, "ver"));
-  const supabase = supabaseConfigurado ? await criarClienteServidor() : null;
+  const supabase = supabaseConfigurado ? criarClienteNavegador() : null;
 
   // Títulos em aberto vencidos ou que vencem até depois de amanhã (a receber pelo líquido).
   const titulosAte = (tabela: "contas_pagar" | "contas_receber", campo: string) => {
@@ -313,4 +316,8 @@ export default async function Painel() {
       )}
     </div>
   );
+}
+
+export default function Pagina() {
+  return <TelaCliente montar={Painel} />;
 }

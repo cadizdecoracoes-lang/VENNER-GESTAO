@@ -1,11 +1,8 @@
-"use server";
-
-import { revalidatePath } from "next/cache";
-import { redirect } from "next/navigation";
+import { redirect, revalidatePath } from "@/lib/navegacao";
 import { mensagemErro, semLinhas, SEM_BANCO, type Estado } from "@/lib/erros";
 import { TIPOS_PLANO_CONTA } from "@/lib/rotulos";
 import { supabaseConfigurado } from "@/lib/supabase/config";
-import { criarClienteServidor } from "@/lib/supabase/server";
+import { criarClienteNavegador } from "@/lib/supabase/client";
 
 const CAMINHO = "/financeiro/categorias";
 
@@ -19,7 +16,7 @@ export async function salvarPlanoConta(id: string | null, _: Estado, form: FormD
   if (!/^\d+(\.\d+)*$/.test(codigo)) return { erro: "O código usa só números separados por ponto, ex.: 4.07." };
   if (!nome) return { erro: "Informe o nome da categoria." };
 
-  const supabase = await criarClienteServidor();
+  const supabase = criarClienteNavegador();
   if (pai) {
     // A subcategoria herda o tipo da categoria acima.
     const { data } = await supabase.from("plano_contas").select("tipo").eq("id", pai).maybeSingle();

@@ -1,11 +1,8 @@
-"use server";
-
-import { revalidatePath } from "next/cache";
-import { redirect } from "next/navigation";
+import { redirect, revalidatePath } from "@/lib/navegacao";
 import { mensagemErro, SEM_BANCO, type Estado } from "@/lib/erros";
 import type { LinhaExtrato } from "@/lib/extrato";
 import { supabaseConfigurado } from "@/lib/supabase/config";
-import { criarClienteServidor } from "@/lib/supabase/server";
+import { criarClienteNavegador } from "@/lib/supabase/client";
 
 const CAMINHO = "/financeiro/conciliacao";
 const ORIGENS = ["ofx", "planilha", "pdf"] as const;
@@ -23,7 +20,7 @@ export async function importarExtrato(_: Estado, form: FormData): Promise<Estado
   if (!ORIGENS.includes(dados.origem)) return { erro: "Formato de arquivo não reconhecido." };
   if (!dados.linhas?.length) return { erro: "O arquivo não tem lançamentos para importar." };
 
-  const supabase = await criarClienteServidor();
+  const supabase = criarClienteNavegador();
   const { data, error } = await supabase.rpc("importar_extrato", {
     conta_bancaria: dados.conta,
     origem: dados.origem,
@@ -39,7 +36,7 @@ export async function importarExtrato(_: Estado, form: FormData): Promise<Estado
 
 async function chamar(funcao: string, args: Record<string, unknown>): Promise<Estado> {
   if (!supabaseConfigurado) return SEM_BANCO;
-  const supabase = await criarClienteServidor();
+  const supabase = criarClienteNavegador();
   const { error } = await supabase.rpc(funcao, args);
   if (error) return { erro: mensagemErro(error) };
   revalidatePath(CAMINHO);

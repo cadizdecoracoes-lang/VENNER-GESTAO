@@ -1,13 +1,16 @@
+"use client";
+
 import { CabecalhoTela, Cartao, SemAcesso } from "@/components/ui";
 import { carregarAcesso, pode } from "@/lib/acesso";
 import { carregarEmpresas, empresaSelecionada } from "@/lib/empresa";
 import { supabaseConfigurado } from "@/lib/supabase/config";
-import { criarClienteServidor } from "@/lib/supabase/server";
+import { criarClienteNavegador } from "@/lib/supabase/client";
 import { ImportarExtrato } from "./importar-extrato";
+import { TelaCliente } from "@/components/tela-cliente";
 
 const TELA = "financeiro.conciliacao";
 
-export default async function PaginaImportarExtrato({ searchParams }: { searchParams: Promise<{ conta?: string }> }) {
+async function PaginaImportarExtrato({ searchParams }: { searchParams: Promise<{ conta?: string }> }) {
   const acesso = await carregarAcesso();
   if (!pode(acesso, TELA, "ver")) return <SemAcesso codigo={TELA} />;
   const { conta } = await searchParams;
@@ -15,7 +18,7 @@ export default async function PaginaImportarExtrato({ searchParams }: { searchPa
   const nomeEmpresa = new Map(empresas.map((e) => [e.id, e.nome]));
   let contas: { id: string; nome: string; empresa_id: string; conta: string | null; banco_nome: string | null }[] = [];
   if (supabaseConfigurado) {
-    const supabase = await criarClienteServidor();
+    const supabase = criarClienteNavegador();
     let q = supabase.from("contas_bancarias").select("id, nome, empresa_id, conta, banco_nome").eq("ativa", true).neq("tipo", "caixa").order("nome");
     if (selecionada) q = q.eq("empresa_id", selecionada.id);
     contas = (await q).data ?? [];
@@ -72,4 +75,8 @@ export default async function PaginaImportarExtrato({ searchParams }: { searchPa
       </section>
     </div>
   );
+}
+
+export default function Pagina() {
+  return <TelaCliente montar={PaginaImportarExtrato} />;
 }
