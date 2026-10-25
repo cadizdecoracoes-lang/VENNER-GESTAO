@@ -44,7 +44,7 @@ async function PaginaImportarNota() {
     carregarUltimos(),
   ]);
   return (
-    <div className="space-y-6">
+    <div className="space-y-3">
       <CabecalhoTela codigo={TELA} />
       <ImportarNota empresas={empresas} fornecedores={fornecedores} categorias={categorias} centros={centros} ultimos={ultimos} />
     </div>

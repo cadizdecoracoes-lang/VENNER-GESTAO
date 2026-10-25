@@ -20,13 +20,13 @@ export function SeletorEmpresa({ empresas, valor }: { empresas: EmpresaResumo[];
   }
 
   return (
-    <label className="flex items-center gap-2 text-sm">
+    <label className="flex items-center gap-2 text-xs">
       <span className="text-texto-suave">Empresa</span>
       <select
         value={valor ?? CONSOLIDADO}
         disabled={mudando}
         onChange={(e) => mudar(e.target.value)}
-        className="rounded-lg border border-borda bg-superficie px-2 py-1 outline-none focus:border-primaria disabled:opacity-60"
+        className="rounded-md border border-borda bg-superficie px-1.5 py-0.5 text-sm outline-none focus:border-primaria disabled:opacity-60"
       >
         <option value={CONSOLIDADO}>Grupo (consolidado)</option>
         {empresas.map((e) => (

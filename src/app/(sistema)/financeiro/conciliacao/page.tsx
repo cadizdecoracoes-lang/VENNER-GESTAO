@@ -107,7 +107,7 @@ async function PaginaConciliacao({ searchParams }: { searchParams: Promise<Filtr
 
   return (
     <div className="space-y-3">
-      <CabecalhoTela codigo={TELA}>
+      <CabecalhoTela codigo={TELA} empresa={selecionada}>
         <Link href="/financeiro/conciliacao/importar#banco" className={estiloBotaoSecundario}>
           <Link2 size={16} /> Ligar com o banco
         </Link>

@@ -19,9 +19,9 @@ import { TelaCliente } from "@/components/tela-cliente";
 
 function Bloco({ titulo, icone: Icone, children }: { titulo: string; icone: typeof Briefcase; children: React.ReactNode }) {
   return (
-    <section className="space-y-3 rounded-2xl bg-fundo/60 p-4 shadow-[0_0_0_1px_var(--color-borda)]">
-      <h2 className="flex items-center gap-2 font-medium">
-        <Icone size={18} className="text-primaria" /> {titulo}
+    <section className="space-y-2 rounded-xl bg-fundo/60 p-3 shadow-[0_0_0_1px_var(--color-borda)]">
+      <h2 className="flex items-center gap-2 text-sm font-semibold">
+        <Icone size={16} className="text-primaria" /> {titulo}
       </h2>
       {children}
     </section>
@@ -109,14 +109,16 @@ async function Painel() {
   const comprarSemana = compras.filter((l) => l.data_limite && l.data_limite > hoje && l.data_limite <= somarDias(hoje, 7));
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold">Painel</h1>
-        <p className="mt-1 text-texto-suave">
-          {diaSemana(hoje)}, {formatarData(hoje)}. Clique em qualquer número para ver os registros que o formam.
-        </p>
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-baseline gap-x-2">
+        <h1 className="text-lg font-semibold leading-tight" title="Clique em qualquer número para ver os registros que o formam.">
+          Painel
+        </h1>
+        <span className="text-xs text-texto-suave">
+          {diaSemana(hoje)}, {formatarData(hoje)}
+        </span>
+        {(verComercial || verFinanceiro) && <FaixaEmpresa empresa={selecionada} />}
       </div>
-      {(verComercial || verFinanceiro) && <FaixaEmpresa empresa={selecionada} />}
 
       {verComercial && (
         <Bloco titulo="Comercial" icone={Briefcase}>
@@ -159,23 +161,23 @@ async function Painel() {
       {verFinanceiro && (
         <Bloco titulo="Financeiro" icone={Landmark}>
           <div className="grid gap-3 lg:grid-cols-3">
-            <div className="rounded-2xl bg-superficie px-5 py-4 shadow-[0_1px_3px_rgba(16,24,40,0.06)] lg:col-span-2">
+            <div className="rounded-xl bg-superficie px-3 py-2 shadow-[0_1px_3px_rgba(16,24,40,0.06)] lg:col-span-2">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="text-left text-xs text-texto-suave">
-                    <th className="pb-2 font-medium">Dia</th>
-                    <th className="pb-2 text-right font-medium">A pagar</th>
-                    <th className="pb-2 text-right font-medium">A receber</th>
-                    <th className="pb-2 text-right font-medium">Saldo do dia</th>
+                    <th className="pb-1 font-medium">Dia</th>
+                    <th className="pb-1 text-right font-medium">A pagar</th>
+                    <th className="pb-1 text-right font-medium">A receber</th>
+                    <th className="pb-1 text-right font-medium">Saldo do dia</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-borda/70">
                   {dias.map((d) => (
                     <tr key={d.dia}>
-                      <td className="py-2">
+                      <td className="py-1.5">
                         {d.rotulo} <span className="text-xs text-texto-suave">{formatarData(d.dia)}</span>
                       </td>
-                      <td className="py-2 text-right tabular-nums">
+                      <td className="py-1.5 text-right tabular-nums">
                         {verPagar ? (
                           <>
                             <Link
@@ -190,7 +192,7 @@ async function Painel() {
                           <span className="text-texto-suave">—</span>
                         )}
                       </td>
-                      <td className="py-2 text-right tabular-nums">
+                      <td className="py-1.5 text-right tabular-nums">
                         {verReceber ? (
                           <>
                             <Link
@@ -205,7 +207,7 @@ async function Painel() {
                           <span className="text-texto-suave">—</span>
                         )}
                       </td>
-                      <td className={`py-2 text-right tabular-nums ${d.receber - d.valor < 0 ? "text-perigo" : ""}`}>
+                      <td className={`py-1.5 text-right tabular-nums ${d.receber - d.valor < 0 ? "text-perigo" : ""}`}>
                         {verPagar && verReceber ? formatarMoeda(d.receber - d.valor) : "—"}
                       </td>
                     </tr>

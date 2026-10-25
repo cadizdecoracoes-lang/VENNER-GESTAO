@@ -145,7 +145,7 @@ async function PaginaPedido({ params }: { params: Promise<{ id: string }> }) {
   const atrasado = pedido.fase !== "encerrado" && pedido.dias_atraso > 0;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-3">
       <CabecalhoTela codigo={TELA}>
         <Link href={`/impressao/pedido?id=${pedido.id}`} target="_blank" className={estiloBotaoSecundario}>
           <Printer size={16} /> Imprimir
@@ -161,7 +161,7 @@ async function PaginaPedido({ params }: { params: Promise<{ id: string }> }) {
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <p className="text-sm text-texto-suave">Pedido nº {pedido.numero}</p>
-            <p className="text-xl font-semibold">{nomeCliente(pedido)}</p>
+            <p className="text-lg font-semibold">{nomeCliente(pedido)}</p>
             <p className="text-sm text-texto-suave">
               {empresa ?? "Empresa sem acesso"} · lançado em {formatarData(pedido.data_pedido)}
             </p>
@@ -180,11 +180,11 @@ async function PaginaPedido({ params }: { params: Promise<{ id: string }> }) {
             >
               {pedido.etapa_nome}
             </Etiqueta>
-            <p className="mt-1 text-2xl font-semibold tabular-nums">{formatarMoeda(Number(pedido.valor_total))}</p>
+            <p className="mt-1 text-xl font-semibold tabular-nums">{formatarMoeda(Number(pedido.valor_total))}</p>
             <Fonte>Soma dos {itens.length} produtos abaixo</Fonte>
           </div>
         </div>
-        <dl className="mt-5 grid gap-4 text-sm sm:grid-cols-2 lg:grid-cols-5">
+        <dl className="mt-3 grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-5">
           <div>
             <dt className="text-texto-suave">Prazo de entrega</dt>
             <dd className={atrasado ? "font-medium text-perigo" : ""}>
@@ -211,8 +211,8 @@ async function PaginaPedido({ params }: { params: Promise<{ id: string }> }) {
         </dl>
       </Cartao>
 
-      <div className="grid gap-6 lg:grid-cols-3">
-        <div className="space-y-6 lg:col-span-2">
+      <div className="grid gap-3 lg:grid-cols-3">
+        <div className="space-y-3 lg:col-span-2">
           <Cartao titulo="Produtos">
             <Tabela colunas={["Produto", "Quantidade", "Preço unitário", "Total"]} embutida>
               {itens.map((i) => (
@@ -302,7 +302,7 @@ async function PaginaPedido({ params }: { params: Promise<{ id: string }> }) {
           </Cartao>
         </div>
 
-        <div className="space-y-6">
+        <div className="space-y-3">
           <Cartao titulo="Margem do pedido">
             <dl className="space-y-1.5 text-sm">
               <div className="flex justify-between gap-4">
@@ -400,7 +400,7 @@ async function PaginaPedido({ params }: { params: Promise<{ id: string }> }) {
           )}
 
           <Cartao titulo="Etapa do pedido">
-            <div className="space-y-5">
+            <div className="space-y-3">
               {pode(acesso, TELA, "editar") && (
                 <FormAcao
                   key={pedido.etapa_id}

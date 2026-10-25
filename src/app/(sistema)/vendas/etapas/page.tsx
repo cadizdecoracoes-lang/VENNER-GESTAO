@@ -50,7 +50,7 @@ async function PaginaEtapas({ searchParams }: { searchParams: Promise<{ editar?:
   const proximaOrdem = (etapas.at(-1)?.ordem ?? 0) + 10;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-3">
       <CabecalhoTela codigo={TELA}>
         {pode(acesso, TELA, "criar") && !mostrarForm && (
           <Link href="?novo=1" className={estiloBotao}>
@@ -62,7 +62,7 @@ async function PaginaEtapas({ searchParams }: { searchParams: Promise<{ editar?:
       {mostrarForm && (
         <Cartao titulo={emEdicao ? `Editar ${emEdicao.nome}` : "Nova etapa"}>
           <FormAcao key={emEdicao?.id ?? "novo"} acao={salvarEtapa.bind(null, emEdicao?.id ?? null)} rotulo="Salvar" className="space-y-4">
-            <div className="grid gap-4 sm:grid-cols-4">
+            <div className="grid gap-3 sm:grid-cols-4">
               <Campo rotulo="Nome" className="sm:col-span-2">
                 <input name="nome" required defaultValue={emEdicao?.nome} className={estiloCampo} />
               </Campo>

@@ -45,7 +45,7 @@ async function PaginaPostos({ searchParams }: { searchParams: Promise<{ editar?:
   const mostrarForm = (novo && pode(acesso, TELA, "criar")) || (emEdicao && pode(acesso, TELA, "editar"));
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-3">
       <CabecalhoTela codigo={TELA}>
         {pode(acesso, TELA, "criar") && !mostrarForm && (
           <Link href="?novo=1" className={estiloBotao}>
@@ -57,7 +57,7 @@ async function PaginaPostos({ searchParams }: { searchParams: Promise<{ editar?:
       {mostrarForm && (
         <Cartao titulo={emEdicao ? `Editar ${emEdicao.nome}` : "Novo posto de trabalho"}>
           <FormAcao key={emEdicao?.id ?? "novo"} acao={salvarPosto.bind(null, emEdicao?.id ?? null)} rotulo="Salvar" className="space-y-4">
-            <div className="grid gap-4 sm:grid-cols-3">
+            <div className="grid gap-3 sm:grid-cols-3">
               <Campo rotulo="Nome">
                 <input name="nome" required defaultValue={emEdicao?.nome} className={estiloCampo} />
               </Campo>

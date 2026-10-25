@@ -78,7 +78,7 @@ async function PaginaIntegracoes({ searchParams }: { searchParams: Promise<Filtr
   const semAnuncio = filtros.sem_anuncio?.split(",").filter(Boolean) ?? [];
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-3">
       <CabecalhoTela codigo={TELA} />
 
       {filtros.ligacao && ligar && <ConcluirLigacao volta={{ ...filtros, ligacao: filtros.ligacao }} />}
@@ -119,7 +119,7 @@ async function PaginaIntegracoes({ searchParams }: { searchParams: Promise<Filtr
         retorno={situacao?.retorno.tiny ?? null}
       />
 
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className="grid gap-3 lg:grid-cols-2">
         {(Object.keys(NOME_CANAL) as Canal[]).map((canal) => (
           <Cartao
             key={canal}

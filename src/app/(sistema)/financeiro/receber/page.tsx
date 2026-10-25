@@ -12,9 +12,7 @@ import {
   Cartao,
   Celula,
   Etiqueta,
-  FaixaEmpresa,
   Fonte,
-  Indicador,
   LinkAcao,
   SemAcesso,
   Tabela,
@@ -87,9 +85,9 @@ async function carregar(empresa: string | null, periodo: Periodo, pedido: string
   } else if (periodo) {
     consulta = consulta.gte(periodo.por, periodo.de).lte(periodo.por, periodo.ate);
   } else {
-    // Sem período: tudo em aberto, e recebidos ou cancelados dos últimos 120 dias.
-    const desde = somarDias(hojeBrasil(), -120);
-    consulta = consulta.or(`situacao.eq.aberto,vencimento.gte.${desde},data_recebimento.gte.${desde}`);
+    // Sem período: tudo em aberto, os recebidos neste mês e os cancelados que venciam a partir deste mês.
+    const inicioMes = hojeBrasil().slice(0, 8) + "01";
+    consulta = consulta.or(`situacao.eq.aberto,data_recebimento.gte.${inicioMes},and(situacao.eq.cancelado,vencimento.gte.${inicioMes})`);
   }
   if (empresa) consulta = consulta.eq("empresa_id", empresa);
   return ((await consulta).data ?? []) as unknown as Titulo[];
@@ -107,12 +105,12 @@ async function PaginaContasReceber({ searchParams }: { searchParams: Promise<Fil
   const nomeEmpresa = new Map(empresas.map((e) => [e.id, e.nome]));
   const hoje = hojeBrasil();
   const semana = somarDias(hoje, 7);
-  const inicioMes = hoje.slice(0, 8) + "01";
 
   const abertos = titulos.filter((t) => t.situacao === "aberto");
   const vencidos = abertos.filter((t) => t.vencimento < hoje);
   const proximos = abertos.filter((t) => t.vencimento >= hoje && t.vencimento <= semana);
-  const recebidos = titulos.filter((t) => t.situacao === "pago" && (periodo || pedido || (t.data_recebimento ?? "") >= inicioMes));
+  const recebidos = titulos.filter((t) => t.situacao === "pago");
+  const cancelados = titulos.filter((t) => t.situacao === "cancelado");
   const liquido = (l: Titulo[]) => l.reduce((s, t) => s + Number(t.valor_liquido), 0);
   const tarifasAbertas = abertos.reduce((s, t) => s + Number(t.tarifas), 0);
   const somaRecebida = recebidos.reduce((s, t) => s + Number(t.valor_recebido ?? 0), 0);
@@ -130,12 +128,12 @@ async function PaginaContasReceber({ searchParams }: { searchParams: Promise<Fil
     ? `Títulos do pedido nº ${titulos[0]?.pedidos_venda?.numero ?? ""}`
     : periodo
       ? `${DATAS_PERIODO[periodo.por as keyof typeof DATAS_PERIODO]} de ${formatarData(periodo.de)} a ${formatarData(periodo.ate)}`
-      : "Tudo em aberto e os recebidos dos últimos 120 dias";
+      : "Tudo em aberto e os recebidos neste mês";
   const colunas = ["Vencimento", ...(selecionada ? [] : ["Empresa"]), "Conta", "Cliente", "Valor", "Situação", ""];
 
   return (
-    <div className="space-y-6">
-      <CabecalhoTela codigo={TELA}>
+    <div className="space-y-3">
+      <CabecalhoTela codigo={TELA} empresa={selecionada}>
         {pode(acesso, TELA, "criar") && (
           <Link href="/financeiro/receber/importar" className={estiloBotaoSecundario}>
             <FileUp size={16} /> Importar vendas das plataformas
@@ -150,9 +148,18 @@ async function PaginaContasReceber({ searchParams }: { searchParams: Promise<Fil
 
       {criando && (
         <Cartao titulo="Nova conta a receber">
-          <FormAcao acao={novaConta} rotulo="Salvar" className="space-y-4">
+          <FormAcao
+            extra={
+              <Link href="/financeiro/receber" className={estiloBotaoSecundario}>
+                Cancelar
+              </Link>
+            }
+            acao={novaConta}
+            rotulo="Salvar"
+            className="space-y-4"
+          >
             {filtros.volta && <input type="hidden" name="volta" value={filtros.volta} />}
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
               <Campo rotulo="Empresa que recebe" className="sm:col-span-2">
                 <select name="empresa_id" required defaultValue={filtros.empresa ?? selecionada?.id ?? ""} className={estiloCampo}>
                   <option value="" disabled>
@@ -206,19 +213,19 @@ async function PaginaContasReceber({ searchParams }: { searchParams: Promise<Fil
             <p className="text-xs text-texto-suave">
               Parcelas de pedidos das distribuidoras são geradas no próprio pedido, em Vendas › Pedidos de venda.
             </p>
-            <div className="flex justify-end">
-              <Link href="/financeiro/receber" className={estiloBotaoSecundario}>
-                Cancelar
-              </Link>
-            </div>
           </FormAcao>
         </Cartao>
       )}
 
       {recebendo && pode(acesso, TELA, "editar") && (
         <Cartao titulo={`Receber: ${recebendo.descricao}${recebendo.parcela ? ` (${recebendo.parcela})` : ""}`}>
-          <FormAcao acao={receberConta.bind(null, recebendo.id)} rotulo="Confirmar recebimento" className="space-y-4">
-            <div className="grid gap-4 sm:grid-cols-3">
+          <FormAcao
+            extra={
+              <Link href="/financeiro/receber" className={estiloBotaoSecundario}>
+                Cancelar
+              </Link>
+            } acao={receberConta.bind(null, recebendo.id)} rotulo="Confirmar recebimento" className="space-y-4">
+            <div className="grid gap-3 sm:grid-cols-3">
               <Campo rotulo="Data em que entrou">
                 <input name="data_recebimento" type="date" required defaultValue={hoje} className={estiloCampo} />
               </Campo>
@@ -238,11 +245,6 @@ async function PaginaContasReceber({ searchParams }: { searchParams: Promise<Fil
                 <input name="valor_recebido" required inputMode="decimal" defaultValue={recebendo.valor_liquido} className={estiloCampo} />
               </Campo>
             </div>
-            <div className="flex justify-end">
-              <Link href="/financeiro/receber" className={estiloBotaoSecundario}>
-                Cancelar
-              </Link>
-            </div>
           </FormAcao>
         </Cartao>
       )}
@@ -254,49 +256,12 @@ async function PaginaContasReceber({ searchParams }: { searchParams: Promise<Fil
         </p>
       )}
 
-      <FaixaEmpresa empresa={selecionada} />
-
-      {pedido ? (
+      {pedido && (
         <p className="text-sm">
           {origem}. <LinkAcao href={`/vendas/pedidos/pedido?id=${pedido}`}>Abrir o pedido</LinkAcao> ·{" "}
           <LinkAcao href="/financeiro/receber">Ver todas as contas</LinkAcao>
         </p>
-      ) : (
-        <FiltroPeriodo periodo={periodo} hoje={hoje} campos={DATAS_PERIODO} semPeriodo="Em aberto e recentes" />
       )}
-
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <Indicador
-          rotulo="Vencido"
-          valor={formatarMoeda(liquido(vencidos))}
-          detalhe={`${vencidos.length} ${vencidos.length === 1 ? "conta" : "contas"}`}
-          cor={vencidos.length ? "text-perigo" : ""}
-          href={`?situacao=vencido${manterPeriodo}${pedido ? `&pedido=${pedido}` : ""}`}
-          fonte={`Em aberto com vencimento antes de ${formatarData(hoje)}, pelo valor líquido.`}
-        />
-        <Indicador
-          rotulo="Entra nos próximos 7 dias"
-          valor={formatarMoeda(liquido(proximos))}
-          detalhe={`${proximos.length} ${proximos.length === 1 ? "conta" : "contas"}`}
-          href={`?situacao=semana${manterPeriodo}${pedido ? `&pedido=${pedido}` : ""}`}
-          fonte={`Vencimento de ${formatarData(hoje)} a ${formatarData(semana)}, pelo valor líquido.`}
-        />
-        <Indicador
-          rotulo={periodo || pedido ? "Em aberto na seleção" : "Total em aberto"}
-          valor={formatarMoeda(liquido(abertos))}
-          detalhe={tarifasAbertas > 0 ? `já sem ${formatarMoeda(tarifasAbertas)} de tarifas das plataformas` : `${abertos.length} contas`}
-          href={`?situacao=aberto${manterPeriodo}${pedido ? `&pedido=${pedido}` : ""}`}
-          fonte={`${origem}. Líquido = valor da venda − comissão e frete da plataforma.`}
-        />
-        <Indicador
-          rotulo={periodo || pedido ? "Recebido na seleção" : "Recebido neste mês"}
-          valor={formatarMoeda(somaRecebida)}
-          detalhe={`${recebidos.length} ${recebidos.length === 1 ? "conta" : "contas"}`}
-          cor="text-sucesso"
-          href={`?situacao=pago${manterPeriodo}${pedido ? `&pedido=${pedido}` : ""}`}
-          fonte={periodo || pedido ? `${origem}. Valor efetivamente recebido.` : `Recebimentos com data desde ${formatarData(inicioMes)}.`}
-        />
-      </div>
 
       {!selecionada && !pedido && empresas.length > 1 && (
         <ResumoPorEmpresa
@@ -313,29 +278,59 @@ async function PaginaContasReceber({ searchParams }: { searchParams: Promise<Fil
               quantidades: grupos.map((g) => g.length),
             };
           })}
-          fonte={`Mesmos títulos dos quadros acima (${origem}), separados pelo CNPJ que recebe. A receber pelo valor líquido.`}
+          fonte={`Mesmos títulos da faixa de situação (${origem}), separados pelo CNPJ que recebe. A receber pelo valor líquido.`}
         />
       )}
 
       <Filtro
+        situacoes={{
+          rotulo: "Situação",
+          opcoes: [
+            {
+              valor: "vencido",
+              rotulo: "Vencidas",
+              total: formatarMoeda(liquido(vencidos)),
+              quantidade: vencidos.length,
+              cor: "perigo",
+              dica: `Em aberto com vencimento antes de ${formatarData(hoje)}, pelo valor líquido.`,
+            },
+            {
+              valor: "semana",
+              rotulo: "Entram em 7 dias",
+              total: formatarMoeda(liquido(proximos)),
+              quantidade: proximos.length,
+              dica: `Vencimento de ${formatarData(hoje)} a ${formatarData(semana)}, pelo valor líquido.`,
+            },
+            {
+              valor: "aberto",
+              rotulo: periodo || pedido ? "Em aberto na seleção" : "Em aberto",
+              total: formatarMoeda(liquido(abertos)),
+              quantidade: abertos.length,
+              dica: `${origem}. Líquido = valor da venda − comissão e frete da plataforma${tarifasAbertas > 0 ? ` (${formatarMoeda(tarifasAbertas)} de tarifas já descontadas)` : ""}.`,
+            },
+            {
+              valor: "pago",
+              rotulo: periodo || pedido ? "Recebidas na seleção" : "Recebidas no mês",
+              total: formatarMoeda(somaRecebida),
+              quantidade: recebidos.length,
+              cor: "sucesso",
+              dica: "Valor efetivamente recebido.",
+            },
+            { valor: "cancelado", rotulo: "Canceladas", total: formatarMoeda(liquido(cancelados)), quantidade: cancelados.length },
+            { valor: "", rotulo: "Todas", quantidade: titulos.length, total: "\u00a0" },
+          ],
+        }}
+        ferramentas={
+          !pedido && <FiltroPeriodo periodo={periodo} hoje={hoje} campos={DATAS_PERIODO} semPeriodo="Em aberto + recebidas no mês" />
+        }
         atalhos={[
-          {
-            rotulo: "Situação",
-            opcoes: [
-              { valor: "vencido", rotulo: "Vencidas" },
-              { valor: "semana", rotulo: "Próximos 7 dias" },
-              { valor: "aberto", rotulo: "Em aberto" },
-              { valor: "pago", rotulo: "Recebidas" },
-              { valor: "cancelado", rotulo: "Canceladas" },
-            ],
-          },
           {
             rotulo: "Origem",
             opcoes: Object.entries(CANAIS).map(([valor, rotulo]) => ({ valor, rotulo })),
           },
         ]}
         placeholder="Filtrar por cliente, pedido, descrição, empresa, valor..."
-        iniciais={filtros.situacao ? { Situação: filtros.situacao } : {}}
+        iniciais={{ Situação: filtros.situacao ?? (pedido ? "" : "aberto") }}
       >
         <Tabela colunas={colunas} vazio="Nenhuma conta a receber. Gere as parcelas no pedido ou importe as vendas das plataformas.">
           {titulos.map((t) => {

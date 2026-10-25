@@ -149,9 +149,9 @@ export function ImportarVendas({ empresas, empresaInicial, locais, produtos, lig
   });
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-3">
       <Cartao titulo="1. De onde são as vendas">
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <Campo rotulo="Empresa dona da conta">
             <select value={empresa} onChange={(e) => setEmpresa(e.target.value)} className={estiloCampo}>
               <option value="" disabled>
@@ -299,7 +299,7 @@ export function ImportarVendas({ empresas, empresaInicial, locais, produtos, lig
 
       {leitura && (
         <Cartao titulo={`${faltando.length > 0 ? "5" : "4"}. Conferir e importar`}>
-          <div className="mb-4 grid gap-4 sm:grid-cols-4">
+          <div className="mb-4 grid gap-3 sm:grid-cols-4">
             <Resumo
               rotulo="Vendas na planilha"
               valor={formatarNumero(vendas.length)}

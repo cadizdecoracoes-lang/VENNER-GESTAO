@@ -119,7 +119,7 @@ async function PaginaFluxoCaixa({ searchParams }: { searchParams: Promise<{ modo
 
   return (
     <div className="space-y-3">
-      <CabecalhoTela codigo={TELA}>
+      <CabecalhoTela codigo={TELA} empresa={selecionada}>
         <span className="text-xs text-texto-suave">{selecionada ? selecionada.nome : "Grupo (consolidado)"}</span>
       </CabecalhoTela>
 

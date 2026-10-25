@@ -6,7 +6,7 @@ import type { DadosPessoa } from "@/lib/pessoa";
 // Campos de cadastro de fornecedor ou cliente (os nomes batem com lerPessoa).
 export function CamposPessoa({ valor }: { valor?: Partial<DadosPessoa> }) {
   return (
-    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
       <Campo rotulo="Tipo">
         <select name="tipo_pessoa" defaultValue={valor?.tipo_pessoa ?? "juridica"} className={estiloCampo}>
           {Object.entries(TIPOS_PESSOA).map(([v, r]) => (

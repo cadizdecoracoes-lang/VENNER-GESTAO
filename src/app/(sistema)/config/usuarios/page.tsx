@@ -64,7 +64,7 @@ async function PaginaUsuarios({ searchParams }: { searchParams: Promise<{ editar
   const aguardando = usuarios.filter((u) => !u.ativo).length;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-3">
       <CabecalhoTela codigo={TELA} />
 
       <p className="rounded-xl bg-primaria-suave px-4 py-2.5 text-sm text-primaria">
@@ -74,8 +74,8 @@ async function PaginaUsuarios({ searchParams }: { searchParams: Promise<{ editar
 
       {emEdicao && (
         <Cartao titulo={`Acesso de ${emEdicao.nome}`}>
-          <FormAcao key={emEdicao.id} acao={salvarUsuario.bind(null, emEdicao.id)} rotulo="Salvar" className="space-y-5">
-            <div className="grid gap-4 sm:grid-cols-2">
+          <FormAcao key={emEdicao.id} acao={salvarUsuario.bind(null, emEdicao.id)} rotulo="Salvar" className="space-y-3">
+            <div className="grid gap-3 sm:grid-cols-2">
               <Campo rotulo="Nome">
                 <input name="nome" required defaultValue={emEdicao.nome} className={estiloCampo} />
               </Campo>

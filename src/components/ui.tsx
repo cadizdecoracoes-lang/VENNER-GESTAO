@@ -1,42 +1,71 @@
 import Link from "next/link";
-import { Lock } from "lucide-react";
+import { Building2, Info, Lock } from "lucide-react";
 import { telaPorCodigo } from "@/lib/menu";
 
-// Peças visuais comuns às telas de cadastro.
+// Peças visuais comuns às telas. Regra de layout (vale para toda tela nova):
+// o cabeçalho é uma linha discreta e o destaque fica nos lançamentos. Nada de
+// subtítulo, faixas coloridas ou cartões altos acima da lista; explicações vão
+// na dica (passar o mouse) e os números resumidos numa faixa fina.
 
 export const estiloCampo =
-  "w-full rounded-lg border border-borda bg-superficie px-3 py-2 text-sm outline-none transition-colors focus:border-primaria disabled:bg-fundo disabled:text-texto-suave";
+  "w-full rounded-lg border border-borda bg-superficie px-2.5 py-1.5 text-sm outline-none transition-colors focus:border-primaria disabled:bg-fundo disabled:text-texto-suave";
 
 export const estiloBotao =
-  "inline-flex items-center gap-1.5 rounded-lg bg-primaria px-3 py-2 text-sm font-medium text-white hover:opacity-90 disabled:opacity-60";
+  "inline-flex items-center gap-1.5 rounded-lg bg-primaria px-3 py-1.5 text-sm font-medium text-white hover:opacity-90 disabled:opacity-60";
 
 export const estiloBotaoSecundario =
-  "inline-flex items-center gap-1.5 rounded-lg bg-superficie px-3 py-2 text-sm text-texto shadow-[0_0_0_1px_var(--color-borda)] hover:bg-fundo";
+  "inline-flex items-center gap-1.5 rounded-lg bg-superficie px-3 py-1.5 text-sm text-texto shadow-[0_0_0_1px_var(--color-borda)] hover:bg-fundo";
 
-export function CabecalhoTela({ codigo, children }: { codigo: string; children?: React.ReactNode }) {
+// Uma linha só: módulo, título e (nas telas por CNPJ) a empresa em uso. A
+// descrição da tela aparece ao passar o mouse no título. `empresa`: passe a
+// empresa escolhida no topo (null = consolidado) nas telas separadas por CNPJ.
+// `ajuda`: explicação longa da tela, aberta pelo ícone (i) em vez de ocupar espaço.
+export function CabecalhoTela({
+  codigo,
+  empresa,
+  ajuda,
+  children,
+}: {
+  codigo: string;
+  empresa?: { nome: string } | null;
+  ajuda?: React.ReactNode;
+  children?: React.ReactNode;
+}) {
   const { tela, grupo } = telaPorCodigo(codigo);
   return (
-    <div className="flex flex-wrap items-end justify-between gap-4">
-      <div>
-        <p className="text-sm text-texto-suave">{grupo}</p>
-        <h1 className="text-2xl font-semibold">{tela.titulo}</h1>
-        <p className="mt-1 text-texto-suave">{tela.descricao}</p>
+    <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+      <div className="flex min-w-0 flex-wrap items-baseline gap-x-2">
+        <span className="text-xs text-texto-suave">{grupo} /</span>
+        <h1 className="text-lg font-semibold leading-tight" title={tela.descricao}>
+          {tela.titulo}
+        </h1>
+        {ajuda && (
+          <details className="relative self-center">
+            <summary className="flex cursor-pointer list-none items-center rounded p-0.5 text-texto-suave hover:text-primaria [&::-webkit-details-marker]:hidden">
+              <Info size={15} aria-label="Como funciona esta tela" />
+            </summary>
+            <div className="absolute left-0 top-full z-20 mt-1 w-80 rounded-xl bg-superficie p-3 text-xs leading-relaxed text-texto-suave shadow-[0_4px_16px_rgba(16,24,40,0.14)]">
+              {ajuda}
+            </div>
+          </details>
+        )}
+        {empresa !== undefined && <FaixaEmpresa empresa={empresa} />}
       </div>
-      {children && <div className="flex items-center gap-2">{children}</div>}
+      {children && <div className="flex flex-wrap items-center gap-2">{children}</div>}
     </div>
   );
 }
 
 export function Cartao({ titulo, children, acoes }: { titulo?: string; children: React.ReactNode; acoes?: React.ReactNode }) {
   return (
-    <section className="rounded-2xl bg-superficie shadow-[0_1px_3px_rgba(16,24,40,0.06)]">
+    <section className="rounded-xl bg-superficie shadow-[0_1px_3px_rgba(16,24,40,0.06)]">
       {(titulo || acoes) && (
-        <div className="flex items-center justify-between gap-2 px-5 pt-4">
-          {titulo && <h2 className="font-medium">{titulo}</h2>}
+        <div className="flex items-center justify-between gap-2 px-4 pt-3">
+          {titulo && <h2 className="text-sm font-semibold">{titulo}</h2>}
           {acoes}
         </div>
       )}
-      <div className="p-5">{children}</div>
+      <div className="p-4">{children}</div>
     </section>
   );
 }
@@ -86,12 +115,12 @@ export function Tabela({
 }) {
   const temLinhas = Array.isArray(children) ? children.length > 0 : !!children;
   return (
-    <div className={`overflow-x-auto ${embutida ? "-mx-1" : "rounded-2xl bg-superficie shadow-[0_1px_3px_rgba(16,24,40,0.06)]"}`}>
+    <div className={`overflow-x-auto ${embutida ? "-mx-1" : "rounded-xl bg-superficie shadow-[0_1px_3px_rgba(16,24,40,0.06)]"}`}>
       <table className="w-full text-sm">
         <thead>
           <tr className="text-left text-xs text-texto-suave">
             {colunas.map((c, i) => (
-              <th key={i} className="px-4 pb-2 pt-3 font-medium">
+              <th key={i} className="whitespace-nowrap border-b border-borda/70 px-3 py-2 font-medium">
                 {c}
               </th>
             ))}
@@ -102,7 +131,7 @@ export function Tabela({
             children
           ) : (
             <tr data-vazio>
-              <td colSpan={colunas.length} className="px-4 py-8 text-center text-texto-suave">
+              <td colSpan={colunas.length} className="px-3 py-6 text-center text-texto-suave">
                 {vazio ?? "Nenhum cadastro ainda."}
               </td>
             </tr>
@@ -114,7 +143,7 @@ export function Tabela({
 }
 
 export function Celula({ children, className }: { children?: React.ReactNode; className?: string }) {
-  return <td className={`px-4 py-3 ${className ?? ""}`}>{children}</td>;
+  return <td className={`px-3 py-1.5 ${className ?? ""}`}>{children}</td>;
 }
 
 export function LinkAcao({ href, children }: { href: string; children: React.ReactNode }) {
@@ -127,9 +156,9 @@ export function LinkAcao({ href, children }: { href: string; children: React.Rea
 
 export function SemAcesso({ codigo }: { codigo: string }) {
   return (
-    <div className="space-y-6">
+    <div className="space-y-3">
       <CabecalhoTela codigo={codigo} />
-      <div className="flex items-center gap-3 rounded-2xl bg-superficie p-6 text-texto-suave shadow-[0_1px_3px_rgba(16,24,40,0.06)]">
+      <div className="flex items-center gap-3 rounded-xl bg-superficie p-4 text-texto-suave shadow-[0_1px_3px_rgba(16,24,40,0.06)]">
         <Lock size={20} />
         <span>Seu perfil não tem acesso a esta tela. Fale com a diretoria se precisar dela.</span>
       </div>
@@ -138,19 +167,20 @@ export function SemAcesso({ codigo }: { codigo: string }) {
 }
 
 // Diz de qual CNPJ são os dados da tela, conforme o seletor "Empresa" do topo.
+// Etiqueta pequena ao lado do título; a explicação fica na dica.
 export function FaixaEmpresa({ empresa }: { empresa: { nome: string } | null }) {
   return (
-    <p className="rounded-xl bg-primaria-suave px-4 py-2.5 text-sm text-primaria">
-      {empresa ? (
-        <>
-          Mostrando só <strong>{empresa.nome}</strong>. Para ver todas as empresas, escolha &quot;Grupo (consolidado)&quot; no topo.
-        </>
-      ) : (
-        <>
-          <strong>Consolidado do grupo</strong>, separado por empresa. Para ver uma empresa só, escolha o CNPJ no topo.
-        </>
-      )}
-    </p>
+    <span
+      className="inline-flex items-center gap-1 self-center rounded-full bg-primaria-suave px-2 py-0.5 text-xs text-primaria"
+      title={
+        empresa
+          ? 'Mostrando só esta empresa. Para ver todas, escolha "Grupo (consolidado)" no topo.'
+          : "Todas as empresas, separadas por CNPJ. Para ver uma empresa só, escolha o CNPJ no topo."
+      }
+    >
+      <Building2 size={12} />
+      {empresa ? empresa.nome : "Grupo (consolidado)"}
+    </span>
   );
 }
 
@@ -160,7 +190,8 @@ export function Fonte({ children }: { children: React.ReactNode }) {
   return <p className="text-xs leading-relaxed text-texto-suave">{children}</p>;
 }
 
-// Número resumido que abre a lista dos registros que o formam.
+// Número resumido que abre a lista dos registros que o formam. Compacto: a
+// origem do número (fonte) fica na dica do ícone (i), para não ocupar a tela.
 export function Indicador({
   rotulo,
   valor,
@@ -176,20 +207,28 @@ export function Indicador({
   cor?: string;
   fonte?: React.ReactNode;
 }) {
+  const dica = typeof fonte === "string" ? fonte : undefined;
   const corpo = (
     <>
-      <p className="text-sm text-texto-suave">{rotulo}</p>
-      <p className={`mt-1 text-xl font-semibold tabular-nums ${cor ?? ""}`}>{valor}</p>
-      {detalhe && <p className="text-xs text-texto-suave">{detalhe}</p>}
-      {fonte && <p className="mt-2 border-t border-borda/70 pt-2 text-[11px] leading-snug text-texto-suave">{fonte}</p>}
+      <p className="flex items-center gap-1 truncate text-xs text-texto-suave" title={dica}>
+        {rotulo}
+        {fonte && <Info size={12} className="shrink-0 opacity-60" aria-label={dica} />}
+      </p>
+      <p className="flex flex-wrap items-baseline gap-x-2">
+        <span className={`text-base font-semibold tabular-nums ${cor ?? ""}`}>{valor}</span>
+        {detalhe && <span className="text-xs text-texto-suave">{detalhe}</span>}
+      </p>
+      {fonte && !dica && <div className="mt-1 text-[11px] leading-snug text-texto-suave">{fonte}</div>}
     </>
   );
-  const estilo = "block rounded-2xl bg-superficie px-5 py-4 shadow-[0_1px_3px_rgba(16,24,40,0.06)]";
+  const estilo = "block min-w-0 rounded-xl bg-superficie px-3 py-2 shadow-[0_1px_3px_rgba(16,24,40,0.06)]";
   return href ? (
     <Link href={href} className={`${estilo} transition-shadow hover:shadow-[0_0_0_1.5px_var(--color-primaria)]`}>
       {corpo}
     </Link>
   ) : (
-    <div className={estilo}>{corpo}</div>
+    <div className={estilo} title={dica}>
+      {corpo}
+    </div>
   );
 }

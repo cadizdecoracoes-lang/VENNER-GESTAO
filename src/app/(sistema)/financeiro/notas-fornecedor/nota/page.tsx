@@ -112,7 +112,7 @@ async function PaginaNota({
   const arquivo = n.arquivo ? (await supabase.storage.from("notas-fornecedor").createSignedUrl(n.arquivo, 3600)).data?.signedUrl : null;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-3">
       <CabecalhoTela codigo={TELA}>
         <Link href="/financeiro/notas-fornecedor" className={estiloBotaoSecundario}>
           Voltar

@@ -109,7 +109,7 @@ async function PaginaPerfis({ searchParams }: { searchParams: Promise<{ editar?:
   const qtdUsuarios = (id: string) => usuarios.filter((u) => u.perfil_id === id).length;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-3">
       <CabecalhoTela codigo={TELA}>
         {pode(acesso, TELA, "criar") && !mostrarForm && (
           <Link href="?novo=1" className={estiloBotao}>
@@ -136,12 +136,17 @@ async function PaginaPerfis({ searchParams }: { searchParams: Promise<{ editar?:
           }
         >
           <FormAcao
+            extra={
+              <Link href="/config/perfis" className={estiloBotaoSecundario}>
+                Cancelar
+              </Link>
+            }
             key={emEdicao?.id ?? "novo"}
             acao={salvarPerfil.bind(null, emEdicao?.id ?? null, travada)}
             rotulo="Salvar"
-            className="space-y-5"
+            className="space-y-3"
           >
-            <div className="grid gap-4 sm:grid-cols-3">
+            <div className="grid gap-3 sm:grid-cols-3">
               <Campo rotulo="Nome">
                 <input name="nome" required defaultValue={emEdicao?.nome} className={estiloCampo} />
               </Campo>
@@ -156,11 +161,6 @@ async function PaginaPerfis({ searchParams }: { searchParams: Promise<{ editar?:
                   : 'Marque o que este perfil pode fazer em cada tela. Sem "Ver", a tela some do menu.'}
               </p>
               <MatrizPermissoes marcadas={marcadas} travada={travada} />
-            </div>
-            <div className="flex justify-end">
-              <Link href="/config/perfis" className={estiloBotaoSecundario}>
-                Cancelar
-              </Link>
             </div>
           </FormAcao>
         </Cartao>

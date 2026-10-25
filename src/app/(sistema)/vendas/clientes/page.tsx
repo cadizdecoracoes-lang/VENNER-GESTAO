@@ -58,7 +58,7 @@ async function PaginaClientees({ searchParams }: { searchParams: Promise<Filtros
   const mostrarForm = (filtros.novo && pode(acesso, TELA, "criar")) || (emEdicao && pode(acesso, TELA, "editar"));
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-3">
       <CabecalhoTela codigo={TELA}>
         {pode(acesso, TELA, "criar") && !mostrarForm && (
           <Link href="?novo=1" className={estiloBotao}>
@@ -76,7 +76,7 @@ async function PaginaClientees({ searchParams }: { searchParams: Promise<Filtros
             className="space-y-4"
           >
             <CamposPessoa valor={emEdicao} />
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
               <Campo rotulo="Canal de venda">
                 <select name="canal" defaultValue={emEdicao?.canal ?? "venda_direta"} className={estiloCampo}>
                   {Object.entries(CANAIS).map(([v, r]) => (

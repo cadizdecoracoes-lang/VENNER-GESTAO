@@ -12,7 +12,6 @@ import {
   Cartao,
   Celula,
   Etiqueta,
-  FaixaEmpresa,
   LinkAcao,
   SemAcesso,
   Tabela,
@@ -67,24 +66,12 @@ async function carregar(empresa: string | null, periodo: Periodo): Promise<Titul
   if (periodo) {
     consulta = consulta.gte(periodo.por, periodo.de).lte(periodo.por, periodo.ate);
   } else {
-    // Sem período: tudo em aberto, e pagos ou cancelados dos últimos 120 dias.
-    const desde = somarDias(hojeBrasil(), -120);
-    consulta = consulta.or(`situacao.eq.aberto,vencimento.gte.${desde},data_pagamento.gte.${desde}`);
+    // Sem período: tudo em aberto, os pagos neste mês e os cancelados que venciam a partir deste mês.
+    const inicioMes = hojeBrasil().slice(0, 8) + "01";
+    consulta = consulta.or(`situacao.eq.aberto,data_pagamento.gte.${inicioMes},and(situacao.eq.cancelado,vencimento.gte.${inicioMes})`);
   }
   if (empresa) consulta = consulta.eq("empresa_id", empresa);
   return ((await consulta).data ?? []) as unknown as Titulo[];
-}
-
-function Resumo({ rotulo, valor, quantidade, cor }: { rotulo: string; valor: number; quantidade: number; cor?: string }) {
-  return (
-    <div className="rounded-2xl bg-superficie px-5 py-4 shadow-[0_1px_3px_rgba(16,24,40,0.06)]">
-      <p className="text-sm text-texto-suave">{rotulo}</p>
-      <p className={`mt-1 text-xl font-semibold tabular-nums ${cor ?? ""}`}>{formatarMoeda(valor)}</p>
-      <p className="text-xs text-texto-suave">
-        {quantidade} {quantidade === 1 ? "conta" : "contas"}
-      </p>
-    </div>
-  );
 }
 
 async function PaginaContasPagar({ searchParams }: { searchParams: Promise<Filtros> }) {
@@ -98,13 +85,12 @@ async function PaginaContasPagar({ searchParams }: { searchParams: Promise<Filtr
   const nomeEmpresa = new Map(empresas.map((e) => [e.id, e.nome]));
   const hoje = hojeBrasil();
   const semana = somarDias(hoje, 7);
-  const inicioMes = hoje.slice(0, 8) + "01";
 
   const abertos = titulos.filter((t) => t.situacao === "aberto");
   const vencidos = abertos.filter((t) => t.vencimento < hoje);
   const proximos = abertos.filter((t) => t.vencimento >= hoje && t.vencimento <= semana);
   const pagos = titulos.filter((t) => t.situacao === "pago");
-  const pagosMes = titulos.filter((t) => t.situacao === "pago" && (t.data_pagamento ?? "") >= inicioMes);
+  const cancelados = titulos.filter((t) => t.situacao === "cancelado");
   const soma = (l: Titulo[], campo: "valor" | "valor_pago" = "valor") => l.reduce((s, t) => s + Number(t[campo] ?? 0), 0);
 
   const pagando = filtros.pagar ? abertos.find((t) => t.id === filtros.pagar) : undefined;
@@ -127,8 +113,8 @@ async function PaginaContasPagar({ searchParams }: { searchParams: Promise<Filtr
   const colunas = ["Vencimento", ...(selecionada ? [] : ["Empresa"]), "Conta", "Categoria", "Valor", "Situação", ""];
 
   return (
-    <div className="space-y-6">
-      <CabecalhoTela codigo={TELA}>
+    <div className="space-y-3">
+      <CabecalhoTela codigo={TELA} empresa={selecionada}>
         {pode(acesso, "financeiro.notas_fornecedor", "criar") && (
           <Link href="/financeiro/notas-fornecedor/importar" className={estiloBotaoSecundario}>
             <FileUp size={16} /> Importar nota
@@ -143,9 +129,18 @@ async function PaginaContasPagar({ searchParams }: { searchParams: Promise<Filtr
 
       {criando && (
         <Cartao titulo="Nova conta a pagar">
-          <FormAcao acao={novaConta} rotulo="Salvar" className="space-y-4">
+          <FormAcao
+            extra={
+              <Link href="/financeiro/pagar" className={estiloBotaoSecundario}>
+                Cancelar
+              </Link>
+            }
+            acao={novaConta}
+            rotulo="Salvar"
+            className="space-y-4"
+          >
             {filtros.volta && <input type="hidden" name="volta" value={filtros.volta} />}
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
               <Campo rotulo="Empresa que paga" className="sm:col-span-2">
                 <select name="empresa_id" required defaultValue={filtros.empresa ?? selecionada?.id ?? ""} className={estiloCampo}>
                   <option value="" disabled>
@@ -206,19 +201,19 @@ async function PaginaContasPagar({ searchParams }: { searchParams: Promise<Filtr
                 <input name="observacao" className={estiloCampo} />
               </Campo>
             </div>
-            <div className="flex justify-end">
-              <Link href="/financeiro/pagar" className={estiloBotaoSecundario}>
-                Cancelar
-              </Link>
-            </div>
           </FormAcao>
         </Cartao>
       )}
 
       {pagando && pode(acesso, TELA, "editar") && (
         <Cartao titulo={`Pagar: ${pagando.descricao}${pagando.parcela ? ` (${pagando.parcela})` : ""}`}>
-          <FormAcao acao={pagarConta.bind(null, pagando.id)} rotulo="Confirmar pagamento" className="space-y-4">
-            <div className="grid gap-4 sm:grid-cols-3">
+          <FormAcao
+            extra={
+              <Link href="/financeiro/pagar" className={estiloBotaoSecundario}>
+                Cancelar
+              </Link>
+            } acao={pagarConta.bind(null, pagando.id)} rotulo="Confirmar pagamento" className="space-y-4">
+            <div className="grid gap-3 sm:grid-cols-3">
               <Campo rotulo="Data do pagamento">
                 <input name="data_pagamento" type="date" required defaultValue={hoje} className={estiloCampo} />
               </Campo>
@@ -238,29 +233,9 @@ async function PaginaContasPagar({ searchParams }: { searchParams: Promise<Filtr
                 <input name="valor_pago" required inputMode="decimal" defaultValue={pagando.valor} className={estiloCampo} />
               </Campo>
             </div>
-            <div className="flex justify-end">
-              <Link href="/financeiro/pagar" className={estiloBotaoSecundario}>
-                Cancelar
-              </Link>
-            </div>
           </FormAcao>
         </Cartao>
       )}
-
-      <FaixaEmpresa empresa={selecionada} />
-
-      <FiltroPeriodo periodo={periodo} hoje={hoje} campos={DATAS_PERIODO} semPeriodo="Em aberto e recentes" />
-
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <Resumo rotulo="Vencido" valor={soma(vencidos)} quantidade={vencidos.length} cor={vencidos.length ? "text-perigo" : ""} />
-        <Resumo rotulo="Vence nos próximos 7 dias" valor={soma(proximos)} quantidade={proximos.length} />
-        <Resumo rotulo={periodo ? "Em aberto no período" : "Total em aberto"} valor={soma(abertos)} quantidade={abertos.length} />
-        {periodo ? (
-          <Resumo rotulo="Pago no período" valor={soma(pagos, "valor_pago")} quantidade={pagos.length} cor="text-sucesso" />
-        ) : (
-          <Resumo rotulo="Pago neste mês" valor={soma(pagosMes, "valor_pago")} quantidade={pagosMes.length} cor="text-sucesso" />
-        )}
-      </div>
 
       {!selecionada && empresas.length > 1 && (
         <ResumoPorEmpresa
@@ -269,7 +244,7 @@ async function PaginaContasPagar({ searchParams }: { searchParams: Promise<Filtr
           caminho="/financeiro/pagar"
           extra={periodo ? `&de=${periodo.de}&ate=${periodo.ate}&por=${periodo.por}` : ""}
           linhas={empresas.map((e) => {
-            const grupos = [vencidos, proximos, abertos, periodo ? pagos : pagosMes].map((l) => l.filter((t) => t.empresa_id === e.id));
+            const grupos = [vencidos, proximos, abertos, pagos].map((l) => l.filter((t) => t.empresa_id === e.id));
             return {
               id: e.id,
               nome: e.nome,
@@ -277,25 +252,51 @@ async function PaginaContasPagar({ searchParams }: { searchParams: Promise<Filtr
               quantidades: grupos.map((g) => g.length),
             };
           })}
-          fonte={`Mesmos títulos dos quadros acima (${periodo ? "período escolhido" : "em aberto e pagos dos últimos 120 dias"}), separados pelo CNPJ que paga.`}
+          fonte={`Mesmos títulos da faixa de situação (${periodo ? "período escolhido" : "em aberto e pagos neste mês"}), separados pelo CNPJ que paga.`}
         />
       )}
 
       <Filtro
-        atalhos={[
-          {
-            rotulo: "Situação",
-            opcoes: [
-              { valor: "vencido", rotulo: "Vencidas" },
-              { valor: "semana", rotulo: "Próximos 7 dias" },
-              { valor: "aberto", rotulo: "Em aberto" },
-              { valor: "pago", rotulo: "Pagas" },
-              { valor: "cancelado", rotulo: "Canceladas" },
-            ],
-          },
-        ]}
+        situacoes={{
+          rotulo: "Situação",
+          opcoes: [
+            {
+              valor: "vencido",
+              rotulo: "Vencidas",
+              total: formatarMoeda(soma(vencidos)),
+              quantidade: vencidos.length,
+              cor: "perigo",
+              dica: `Em aberto com vencimento antes de ${formatarData(hoje)}.`,
+            },
+            {
+              valor: "semana",
+              rotulo: "Vencem em 7 dias",
+              total: formatarMoeda(soma(proximos)),
+              quantidade: proximos.length,
+              dica: `Em aberto com vencimento de ${formatarData(hoje)} a ${formatarData(semana)}.`,
+            },
+            {
+              valor: "aberto",
+              rotulo: periodo ? "Em aberto no período" : "Em aberto",
+              total: formatarMoeda(soma(abertos)),
+              quantidade: abertos.length,
+              dica: "Tudo que ainda não foi pago (vencido ou a vencer).",
+            },
+            {
+              valor: "pago",
+              rotulo: periodo ? "Pagas no período" : "Pagas no mês",
+              total: formatarMoeda(soma(pagos, "valor_pago")),
+              quantidade: pagos.length,
+              cor: "sucesso",
+              dica: "Valor efetivamente pago, com juros ou desconto.",
+            },
+            { valor: "cancelado", rotulo: "Canceladas", total: formatarMoeda(soma(cancelados)), quantidade: cancelados.length },
+            { valor: "", rotulo: "Todas", quantidade: titulos.length, total: "\u00a0" },
+          ],
+        }}
+        ferramentas={<FiltroPeriodo periodo={periodo} hoje={hoje} campos={DATAS_PERIODO} semPeriodo="Em aberto + pagas no mês" />}
         placeholder="Filtrar por fornecedor, descrição, empresa, valor..."
-        iniciais={filtros.situacao ? { Situação: filtros.situacao } : {}}
+        iniciais={{ Situação: filtros.situacao ?? "aberto" }}
       >
         <Tabela colunas={colunas} vazio="Nenhuma conta a pagar. Importe uma nota de fornecedor ou lance uma conta nova.">
           {titulos.map((t) => {
@@ -319,7 +320,7 @@ async function PaginaContasPagar({ searchParams }: { searchParams: Promise<Filtr
                   <span className="font-medium">{t.descricao}</span>
                   {t.parcela && <span className="text-texto-suave"> · {t.parcela}</span>}
                   {t.nota_id && (
-                    <span className="block text-xs">
+                    <span className="ml-2 text-xs">
                       <LinkAcao href={`/financeiro/notas-fornecedor/nota?id=${t.nota_id}`}>Ver nota</LinkAcao>
                     </span>
                   )}

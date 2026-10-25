@@ -1,10 +1,11 @@
 import Link from "next/link";
+import { formatarData } from "@/lib/formato";
 import { estiloBotaoSecundario, estiloCampo } from "./ui";
 
 // Filtro de período das telas financeiras: atalhos de mês e datas livres.
 // Vai na URL (?de=&ate=&por=), para o servidor buscar só o intervalo.
 
-const campoCurto = estiloCampo.replace("w-full", "w-auto") + " py-1.5";
+const campoCurto = estiloCampo.replace("w-full", "w-auto").replace("py-1.5", "py-1");
 
 export type Periodo = { de: string; ate: string; por: string } | null;
 
@@ -50,12 +51,14 @@ export function FiltroPeriodo({
     { rotulo: "Próximos 30 dias", ...dias(hoje, 30) },
   ];
   const ativo = (a: { de: string; ate: string }) => periodo?.de === a.de && periodo?.ate === a.ate;
+  const livre = !!periodo && !atalhos.some(ativo);
   const pilula = (marcado: boolean) =>
-    `rounded-full px-3 py-1 text-sm transition-colors ${marcado ? "bg-primaria-suave font-medium text-primaria" : "text-texto-suave hover:bg-superficie hover:text-texto"}`;
+    `whitespace-nowrap rounded-full px-2.5 py-0.5 text-[13px] transition-colors ${marcado ? "bg-primaria-suave font-medium text-primaria" : "text-texto-suave hover:bg-superficie hover:text-texto"}`;
 
+  // Uma linha: atalhos de período e, recolhidas, as datas livres.
   return (
-    <form method="get" className="flex flex-wrap items-center gap-x-3 gap-y-2">
-      <span className="text-sm text-texto-suave">Período</span>
+    <div className="flex flex-wrap items-center gap-x-0.5 gap-y-1">
+      <span className="mr-1 text-xs text-texto-suave">Período</span>
       <Link href="?" className={pilula(!periodo)}>
         {semPeriodo}
       </Link>
@@ -64,23 +67,28 @@ export function FiltroPeriodo({
           {a.rotulo}
         </Link>
       ))}
-      <span className="flex flex-wrap items-center gap-2">
-        {Object.keys(campos).length > 1 && (
-          <select name="por" defaultValue={por} aria-label="Data usada no período" className={campoCurto}>
-            {Object.entries(campos).map(([valor, rotulo]) => (
-              <option key={valor} value={valor}>
-                por {rotulo.toLowerCase()}
-              </option>
-            ))}
-          </select>
-        )}
-        <input type="date" name="de" required defaultValue={periodo?.de} aria-label="De" className={campoCurto} />
-        <span className="text-sm text-texto-suave">até</span>
-        <input type="date" name="ate" required defaultValue={periodo?.ate} aria-label="Até" className={campoCurto} />
-        <button type="submit" className={`${estiloBotaoSecundario} py-1.5`}>
-          Aplicar
-        </button>
-      </span>
-    </form>
+      <details className="group relative">
+        <summary className={`${pilula(livre)} cursor-pointer list-none [&::-webkit-details-marker]:hidden`}>
+          {livre ? `${formatarData(periodo.de)} a ${formatarData(periodo.ate)}` : "Outras datas…"}
+        </summary>
+        <form method="get" className="absolute left-0 top-full z-10 mt-1 flex flex-wrap items-center gap-2 rounded-xl bg-superficie p-2 shadow-[0_4px_16px_rgba(16,24,40,0.12)] group-open:min-w-max">
+          {Object.keys(campos).length > 1 && (
+            <select name="por" defaultValue={por} aria-label="Data usada no período" className={campoCurto}>
+              {Object.entries(campos).map(([valor, rotulo]) => (
+                <option key={valor} value={valor}>
+                  por {rotulo.toLowerCase()}
+                </option>
+              ))}
+            </select>
+          )}
+          <input type="date" name="de" required defaultValue={periodo?.de} aria-label="De" className={campoCurto} />
+          <span className="text-sm text-texto-suave">até</span>
+          <input type="date" name="ate" required defaultValue={periodo?.ate} aria-label="Até" className={campoCurto} />
+          <button type="submit" className={`${estiloBotaoSecundario} py-1`}>
+            Aplicar
+          </button>
+        </form>
+      </details>
+    </div>
   );
 }

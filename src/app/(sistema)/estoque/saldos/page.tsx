@@ -83,7 +83,7 @@ async function PaginaSaldos({ searchParams }: { searchParams: Promise<Filtros> }
   const saldoNoLocal = new Map(saldos.filter((s) => s.local_id === contando?.id).map((s) => [s.item_id, Number(s.saldo)]));
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-3">
       <CabecalhoTela codigo={TELA}>
         {pode(acesso, "estoque.movimentos", "ver") && (
           <Link href="/estoque/movimentos" className={estiloBotaoSecundario}>
@@ -160,7 +160,7 @@ async function PaginaSaldos({ searchParams }: { searchParams: Promise<Filtros> }
         </Cartao>
       )}
 
-      <div className="grid gap-4 sm:grid-cols-3">
+      <div className="grid gap-3 sm:grid-cols-3">
         <Indicador
           rotulo="Abaixo do estoque mínimo"
           valor={abaixo.length}

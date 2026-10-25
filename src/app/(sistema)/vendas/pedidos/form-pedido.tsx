@@ -61,9 +61,9 @@ export function FormPedido({
   const porId = new Map(produtos.map((p) => [p.id, p]));
 
   return (
-    <FormAcao acao={acao} rotulo="Salvar pedido" className="space-y-5">
+    <FormAcao acao={acao} rotulo="Salvar pedido" className="space-y-3">
       <input type="hidden" name="itens" value={JSON.stringify(itens)} />
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <Campo rotulo="Empresa que vende" className="sm:col-span-2">
           <select
             name="empresa_id"
