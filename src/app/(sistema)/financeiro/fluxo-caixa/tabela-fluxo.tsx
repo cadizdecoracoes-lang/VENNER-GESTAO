@@ -1,6 +1,6 @@
 "use client";
 
-import { useRouter } from "next/navigation";
+import { revalidatePath } from "@/lib/navegacao";
 import { useState, useTransition } from "react";
 import type { Fluxo, LinhaFluxo, Rastreio } from "@/lib/fluxo-caixa";
 import { formatarData, formatarMoeda } from "@/lib/formato";
@@ -38,7 +38,6 @@ export function TabelaFluxo({
   podeDigitar: boolean;
   rotuloAnterior: string;
 }) {
-  const router = useRouter();
   const [abertos, setAbertos] = useState<Set<string>>(new Set());
   const [editando, setEditando] = useState<string | null>(null);
   const [erro, setErro] = useState<string | null>(null);
@@ -76,7 +75,7 @@ export function TabelaFluxo({
       if (r.erro) setErro(r.erro);
       else {
         setErro(null);
-        router.refresh();
+        revalidatePath();
       }
     });
   }

@@ -1,3 +1,5 @@
+"use client";
+
 import { FileUp } from "lucide-react";
 import Link from "next/link";
 import { Filtro } from "@/components/filtro";
@@ -7,7 +9,8 @@ import { carregarEmpresas, empresaSelecionada } from "@/lib/empresa";
 import { formatarData, formatarMoeda } from "@/lib/formato";
 import { ORIGENS_NOTA, type OrigemNota } from "@/lib/rotulos";
 import { supabaseConfigurado } from "@/lib/supabase/config";
-import { criarClienteServidor } from "@/lib/supabase/server";
+import { criarClienteNavegador } from "@/lib/supabase/client";
+import { TelaCliente } from "@/components/tela-cliente";
 
 const TELA = "financeiro.notas_fornecedor";
 
@@ -33,14 +36,14 @@ function situacao(n: Nota): { tag: string; rotulo: string; cor: "neutra" | "prim
   return { tag: "pronta", rotulo: "Pronta para entrada", cor: "primaria" };
 }
 
-export default async function PaginaNotasFornecedor() {
+async function PaginaNotasFornecedor() {
   const acesso = await carregarAcesso();
   if (!pode(acesso, TELA, "ver")) return <SemAcesso codigo={TELA} />;
   const [empresas, selecionada] = await Promise.all([carregarEmpresas(), empresaSelecionada()]);
 
   let notas: Nota[] = [];
   if (supabaseConfigurado) {
-    const supabase = await criarClienteServidor();
+    const supabase = criarClienteNavegador();
     let consulta = supabase
       .from("notas_fornecedor")
       .select(
@@ -98,7 +101,7 @@ export default async function PaginaNotasFornecedor() {
                   <Etiqueta cor={s.cor}>{s.rotulo}</Etiqueta>
                 </Celula>
                 <Celula className="text-right">
-                  <LinkAcao href={`/financeiro/notas-fornecedor/${n.id}`}>Abrir</LinkAcao>
+                  <LinkAcao href={`/financeiro/notas-fornecedor/nota?id=${n.id}`}>Abrir</LinkAcao>
                 </Celula>
               </tr>
             );
@@ -107,4 +110,8 @@ export default async function PaginaNotasFornecedor() {
       </Filtro>
     </div>
   );
+}
+
+export default function Pagina() {
+  return <TelaCliente montar={PaginaNotasFornecedor} />;
 }

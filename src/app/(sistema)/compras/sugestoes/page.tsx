@@ -1,3 +1,5 @@
+"use client";
+
 import Link from "next/link";
 import { Filtro } from "@/components/filtro";
 import { CabecalhoTela, Cartao, Celula, Etiqueta, Fonte, Indicador, LinkAcao, SemAcesso, Tabela } from "@/components/ui";
@@ -6,6 +8,7 @@ import { hojeBrasil, somarDias } from "@/lib/datas";
 import { formatarData, formatarMoeda, formatarNumero } from "@/lib/formato";
 import { necessidadeMateriais, type ItemPlan } from "@/lib/planejamento";
 import { carregarPlanejamento } from "@/lib/planejamento-servidor";
+import { TelaCliente } from "@/components/tela-cliente";
 
 const TELA = "compras.sugestoes";
 const COMPRADOS = ["materia_prima", "embalagem"];
@@ -21,7 +24,7 @@ type Linha = {
   so_minimo: boolean;
 };
 
-export default async function PaginaSugestoes() {
+async function PaginaSugestoes() {
   const acesso = await carregarAcesso();
   if (!pode(acesso, TELA, "ver")) return <SemAcesso codigo={TELA} />;
   const hoje = hojeBrasil();
@@ -150,7 +153,7 @@ export default async function PaginaSugestoes() {
                       {l.pedidos.map((n, k) => (
                         <span key={n}>
                           {k > 0 && ", "}
-                          <LinkAcao href={`/vendas/pedidos/${idPedido.get(n)}`}>{n}</LinkAcao>
+                          <LinkAcao href={`/vendas/pedidos/pedido?id=${idPedido.get(n)}`}>{n}</LinkAcao>
                         </span>
                       ))}
                     </Celula>
@@ -183,7 +186,7 @@ export default async function PaginaSugestoes() {
                       {l.pedidos.map((n, k) => (
                         <span key={n}>
                           {k > 0 && ", "}
-                          <LinkAcao href={`/vendas/pedidos/${idPedido.get(n)}`}>{n}</LinkAcao>
+                          <LinkAcao href={`/vendas/pedidos/pedido?id=${idPedido.get(n)}`}>{n}</LinkAcao>
                         </span>
                       ))}
                     </Celula>
@@ -206,4 +209,8 @@ export default async function PaginaSugestoes() {
       )}
     </div>
   );
+}
+
+export default function Pagina() {
+  return <TelaCliente montar={PaginaSugestoes} />;
 }

@@ -1,3 +1,5 @@
+"use client";
+
 import Link from "next/link";
 import { CabecalhoTela, SemAcesso, estiloBotaoSecundario } from "@/components/ui";
 import { carregarAcesso, pode } from "@/lib/acesso";
@@ -6,8 +8,9 @@ import { empresaSelecionada } from "@/lib/empresa";
 import { montarFluxo, somarMeses, ultimoDiaMes, type CategoriaFluxo, type MovimentoFluxo, type SaldoConta } from "@/lib/fluxo-caixa";
 import { formatarData, formatarMoeda } from "@/lib/formato";
 import { supabaseConfigurado } from "@/lib/supabase/config";
-import { criarClienteServidor } from "@/lib/supabase/server";
+import { criarClienteNavegador } from "@/lib/supabase/client";
 import { TabelaFluxo } from "./tabela-fluxo";
+import { TelaCliente } from "@/components/tela-cliente";
 
 const TELA = "financeiro.fluxo_caixa";
 const MESES = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
@@ -16,7 +19,7 @@ const curto = (iso: string) => `${MESES[Number(iso.slice(5, 7)) - 1].slice(0, 3)
 
 // A função pode devolver mais de 1.000 linhas: lê em páginas.
 async function movimentos(de: string, ate: string, empresa: string | null): Promise<MovimentoFluxo[]> {
-  const supabase = await criarClienteServidor();
+  const supabase = criarClienteNavegador();
   const lista: MovimentoFluxo[] = [];
   for (let i = 0; ; i += 1000) {
     const { data, error } = await supabase.rpc("fluxo_caixa", { de, ate, empresa }).range(i, i + 999);
@@ -29,7 +32,7 @@ async function movimentos(de: string, ate: string, empresa: string | null): Prom
 
 async function carregar(de: string, ate: string, antDe: string, antAte: string, empresa: string | null) {
   if (!supabaseConfigurado) return { movimentos: [], anteriores: [], saldos: [], categorias: [], pendentesExtrato: 0 };
-  const supabase = await criarClienteServidor();
+  const supabase = criarClienteNavegador();
   const [atuais, anteriores, saldos, categorias, pendentes] = await Promise.all([
     movimentos(de, ate, empresa),
     movimentos(antDe, antAte, empresa),
@@ -48,7 +51,7 @@ async function carregar(de: string, ate: string, antDe: string, antAte: string, 
   };
 }
 
-export default async function PaginaFluxoCaixa({ searchParams }: { searchParams: Promise<{ modo?: string; mes?: string; inicio?: string }> }) {
+async function PaginaFluxoCaixa({ searchParams }: { searchParams: Promise<{ modo?: string; mes?: string; inicio?: string }> }) {
   const acesso = await carregarAcesso();
   if (!pode(acesso, TELA, "ver")) return <SemAcesso codigo={TELA} />;
   const filtros = await searchParams;
@@ -178,4 +181,8 @@ export default async function PaginaFluxoCaixa({ searchParams }: { searchParams:
       </p>
     </div>
   );
+}
+
+export default function Pagina() {
+  return <TelaCliente montar={PaginaFluxoCaixa} />;
 }

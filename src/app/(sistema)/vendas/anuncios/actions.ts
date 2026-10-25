@@ -1,11 +1,8 @@
-"use server";
-
-import { revalidatePath } from "next/cache";
-import { redirect } from "next/navigation";
+import { redirect, revalidatePath } from "@/lib/navegacao";
 import { mensagemErro, semLinhas, SEM_BANCO, type Estado } from "@/lib/erros";
 import { lerNumero } from "@/lib/formato";
 import { supabaseConfigurado } from "@/lib/supabase/config";
-import { criarClienteServidor } from "@/lib/supabase/server";
+import { criarClienteNavegador } from "@/lib/supabase/client";
 
 const CAMINHO = "/vendas/anuncios";
 
@@ -37,7 +34,7 @@ export async function salvarAnuncio(id: string | null, voltar: string | null, _:
   const invalido = conferir(anuncio);
   if (invalido) return invalido;
 
-  const supabase = await criarClienteServidor();
+  const supabase = criarClienteNavegador();
   const { data, error } = id
     ? await supabase.from("anuncios_plataforma").update(anuncio).eq("id", id).select("id")
     : await supabase.from("anuncios_plataforma").insert(anuncio).select("id");
@@ -50,7 +47,7 @@ export async function salvarAnuncio(id: string | null, voltar: string | null, _:
 
 export async function removerAnuncio(id: string): Promise<Estado> {
   if (!supabaseConfigurado) return SEM_BANCO;
-  const supabase = await criarClienteServidor();
+  const supabase = criarClienteNavegador();
   const { data, error } = await supabase.from("anuncios_plataforma").delete().eq("id", id).select("id");
   if (error) return { erro: mensagemErro(error) };
   const bloqueado = semLinhas(data);

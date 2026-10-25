@@ -1,23 +1,26 @@
+"use client";
+
 import { CabecalhoTela, SemAcesso } from "@/components/ui";
 import { carregarAcesso, pode } from "@/lib/acesso";
 import { carregarEmpresas, empresaSelecionada } from "@/lib/empresa";
 import { carregarLocais } from "@/lib/financeiro";
 import { carregarProdutosVenda } from "@/lib/vendas";
 import { supabaseConfigurado } from "@/lib/supabase/config";
-import { criarClienteServidor } from "@/lib/supabase/server";
+import { criarClienteNavegador } from "@/lib/supabase/client";
 import { ImportarVendas } from "./importar-vendas";
+import { TelaCliente } from "@/components/tela-cliente";
 
 const TELA = "financeiro.receber";
 
 // Códigos já ligados a produto, por empresa e plataforma ("empresa|canal|código").
 async function carregarLigados(): Promise<string[]> {
   if (!supabaseConfigurado) return [];
-  const supabase = await criarClienteServidor();
+  const supabase = criarClienteNavegador();
   const { data } = await supabase.from("anuncios_plataforma").select("empresa_id, canal, codigo").limit(10000);
   return [...new Set((data ?? []).map((a) => `${a.empresa_id}|${a.canal}|${a.codigo}`))];
 }
 
-export default async function PaginaImportarVendas() {
+async function PaginaImportarVendas() {
   const acesso = await carregarAcesso();
   if (!pode(acesso, TELA, "criar")) return <SemAcesso codigo={TELA} />;
   const [empresas, selecionada, locais, produtos, ligados] = await Promise.all([
@@ -39,4 +42,8 @@ export default async function PaginaImportarVendas() {
       />
     </div>
   );
+}
+
+export default function Pagina() {
+  return <TelaCliente montar={PaginaImportarVendas} />;
 }

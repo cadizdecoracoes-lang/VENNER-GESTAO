@@ -1,3 +1,5 @@
+"use client";
+
 import { FileUp, Plus } from "lucide-react";
 import Link from "next/link";
 import { Filtro } from "@/components/filtro";
@@ -25,8 +27,9 @@ import { hojeBrasil, somarDias } from "@/lib/datas";
 import { formatarData, formatarMoeda } from "@/lib/formato";
 import { type SituacaoTitulo } from "@/lib/rotulos";
 import { supabaseConfigurado } from "@/lib/supabase/config";
-import { criarClienteServidor } from "@/lib/supabase/server";
+import { criarClienteNavegador } from "@/lib/supabase/client";
 import { cancelarConta, estornarPagamento, novaConta, pagarConta, reabrirConta } from "./actions";
+import { TelaCliente } from "@/components/tela-cliente";
 
 const TELA = "financeiro.pagar";
 
@@ -53,7 +56,7 @@ const DATAS_PERIODO = { vencimento: "Vencimento", data_pagamento: "Pagamento" };
 
 async function carregar(empresa: string | null, periodo: Periodo): Promise<Titulo[]> {
   if (!supabaseConfigurado) return [];
-  const supabase = await criarClienteServidor();
+  const supabase = criarClienteNavegador();
   let consulta = supabase
     .from("contas_pagar")
     .select(
@@ -84,7 +87,7 @@ function Resumo({ rotulo, valor, quantidade, cor }: { rotulo: string; valor: num
   );
 }
 
-export default async function PaginaContasPagar({ searchParams }: { searchParams: Promise<Filtros> }) {
+async function PaginaContasPagar({ searchParams }: { searchParams: Promise<Filtros> }) {
   const acesso = await carregarAcesso();
   if (!pode(acesso, TELA, "ver")) return <SemAcesso codigo={TELA} />;
 
@@ -108,7 +111,7 @@ export default async function PaginaContasPagar({ searchParams }: { searchParams
   const criando = !!filtros.novo && pode(acesso, TELA, "criar");
   const [contasBancarias, fornecedores, categorias, centros] = await Promise.all([
     pagando && supabaseConfigurado
-      ? (await criarClienteServidor())
+      ? (criarClienteNavegador())
           .from("contas_bancarias")
           .select("id, nome")
           .eq("empresa_id", pagando.empresa_id)
@@ -317,7 +320,7 @@ export default async function PaginaContasPagar({ searchParams }: { searchParams
                   {t.parcela && <span className="text-texto-suave"> · {t.parcela}</span>}
                   {t.nota_id && (
                     <span className="block text-xs">
-                      <LinkAcao href={`/financeiro/notas-fornecedor/${t.nota_id}`}>Ver nota</LinkAcao>
+                      <LinkAcao href={`/financeiro/notas-fornecedor/nota?id=${t.nota_id}`}>Ver nota</LinkAcao>
                     </span>
                   )}
                 </Celula>
@@ -383,4 +386,8 @@ export default async function PaginaContasPagar({ searchParams }: { searchParams
       </Filtro>
     </div>
   );
+}
+
+export default function Pagina() {
+  return <TelaCliente montar={PaginaContasPagar} />;
 }

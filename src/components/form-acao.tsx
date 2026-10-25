@@ -28,7 +28,9 @@ export function FormAcao({
   className?: string;
   children?: React.ReactNode;
 }) {
-  const [estado, enviar, pendente] = useActionState(acao, {});
+  // Ação que termina indo para outra tela (redirect) não devolve estado.
+  const [resultado, enviar, pendente] = useActionState(acao, {});
+  const estado: Estado = resultado ?? {};
   const form = useRef<HTMLFormElement>(null);
 
   useEffect(() => {

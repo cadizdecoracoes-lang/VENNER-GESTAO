@@ -1,3 +1,5 @@
+"use client";
+
 import { FileUp, Link2 } from "lucide-react";
 import Link from "next/link";
 import { FormAcao } from "@/components/form-acao";
@@ -10,6 +12,7 @@ import { formatarData, formatarMoeda } from "@/lib/formato";
 import { conciliar, conciliarSugestoes, desfazer } from "./actions";
 import { carregarCandidatos, carregarConferencia, carregarContas, carregarIndicadores, carregarLinhas, carregarPendentes, nomePessoa, type LinhaConciliacao } from "./dados";
 import { PainelResolver } from "./painel-resolver";
+import { TelaCliente } from "@/components/tela-cliente";
 
 const TELA = "financeiro.conciliacao";
 const variacao = (atual: number, antes: number) => `${atual >= antes ? "+" : ""}${Math.round(((atual - antes) / antes) * 100)}%`;
@@ -43,7 +46,7 @@ function Ligacoes({ linha }: { linha: LinhaConciliacao }) {
   );
 }
 
-export default async function PaginaConciliacao({ searchParams }: { searchParams: Promise<Filtros> }) {
+async function PaginaConciliacao({ searchParams }: { searchParams: Promise<Filtros> }) {
   const acesso = await carregarAcesso();
   if (!pode(acesso, TELA, "ver")) return <SemAcesso codigo={TELA} />;
   const filtros = await searchParams;
@@ -295,4 +298,8 @@ export default async function PaginaConciliacao({ searchParams }: { searchParams
       )}
     </div>
   );
+}
+
+export default function Pagina() {
+  return <TelaCliente montar={PaginaConciliacao} />;
 }

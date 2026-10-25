@@ -1,3 +1,5 @@
+"use client";
+
 import { CabecalhoTela, Celula, Etiqueta, Fonte, Indicador, LinkAcao, SemAcesso, Tabela } from "@/components/ui";
 import { Filtro } from "@/components/filtro";
 import { carregarAcesso, pode } from "@/lib/acesso";
@@ -6,10 +8,11 @@ import { carregarEmpresas } from "@/lib/empresa";
 import { formatarData, formatarMoeda, formatarNumero } from "@/lib/formato";
 import { filaProducao } from "@/lib/planejamento";
 import { carregarPlanejamento } from "@/lib/planejamento-servidor";
+import { TelaCliente } from "@/components/tela-cliente";
 
 const TELA = "producao.sequenciamento";
 
-export default async function PaginaSequenciamento() {
+async function PaginaSequenciamento() {
   const acesso = await carregarAcesso();
   if (!pode(acesso, TELA, "ver")) return <SemAcesso codigo={TELA} />;
   const hoje = hojeBrasil();
@@ -87,7 +90,7 @@ export default async function PaginaSequenciamento() {
                 >
                   <Celula className="tabular-nums text-texto-suave">{k + 1}</Celula>
                   <Celula className="whitespace-nowrap">
-                    <LinkAcao href={`/vendas/pedidos/${f.pedido.id}`}>Nº {f.pedido.numero}</LinkAcao>
+                    <LinkAcao href={`/vendas/pedidos/pedido?id=${f.pedido.id}`}>Nº {f.pedido.numero}</LinkAcao>
                     <span className="block text-xs text-texto-suave">{f.pedido.etapa}</span>
                   </Celula>
                   <Celula>
@@ -137,4 +140,8 @@ export default async function PaginaSequenciamento() {
       )}
     </div>
   );
+}
+
+export default function Pagina() {
+  return <TelaCliente montar={PaginaSequenciamento} />;
 }

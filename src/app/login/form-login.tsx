@@ -23,7 +23,7 @@ export function FormLogin({ erroInicial }: { erroInicial?: string }) {
       <form action={acao} className="space-y-4">
         <CampoEntrada rotulo="E-mail" name="email" type="email" autoComplete="email" />
         <CampoEntrada rotulo="Senha" name="senha" type="password" autoComplete="current-password" />
-        <Mensagens erro={estado.erro ?? erroInicial} />
+        <Mensagens erro={estado?.erro ?? erroInicial} />
         <BotaoEntrada enviando={enviando} rotulo="Entrar" rotuloEnviando="Entrando..." />
       </form>
       <LinkEntrada href="/login/esqueci">Esqueci minha senha</LinkEntrada>

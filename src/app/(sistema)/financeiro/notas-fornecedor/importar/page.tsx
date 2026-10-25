@@ -1,15 +1,18 @@
+"use client";
+
 import { CabecalhoTela, SemAcesso } from "@/components/ui";
 import { carregarAcesso, pode } from "@/lib/acesso";
 import { carregarCategoriasDespesa, carregarCentrosCusto, carregarFornecedores } from "@/lib/financeiro";
 import { supabaseConfigurado } from "@/lib/supabase/config";
-import { criarClienteServidor } from "@/lib/supabase/server";
+import { criarClienteNavegador } from "@/lib/supabase/client";
 import { ImportarNota } from "./importar-nota";
+import { TelaCliente } from "@/components/tela-cliente";
 
 const TELA = "financeiro.notas_fornecedor";
 
 async function carregarEmpresasComCnpj() {
   if (!supabaseConfigurado) return [];
-  const supabase = await criarClienteServidor();
+  const supabase = criarClienteNavegador();
   const { data } = await supabase.from("empresas").select("id, cnpj, nome_fantasia, razao_social").eq("ativa", true).order("razao_social");
   return (data ?? []).map((e) => ({ id: e.id, cnpj: e.cnpj, nome: e.nome_fantasia || e.razao_social }));
 }
@@ -17,7 +20,7 @@ async function carregarEmpresasComCnpj() {
 // Última categoria e centro de custo usados com cada fornecedor, para sugerir.
 async function carregarUltimos() {
   if (!supabaseConfigurado) return {};
-  const supabase = await criarClienteServidor();
+  const supabase = criarClienteNavegador();
   const { data } = await supabase
     .from("contas_pagar")
     .select("fornecedor_id, categoria_id, centro_custo_id")
@@ -30,7 +33,7 @@ async function carregarUltimos() {
   return ultimos;
 }
 
-export default async function PaginaImportarNota() {
+async function PaginaImportarNota() {
   const acesso = await carregarAcesso();
   if (!pode(acesso, TELA, "criar")) return <SemAcesso codigo={TELA} />;
   const [empresas, fornecedores, categorias, centros, ultimos] = await Promise.all([
@@ -46,4 +49,8 @@ export default async function PaginaImportarNota() {
       <ImportarNota empresas={empresas} fornecedores={fornecedores} categorias={categorias} centros={centros} ultimos={ultimos} />
     </div>
   );
+}
+
+export default function Pagina() {
+  return <TelaCliente montar={PaginaImportarNota} />;
 }

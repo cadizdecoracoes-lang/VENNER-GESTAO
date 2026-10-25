@@ -1,11 +1,8 @@
-"use server";
-
-import { revalidatePath } from "next/cache";
-import { redirect } from "next/navigation";
+import { redirect, revalidatePath } from "@/lib/navegacao";
 import { mensagemErro, SEM_BANCO, type Estado } from "@/lib/erros";
 import { lerNumero } from "@/lib/formato";
 import { supabaseConfigurado } from "@/lib/supabase/config";
-import { criarClienteServidor } from "@/lib/supabase/server";
+import { criarClienteNavegador } from "@/lib/supabase/client";
 
 // Cada campo "contagem_<item>" preenchido é um item contado; vazio fica como está.
 export async function registrarInventario(local: string, _: Estado, form: FormData): Promise<Estado> {
@@ -18,7 +15,7 @@ export async function registrarInventario(local: string, _: Estado, form: FormDa
     contagens.push({ item_id: campo.slice("contagem_".length), quantidade });
   }
   if (contagens.length === 0) return { erro: "Preencha a quantidade contada de pelo menos um item." };
-  const supabase = await criarClienteServidor();
+  const supabase = criarClienteNavegador();
   const { data, error } = await supabase.rpc("registrar_inventario", {
     local,
     contagens,

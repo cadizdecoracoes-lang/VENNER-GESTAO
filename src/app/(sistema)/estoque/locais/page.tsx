@@ -1,3 +1,5 @@
+"use client";
+
 import { Plus } from "lucide-react";
 import Link from "next/link";
 import { ATALHO_SITUACAO, Filtro } from "@/components/filtro";
@@ -17,8 +19,9 @@ import {
 } from "@/components/ui";
 import { carregarAcesso, pode } from "@/lib/acesso";
 import { supabaseConfigurado } from "@/lib/supabase/config";
-import { criarClienteServidor } from "@/lib/supabase/server";
+import { criarClienteNavegador } from "@/lib/supabase/client";
 import { salvarLocal } from "./actions";
+import { TelaCliente } from "@/components/tela-cliente";
 
 const TELA = "estoque.locais";
 
@@ -26,12 +29,12 @@ type Local = { id: string; nome: string; ativo: boolean };
 
 async function carregar(): Promise<Local[]> {
   if (!supabaseConfigurado) return [];
-  const supabase = await criarClienteServidor();
+  const supabase = criarClienteNavegador();
   const { data } = await supabase.from("locais_estoque").select("id, nome, ativo").order("nome");
   return (data ?? []) as Local[];
 }
 
-export default async function PaginaLocais({ searchParams }: { searchParams: Promise<{ editar?: string; novo?: string }> }) {
+async function PaginaLocais({ searchParams }: { searchParams: Promise<{ editar?: string; novo?: string }> }) {
   const acesso = await carregarAcesso();
   if (!pode(acesso, TELA, "ver")) return <SemAcesso codigo={TELA} />;
 
@@ -82,4 +85,8 @@ export default async function PaginaLocais({ searchParams }: { searchParams: Pro
       </Filtro>
     </div>
   );
+}
+
+export default function Pagina() {
+  return <TelaCliente montar={PaginaLocais} />;
 }

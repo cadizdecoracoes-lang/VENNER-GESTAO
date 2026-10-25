@@ -1,3 +1,5 @@
+"use client";
+
 import { Plus } from "lucide-react";
 import Link from "next/link";
 import { Filtro } from "@/components/filtro";
@@ -22,8 +24,9 @@ import { formatarMoeda, formatarNumero } from "@/lib/formato";
 import { NOME_CANAL, type Canal } from "@/lib/plataformas/tipos";
 import { carregarProdutosVenda } from "@/lib/vendas";
 import { supabaseConfigurado } from "@/lib/supabase/config";
-import { criarClienteServidor } from "@/lib/supabase/server";
+import { criarClienteNavegador } from "@/lib/supabase/client";
 import { removerAnuncio, salvarAnuncio } from "./actions";
+import { TelaCliente } from "@/components/tela-cliente";
 
 const TELA = "vendas.anuncios";
 
@@ -41,7 +44,7 @@ type Filtros = { novo?: string; editar?: string; codigo?: string; canal?: string
 
 async function carregar(empresa: string | null): Promise<Anuncio[]> {
   if (!supabaseConfigurado) return [];
-  const supabase = await criarClienteServidor();
+  const supabase = criarClienteNavegador();
   let consulta = supabase
     .from("anuncios_plataforma")
     .select("id, empresa_id, canal, codigo, titulo, item_id, quantidade, itens(codigo, descricao, preco_venda)")
@@ -52,7 +55,7 @@ async function carregar(empresa: string | null): Promise<Anuncio[]> {
   return ((await consulta).data ?? []) as unknown as Anuncio[];
 }
 
-export default async function PaginaAnuncios({ searchParams }: { searchParams: Promise<Filtros> }) {
+async function PaginaAnuncios({ searchParams }: { searchParams: Promise<Filtros> }) {
   const acesso = await carregarAcesso();
   if (!pode(acesso, TELA, "ver")) return <SemAcesso codigo={TELA} />;
 
@@ -192,4 +195,8 @@ export default async function PaginaAnuncios({ searchParams }: { searchParams: P
       </Filtro>
     </div>
   );
+}
+
+export default function Pagina() {
+  return <TelaCliente montar={PaginaAnuncios} />;
 }

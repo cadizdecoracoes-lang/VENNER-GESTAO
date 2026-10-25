@@ -1,8 +1,6 @@
-"use server";
-
-import { redirect } from "next/navigation";
 import { enderecoPublico } from "@/lib/endereco";
-import { criarClienteServidor } from "@/lib/supabase/server";
+import { criarClienteNavegador } from "@/lib/supabase/client";
+import { redirect } from "@/lib/navegacao";
 
 export type EstadoLogin = { erro?: string; aviso?: string };
 
@@ -21,7 +19,7 @@ function motivo(mensagem: string) {
 }
 
 export async function entrar(_: EstadoLogin, form: FormData): Promise<EstadoLogin> {
-  const supabase = await criarClienteServidor();
+  const supabase = criarClienteNavegador();
   const { error } = await supabase.auth.signInWithPassword({
     email: String(form.get("email") ?? "").trim(),
     password: String(form.get("senha") ?? ""),
@@ -33,7 +31,7 @@ export async function entrar(_: EstadoLogin, form: FormData): Promise<EstadoLogi
 export async function enviarRecuperacao(_: EstadoLogin, form: FormData): Promise<EstadoLogin> {
   const email = String(form.get("email") ?? "").trim();
   if (!email) return { erro: "Informe o seu e-mail." };
-  const supabase = await criarClienteServidor();
+  const supabase = criarClienteNavegador();
   const { error } = await supabase.auth.resetPasswordForEmail(email, {
     redirectTo: `${await enderecoPublico()}/login/confirmar?proximo=/login/nova-senha`,
   });
@@ -47,7 +45,7 @@ export async function trocarSenha(_: EstadoLogin, form: FormData): Promise<Estad
   const senha = String(form.get("senha") ?? "");
   if (senha.length < 8) return { erro: "Use pelo menos 8 caracteres." };
   if (senha !== String(form.get("confirmacao") ?? "")) return { erro: "As duas senhas não são iguais." };
-  const supabase = await criarClienteServidor();
+  const supabase = criarClienteNavegador();
   const {
     data: { user },
   } = await supabase.auth.getUser();
@@ -58,7 +56,7 @@ export async function trocarSenha(_: EstadoLogin, form: FormData): Promise<Estad
 }
 
 export async function sair() {
-  const supabase = await criarClienteServidor();
+  const supabase = criarClienteNavegador();
   await supabase.auth.signOut();
   redirect("/login");
 }

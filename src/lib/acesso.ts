@@ -1,6 +1,6 @@
-import { cache } from "react";
+import { guardado } from "@/lib/navegacao";
 import { supabaseConfigurado } from "@/lib/supabase/config";
-import { criarClienteServidor } from "@/lib/supabase/server";
+import { criarClienteNavegador } from "@/lib/supabase/client";
 
 export type Acao = "ver" | "criar" | "editar" | "aprovar" | "excluir";
 
@@ -12,10 +12,10 @@ export type Acesso = {
   permissoes: Set<string> | null;
 };
 
-// Uma consulta por requisição, compartilhada entre o layout e a página.
-export const carregarAcesso = cache(async (): Promise<Acesso> => {
+// Uma consulta só, compartilhada entre o layout e as telas (refeita depois de gravar).
+export const carregarAcesso = guardado(async (): Promise<Acesso> => {
   if (!supabaseConfigurado) return { email: null, ativo: true, permissoes: null };
-  const supabase = await criarClienteServidor();
+  const supabase = criarClienteNavegador();
   const {
     data: { user },
   } = await supabase.auth.getUser();

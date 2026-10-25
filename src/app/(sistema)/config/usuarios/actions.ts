@@ -1,10 +1,7 @@
-"use server";
-
-import { revalidatePath } from "next/cache";
-import { redirect } from "next/navigation";
+import { redirect, revalidatePath } from "@/lib/navegacao";
 import { mensagemErro, semLinhas, SEM_BANCO, type Estado } from "@/lib/erros";
 import { supabaseConfigurado } from "@/lib/supabase/config";
-import { criarClienteServidor } from "@/lib/supabase/server";
+import { criarClienteNavegador } from "@/lib/supabase/client";
 
 export async function salvarUsuario(id: string, _: Estado, form: FormData): Promise<Estado> {
   if (!supabaseConfigurado) return SEM_BANCO;
@@ -15,7 +12,7 @@ export async function salvarUsuario(id: string, _: Estado, form: FormData): Prom
   if (!nome) return { erro: "Informe o nome." };
   if (ativo && !perfil) return { erro: "Escolha o perfil antes de liberar o acesso." };
 
-  const supabase = await criarClienteServidor();
+  const supabase = criarClienteNavegador();
   const { data, error } = await supabase.from("usuarios").update({ nome, perfil_id: perfil, ativo }).eq("id", id).select("id");
   if (error) return { erro: mensagemErro(error) };
   const bloqueado = semLinhas(data);

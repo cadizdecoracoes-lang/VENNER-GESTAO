@@ -383,6 +383,18 @@ inspector_port = 8083
 # The Deno major version to use.
 deno_version = 2
 
+# Edge Functions do sistema (supabase/functions). O login de quem chama é
+# conferido pelo banco em cada função (RLS e tem_permissao), não pelo portão
+# do Supabase: o robô e a volta das plataformas chegam sem login.
+[functions.robo-tiny]
+verify_jwt = false
+
+[functions.integracoes]
+verify_jwt = false
+
+[functions.integracoes-retorno]
+verify_jwt = false
+
 # [edge_runtime.secrets]
 # secret_key = "env(SECRET_VALUE)"
 

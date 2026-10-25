@@ -1,3 +1,5 @@
+"use client";
+
 import { Plus } from "lucide-react";
 import Link from "next/link";
 import { ATALHO_SITUACAO, Filtro } from "@/components/filtro";
@@ -18,8 +20,9 @@ import {
 import { carregarAcesso, pode } from "@/lib/acesso";
 import { formatarMoeda, formatarNumero } from "@/lib/formato";
 import { supabaseConfigurado } from "@/lib/supabase/config";
-import { criarClienteServidor } from "@/lib/supabase/server";
+import { criarClienteNavegador } from "@/lib/supabase/client";
 import { salvarPosto } from "./actions";
+import { TelaCliente } from "@/components/tela-cliente";
 
 const TELA = "producao.postos";
 
@@ -27,12 +30,12 @@ type Posto = { id: string; nome: string; custo_hora: number; capacidade_horas_di
 
 async function carregar(): Promise<Posto[]> {
   if (!supabaseConfigurado) return [];
-  const supabase = await criarClienteServidor();
+  const supabase = criarClienteNavegador();
   const { data } = await supabase.from("postos_trabalho").select("id, nome, custo_hora, capacidade_horas_dia, ativo").order("nome");
   return (data ?? []) as Posto[];
 }
 
-export default async function PaginaPostos({ searchParams }: { searchParams: Promise<{ editar?: string; novo?: string }> }) {
+async function PaginaPostos({ searchParams }: { searchParams: Promise<{ editar?: string; novo?: string }> }) {
   const acesso = await carregarAcesso();
   if (!pode(acesso, TELA, "ver")) return <SemAcesso codigo={TELA} />;
 
@@ -98,4 +101,8 @@ export default async function PaginaPostos({ searchParams }: { searchParams: Pro
       </Filtro>
     </div>
   );
+}
+
+export default function Pagina() {
+  return <TelaCliente montar={PaginaPostos} />;
 }

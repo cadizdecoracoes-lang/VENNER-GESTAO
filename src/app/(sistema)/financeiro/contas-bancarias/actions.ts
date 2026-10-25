@@ -1,12 +1,9 @@
-"use server";
-
-import { revalidatePath } from "next/cache";
-import { redirect } from "next/navigation";
+import { redirect, revalidatePath } from "@/lib/navegacao";
 import { mensagemErro, semLinhas, SEM_BANCO, type Estado } from "@/lib/erros";
 import { lerNumero, somenteDigitos } from "@/lib/formato";
 import { TIPOS_CONTA_BANCARIA } from "@/lib/rotulos";
 import { supabaseConfigurado } from "@/lib/supabase/config";
-import { criarClienteServidor } from "@/lib/supabase/server";
+import { criarClienteNavegador } from "@/lib/supabase/client";
 
 const CAMINHO = "/financeiro/contas-bancarias";
 
@@ -40,7 +37,7 @@ export async function salvarConta(id: string | null, _: Estado, form: FormData):
     data_saldo_inicial: data,
     ativa: form.get("ativa") === "on",
   };
-  const supabase = await criarClienteServidor();
+  const supabase = criarClienteNavegador();
   const { data: linhas, error } = id
     ? await supabase.from("contas_bancarias").update(dados).eq("id", id).select("id")
     : await supabase.from("contas_bancarias").insert(dados).select("id");

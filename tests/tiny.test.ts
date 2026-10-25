@@ -2,9 +2,9 @@
 // completa com o Tiny e o banco simulados.
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { categoria, contato, data, pedido, produto, titulo } from "../src/lib/tiny/normalizar.ts";
-import { horarioTiny, lerTiny } from "../src/lib/tiny/robo.ts";
-import type { Lote } from "../src/lib/tiny/tipos.ts";
+import { categoria, contato, data, pedido, produto, titulo } from "../supabase/functions/_shared/tiny/normalizar.ts";
+import { horarioTiny, lerTiny } from "../supabase/functions/_shared/tiny/robo.ts";
+import type { Lote } from "../supabase/functions/_shared/tiny/tipos.ts";
 
 test("datas do Tiny em qualquer formato", () => {
   assert.equal(data("2026-10-05"), "2026-10-05");

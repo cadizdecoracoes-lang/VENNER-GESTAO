@@ -41,26 +41,20 @@ Cadastrar no GitHub: repositório → Settings → Secrets and variables → Act
 
 Nunca envie esses valores por conversa ou e-mail.
 
-### Colocar o sistema no ar (Cloudflare, plano gratuito)
+### Colocar o sistema no ar (GitHub Pages, gratuito)
 
-Feito uma vez, na conta da Venner. Depois disso, cada Pull Request aprovado atualiza o sistema sozinho.
+As telas são um site estático publicado pelo GitHub Pages; os dados, o login e as integrações ficam no Supabase. O workflow `publicar-telas.yml` gera e publica o site a cada merge, usando os mesmos segredos da publicação do banco (não precisa cadastrar nada novo).
 
-1. Criar a conta em [dash.cloudflare.com](https://dash.cloudflare.com/sign-up) com o e-mail da Venner e confirmar o e-mail.
-2. **Workers & Pages → Create → Import a repository**. Conectar o GitHub da conta dona do repositório e escolher `VENNER-GESTAO`.
-3. Preencher:
-   - **Project name:** `venner-gestao`
-   - **Build command:** `npx opennextjs-cloudflare build`
-   - **Deploy command:** `npx opennextjs-cloudflare deploy`
-4. Em **Advanced settings → Build variables**, adicionar (os dois valores ficam no Supabase, em Project Settings → API Keys e Data API):
+Feito uma vez, na conta dona do repositório:
 
-| Nome | Valor |
-| --- | --- |
-| `NEXT_PUBLIC_SUPABASE_URL` | Project URL, `https://<id>.supabase.co` |
-| `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Publishable key, começa com `sb_publishable_` |
+1. **Settings → General → Danger Zone → Change visibility → Make public.** O GitHub Pages gratuito exige repositório público. O código não tem senhas nem dados: os dados ficam no Supabase, protegidos pelo login e pelas regras de acesso do banco.
+2. **Settings → Pages → Build and deployment → Source: GitHub Actions.**
+3. **Actions → Publicar telas → Run workflow** (ou o próximo merge). O endereço fica `https://<conta>.github.io/VENNER-GESTAO/`.
+4. No Supabase, **Authentication → URL Configuration**: em **Site URL**, colar esse endereço; em **Redirect URLs**, adicionar `https://<conta>.github.io/VENNER-GESTAO/**` (links de recuperar senha).
 
-   Esses dois valores são públicos por natureza (o navegador usa). A proteção dos dados é o login e as regras de acesso do banco. Nunca use aqui a chave `secret`.
-5. **Deploy**. Ao terminar, o Cloudflare mostra o endereço do sistema (`https://venner-gestao.<conta>.workers.dev`).
-6. No Supabase, **Authentication → URL Configuration → Site URL**: colar esse endereço.
+### Integrações (Edge Functions do Supabase)
+
+As funções em `supabase/functions` são publicadas pelo `publicar-banco.yml`. As chaves dos aplicativos ficam no Supabase, em **Edge Functions → Secrets**: `ML_APP_ID`, `ML_SECRET_KEY` (Mercado Livre), `SHOPEE_PARTNER_ID`, `SHOPEE_PARTNER_KEY` (Shopee). O endereço de retorno para cadastrar em cada aplicativo (Tiny, Mercado Livre, Shopee) aparece na tela **Configurações → Integrações**.
 
 ### Primeiro acesso da diretoria
 

@@ -1,6 +1,6 @@
 // Consultas comuns às telas de pedidos de venda e ao painel.
 import { supabaseConfigurado } from "@/lib/supabase/config";
-import { criarClienteServidor } from "@/lib/supabase/server";
+import { criarClienteNavegador } from "@/lib/supabase/client";
 import type { FasePedido } from "./rotulos";
 
 export type Etapa = { id: string; nome: string; ordem: number; fase: FasePedido; ativa: boolean };
@@ -35,14 +35,14 @@ export const nomeCliente = (p: PedidoResumo) => p.clientes?.nome_fantasia || p.c
 
 export async function carregarEtapas(): Promise<Etapa[]> {
   if (!supabaseConfigurado) return [];
-  const supabase = await criarClienteServidor();
+  const supabase = criarClienteNavegador();
   const { data } = await supabase.from("etapas_pedido").select("id, nome, ordem, fase, ativa").order("ordem");
   return (data ?? []) as Etapa[];
 }
 
 export async function carregarClientes(): Promise<{ id: string; nome: string }[]> {
   if (!supabaseConfigurado) return [];
-  const supabase = await criarClienteServidor();
+  const supabase = criarClienteNavegador();
   const { data } = await supabase.from("clientes").select("id, nome, nome_fantasia").eq("ativo", true).order("nome").limit(5000);
   return (data ?? []).map((c) => ({ id: c.id, nome: c.nome_fantasia || c.nome }));
 }
@@ -51,7 +51,7 @@ export type Produto = { id: string; codigo: string; descricao: string; unidade: 
 
 export async function carregarProdutosVenda(): Promise<Produto[]> {
   if (!supabaseConfigurado) return [];
-  const supabase = await criarClienteServidor();
+  const supabase = criarClienteNavegador();
   const { data } = await supabase
     .from("itens")
     .select("id, codigo, descricao, unidade, preco_venda")
@@ -67,7 +67,7 @@ export async function carregarProdutosVenda(): Promise<Produto[]> {
 export async function confirmadosNoPeriodo(etapas: Etapa[], de: string, ate: string): Promise<{ etapa: Etapa | null; ids: Set<string> }> {
   const etapa = etapas.filter((e) => e.fase === "producao").sort((a, b) => a.ordem - b.ordem)[0] ?? null;
   if (!supabaseConfigurado || !etapa) return { etapa, ids: new Set() };
-  const supabase = await criarClienteServidor();
+  const supabase = criarClienteNavegador();
   const { data } = await supabase
     .from("pedido_etapas_historico")
     .select("pedido_id")

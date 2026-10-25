@@ -1,11 +1,9 @@
-"use server";
-
-import { revalidatePath } from "next/cache";
+import { revalidatePath } from "@/lib/navegacao";
 import { hojeBrasil, somarDias } from "@/lib/datas";
 import { mensagemErro, SEM_BANCO, type Estado } from "@/lib/erros";
 import { dataNoFluxo, type Rastreio } from "@/lib/fluxo-caixa";
 import { supabaseConfigurado } from "@/lib/supabase/config";
-import { criarClienteServidor } from "@/lib/supabase/server";
+import { criarClienteNavegador } from "@/lib/supabase/client";
 
 // Previsão digitada na célula: valor vazio ou zero apaga.
 export async function salvarPrevisao(empresa: string, data: string, tipo: "entrada" | "saida", valor: number | null): Promise<Estado> {
@@ -13,7 +11,7 @@ export async function salvarPrevisao(empresa: string, data: string, tipo: "entra
   if (!/^\d{4}-\d{2}-\d{2}$/.test(data) || !["entrada", "saida"].includes(tipo)) return { erro: "Previsão inválida." };
   if (data < hojeBrasil()) return { erro: "Previsão só vale de hoje em diante." };
   if (valor !== null && (!Number.isFinite(valor) || valor < 0)) return { erro: "Valor inválido." };
-  const supabase = await criarClienteServidor();
+  const supabase = criarClienteNavegador();
   const { error } =
     !valor
       ? await supabase.from("fluxo_previsoes").delete().eq("empresa_id", empresa).eq("data", data).eq("tipo", tipo)
@@ -62,7 +60,7 @@ type Bruto = {
 // Títulos que formam um valor do fluxo (regra: todo número abre os registros).
 export async function titulosDaCelula(r: Rastreio, de: string, ate: string, empresa: string | null): Promise<TituloDaCelula[] | { erro: string }> {
   if (!supabaseConfigurado) return [];
-  const supabase = await criarClienteServidor();
+  const supabase = criarClienteNavegador();
   const hoje = hojeBrasil();
   const ehPagar = r.tipo === "saida";
   const tabela = ehPagar ? "contas_pagar" : "contas_receber";

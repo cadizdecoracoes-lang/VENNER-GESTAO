@@ -1,3 +1,5 @@
+"use client";
+
 import { ArrowLeft, CheckCircle2, CopyPlus, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { Filtro } from "@/components/filtro";
@@ -19,7 +21,7 @@ import { custoComponente, custoOperacao, custoPadrao, quantidadeComPerda } from 
 import { formatarData, formatarMoeda, formatarNumero } from "@/lib/formato";
 import { STATUS_FICHA, TIPOS_COM_FICHA, TIPOS_ITEM, type StatusFicha, type TipoItem } from "@/lib/rotulos";
 import { supabaseConfigurado } from "@/lib/supabase/config";
-import { criarClienteServidor } from "@/lib/supabase/server";
+import { criarClienteNavegador } from "@/lib/supabase/client";
 import {
   adicionarComponente,
   adicionarOperacao,
@@ -30,6 +32,7 @@ import {
   removerOperacao,
   salvarDadosVersao,
 } from "./actions";
+import { TelaCliente } from "@/components/tela-cliente";
 
 const TELA = "producao.ficha_tecnica";
 
@@ -62,11 +65,11 @@ type Posto = { id: string; nome: string };
 
 const COR_STATUS = { rascunho: "alerta", ativa: "sucesso", substituida: "neutra" } as const;
 
-export default async function PaginaFichaTecnica({ searchParams }: { searchParams: Promise<{ item?: string; versao?: string }> }) {
+async function PaginaFichaTecnica({ searchParams }: { searchParams: Promise<{ item?: string; versao?: string }> }) {
   const acesso = await carregarAcesso();
   if (!pode(acesso, TELA, "ver")) return <SemAcesso codigo={TELA} />;
   const { item, versao } = await searchParams;
-  return item ? <DetalheFicha acesso={acesso} itemId={item} versao={Number(versao) || undefined} /> : <ListaProdutos />;
+  return item ? DetalheFicha({ acesso, itemId: item, versao: Number(versao) || undefined }) : ListaProdutos();
 }
 
 // -----------------------------------------------------------------------------
@@ -76,7 +79,7 @@ async function ListaProdutos() {
   let itens: Item[] = [];
   let fichas: Pick<Ficha, "item_id" | "versao" | "status" | "vigencia_inicio">[] = [];
   if (supabaseConfigurado) {
-    const supabase = await criarClienteServidor();
+    const supabase = criarClienteNavegador();
     const consulta = supabase
       .from("itens")
       .select("id, codigo, descricao, tipo, unidade, custo_medio, ativo")
@@ -146,8 +149,8 @@ async function ListaProdutos() {
 // Ficha de um produto: versões, componentes, operações e custo padrão
 // -----------------------------------------------------------------------------
 async function DetalheFicha({ acesso, itemId, versao }: { acesso: Acesso; itemId: string; versao?: number }) {
-  if (!supabaseConfigurado) return <ListaProdutos />;
-  const supabase = await criarClienteServidor();
+  if (!supabaseConfigurado) return ListaProdutos();
+  const supabase = criarClienteNavegador();
 
   const [{ data: itemDado }, { data: fichasDado }] = await Promise.all([
     supabase.from("itens").select("id, codigo, descricao, tipo, unidade, custo_medio, ativo").eq("id", itemId).maybeSingle(),
@@ -504,4 +507,8 @@ function Voltar() {
       <ArrowLeft size={16} /> Todas as fichas
     </Link>
   );
+}
+
+export default function Pagina() {
+  return <TelaCliente montar={PaginaFichaTecnica} />;
 }

@@ -1,3 +1,5 @@
+"use client";
+
 import { Check, Plus } from "lucide-react";
 import Link from "next/link";
 import { ATALHO_SITUACAO, Filtro } from "@/components/filtro";
@@ -18,8 +20,9 @@ import {
 import { carregarAcesso, pode } from "@/lib/acesso";
 import { FORMAS_CALCULO, TIPOS_EVENTO_FOLHA, type FormaCalculo, type TipoEventoFolha } from "@/lib/rotulos";
 import { supabaseConfigurado } from "@/lib/supabase/config";
-import { criarClienteServidor } from "@/lib/supabase/server";
+import { criarClienteNavegador } from "@/lib/supabase/client";
 import { salvarEvento } from "./actions";
+import { TelaCliente } from "@/components/tela-cliente";
 
 const TELA = "rh.eventos";
 
@@ -38,7 +41,7 @@ type Evento = {
 
 async function carregar(): Promise<Evento[]> {
   if (!supabaseConfigurado) return [];
-  const supabase = await criarClienteServidor();
+  const supabase = criarClienteNavegador();
   const { data } = await supabase
     .from("eventos_folha")
     .select("id, codigo, descricao, tipo, forma_calculo, incide_inss, incide_fgts, incide_irrf, observacao, ativo")
@@ -56,7 +59,7 @@ function Marca({ sim }: { sim: boolean }) {
   );
 }
 
-export default async function PaginaEventos({ searchParams }: { searchParams: Promise<{ editar?: string; novo?: string }> }) {
+async function PaginaEventos({ searchParams }: { searchParams: Promise<{ editar?: string; novo?: string }> }) {
   const acesso = await carregarAcesso();
   if (!pode(acesso, TELA, "ver")) return <SemAcesso codigo={TELA} />;
 
@@ -172,4 +175,8 @@ export default async function PaginaEventos({ searchParams }: { searchParams: Pr
       </Filtro>
     </div>
   );
+}
+
+export default function Pagina() {
+  return <TelaCliente montar={PaginaEventos} />;
 }

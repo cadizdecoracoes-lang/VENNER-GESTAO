@@ -1,11 +1,8 @@
-"use server";
-
-import { revalidatePath } from "next/cache";
-import { redirect } from "next/navigation";
+import { redirect, revalidatePath } from "@/lib/navegacao";
 import { mensagemErro, semLinhas, SEM_BANCO, type Estado } from "@/lib/erros";
 import { lerNumero } from "@/lib/formato";
 import { supabaseConfigurado } from "@/lib/supabase/config";
-import { criarClienteServidor } from "@/lib/supabase/server";
+import { criarClienteNavegador } from "@/lib/supabase/client";
 
 const CAMINHO = "/financeiro/notas-fornecedor";
 const BUCKET = "notas-fornecedor";
@@ -30,7 +27,7 @@ export async function importarNota(_: Estado, form: FormData): Promise<Estado> {
   const parcelas = (dados.parcelas ?? []) as { valor: number; vencimento: string }[];
   if (parcelas.some((p) => !p.vencimento || !(p.valor > 0))) return { erro: "Cada parcela precisa de vencimento e valor." };
 
-  const supabase = await criarClienteServidor();
+  const supabase = criarClienteNavegador();
   const id = crypto.randomUUID();
   const arquivo = form.get("arquivo");
   let caminho: string | null = null;
@@ -53,7 +50,7 @@ export async function importarNota(_: Estado, form: FormData): Promise<Estado> {
   }
   revalidatePath(CAMINHO);
   revalidatePath("/financeiro/pagar");
-  redirect(`${CAMINHO}/${id}`);
+  redirect(`${CAMINHO}/nota?id=${id}`);
 }
 
 // Vincula o produto do fornecedor a um item do sistema. O banco memoriza o
@@ -65,23 +62,23 @@ export async function vincularItem(nota: string, linha: string, _: Estado, form:
   if (!item) return { erro: "Escolha o item do sistema." };
   if (!(fator > 0)) return { erro: "A conversão precisa ser maior que zero (1 se a unidade é a mesma)." };
 
-  const supabase = await criarClienteServidor();
+  const supabase = criarClienteNavegador();
   const { data, error } = await supabase.from("nota_fornecedor_itens").update({ item_id: item, fator }).eq("id", linha).select("id");
   if (error) return { erro: mensagemErro(error) };
   const bloqueado = semLinhas(data);
   if (bloqueado) return bloqueado;
-  revalidatePath(`${CAMINHO}/${nota}`);
-  redirect(`${CAMINHO}/${nota}`);
+  revalidatePath(`${CAMINHO}/nota?id=${nota}`);
+  redirect(`${CAMINHO}/nota?id=${nota}`);
 }
 
 export async function darEntrada(nota: string, _: Estado, form: FormData): Promise<Estado> {
   if (!supabaseConfigurado) return SEM_BANCO;
   const local = String(form.get("local_id") ?? "");
   if (!local) return { erro: "Escolha o local de estoque." };
-  const supabase = await criarClienteServidor();
+  const supabase = criarClienteNavegador();
   const { error } = await supabase.rpc("dar_entrada_nota", { nota, local });
   if (error) return { erro: mensagemErro(error) };
   revalidatePath(CAMINHO);
-  revalidatePath(`${CAMINHO}/${nota}`);
+  revalidatePath(`${CAMINHO}/nota?id=${nota}`);
   return { ok: Date.now() };
 }

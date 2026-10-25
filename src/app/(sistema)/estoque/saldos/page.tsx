@@ -1,3 +1,5 @@
+"use client";
+
 import { ClipboardList } from "lucide-react";
 import Link from "next/link";
 import { Filtro } from "@/components/filtro";
@@ -21,8 +23,9 @@ import { carregarAcesso, pode } from "@/lib/acesso";
 import { formatarMoeda, formatarNumero } from "@/lib/formato";
 import { TIPOS_ITEM, type TipoItem } from "@/lib/rotulos";
 import { supabaseConfigurado } from "@/lib/supabase/config";
-import { criarClienteServidor } from "@/lib/supabase/server";
+import { criarClienteNavegador } from "@/lib/supabase/client";
 import { registrarInventario } from "./actions";
+import { TelaCliente } from "@/components/tela-cliente";
 
 const TELA = "estoque.saldos";
 
@@ -36,7 +39,7 @@ async function carregar() {
       locais: [] as { id: string; nome: string }[],
       saldos: [] as { item_id: string; local_id: string; saldo: number }[],
     };
-  const supabase = await criarClienteServidor();
+  const supabase = criarClienteNavegador();
   const [itens, locais, saldos] = await Promise.all([
     supabase
       .from("itens")
@@ -55,7 +58,7 @@ async function carregar() {
   };
 }
 
-export default async function PaginaSaldos({ searchParams }: { searchParams: Promise<Filtros> }) {
+async function PaginaSaldos({ searchParams }: { searchParams: Promise<Filtros> }) {
   const acesso = await carregarAcesso();
   if (!pode(acesso, TELA, "ver")) return <SemAcesso codigo={TELA} />;
   const filtros = await searchParams;
@@ -245,4 +248,8 @@ export default async function PaginaSaldos({ searchParams }: { searchParams: Pro
       </Fonte>
     </div>
   );
+}
+
+export default function Pagina() {
+  return <TelaCliente montar={PaginaSaldos} />;
 }

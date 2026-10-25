@@ -2,6 +2,7 @@ import { FormAcao } from "@/components/form-acao";
 import { Campo, Cartao, Etiqueta, LinkAcao, estiloBotao, estiloCampo } from "@/components/ui";
 import type { EmpresaResumo } from "@/lib/empresa";
 import { ajustarPagarTiny, lerTinyAgora, removerConta, salvarChavesTiny } from "./actions";
+import { LigarConta } from "./ligar-conta";
 
 export type AplicativoTiny = { empresa_id: string; client_id: string; atualizado_em: string };
 export type ContaTiny = {
@@ -27,12 +28,15 @@ export function CartaoTiny({
   contas,
   editar,
   ligar,
+  retorno,
 }: {
   empresas: EmpresaResumo[];
   aplicativos: AplicativoTiny[];
   contas: ContaTiny[];
   editar: boolean;
   ligar: boolean;
+  // Endereço de retorno para cadastrar no aplicativo do Tiny.
+  retorno: string | null;
 }) {
   const nomeEmpresa = new Map(empresas.map((e) => [e.id, e.nome]));
   const comChaves = empresas.filter((e) => aplicativos.some((a) => a.empresa_id === e.id));
@@ -125,6 +129,11 @@ export function CartaoTiny({
               No Tiny: menu › Configurações › Geral › Aplicativos › Venner Gestão. Copie o Client ID e o Client Secret e cole aqui. Elas
               ficam guardadas no banco e nenhuma tela mostra de novo.
             </p>
+            {retorno && (
+              <p className="text-xs text-texto-suave">
+                No aplicativo do Tiny, o endereço de redirecionamento é <code className="break-all">{retorno}</code>
+              </p>
+            )}
             {aplicativos.map((a) => (
               <p key={a.empresa_id} className="text-xs text-texto-suave">
                 {nomeEmpresa.get(a.empresa_id) ?? "—"}: chaves guardadas em {quando(a.atualizado_em)} (Client ID {a.client_id.slice(0, 18)}…)
@@ -157,23 +166,7 @@ export function CartaoTiny({
           <div className="space-y-2">
             <p className="font-medium">2. Ligar a conta</p>
             <p className="text-texto-suave">Abre o Tiny para você autorizar com o seu login de lá. Depois volta para esta tela.</p>
-            <form action="/integracoes/tiny/conectar" method="get" className="flex flex-wrap items-end gap-3">
-              <Campo rotulo="Empresa" className="min-w-56 flex-1">
-                <select name="empresa" required defaultValue={comChaves.length === 1 ? comChaves[0].id : ""} className={estiloCampo}>
-                  <option value="" disabled>
-                    Escolha...
-                  </option>
-                  {comChaves.map((e) => (
-                    <option key={e.id} value={e.id}>
-                      {e.nome}
-                    </option>
-                  ))}
-                </select>
-              </Campo>
-              <button type="submit" className={estiloBotao}>
-                {contas.length ? "Ligar de novo" : "Ligar conta do Tiny"}
-              </button>
-            </form>
+            <LigarConta canal="tiny" empresas={comChaves} rotulo={contas.length ? "Ligar de novo" : "Ligar conta do Tiny"} />
           </div>
         )}
       </div>

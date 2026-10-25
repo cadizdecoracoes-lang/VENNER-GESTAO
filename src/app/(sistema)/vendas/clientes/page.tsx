@@ -1,3 +1,5 @@
+"use client";
+
 import { Plus } from "lucide-react";
 import Link from "next/link";
 import { CamposPessoa } from "@/components/campos-pessoa";
@@ -21,8 +23,9 @@ import { formatarDocumento } from "@/lib/formato";
 import type { DadosPessoa } from "@/lib/pessoa";
 import { CANAIS, type Canal } from "@/lib/rotulos";
 import { supabaseConfigurado } from "@/lib/supabase/config";
-import { criarClienteServidor } from "@/lib/supabase/server";
+import { criarClienteNavegador } from "@/lib/supabase/client";
 import { salvarCliente } from "./actions";
+import { TelaCliente } from "@/components/tela-cliente";
 
 const TELA = "vendas.clientes";
 const CAMPOS = "id, tipo_pessoa, documento, nome, nome_fantasia, email, telefone, cidade, uf, observacao, ativo, canal";
@@ -32,7 +35,7 @@ type Filtros = { editar?: string; novo?: string };
 
 async function carregar(): Promise<Cliente[]> {
   if (!supabaseConfigurado) return [];
-  const supabase = await criarClienteServidor();
+  const supabase = criarClienteNavegador();
   const consulta = supabase.from("clientes").select(CAMPOS).order("nome").limit(2000);
   const { data } = await consulta;
   return (data ?? []) as Cliente[];
@@ -40,12 +43,12 @@ async function carregar(): Promise<Cliente[]> {
 
 async function buscar(id: string): Promise<Cliente | undefined> {
   if (!supabaseConfigurado) return undefined;
-  const supabase = await criarClienteServidor();
+  const supabase = criarClienteNavegador();
   const { data } = await supabase.from("clientes").select(CAMPOS).eq("id", id).maybeSingle();
   return (data as Cliente | null) ?? undefined;
 }
 
-export default async function PaginaClientees({ searchParams }: { searchParams: Promise<Filtros> }) {
+async function PaginaClientees({ searchParams }: { searchParams: Promise<Filtros> }) {
   const acesso = await carregarAcesso();
   if (!pode(acesso, TELA, "ver")) return <SemAcesso codigo={TELA} />;
 
@@ -122,4 +125,8 @@ export default async function PaginaClientees({ searchParams }: { searchParams: 
       </Filtro>
     </div>
   );
+}
+
+export default function Pagina() {
+  return <TelaCliente montar={PaginaClientees} />;
 }
