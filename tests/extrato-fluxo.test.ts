@@ -13,7 +13,7 @@ import {
   valorCelula,
 } from "../src/lib/extrato.ts";
 import { feriado, pascoa, proximoDiaUtil } from "../src/lib/feriados.ts";
-import { dataNoFluxo, montarColunas, montarFluxo, type MovimentoFluxo } from "../src/lib/fluxo-caixa.ts";
+import { dataNoFluxo, filtrarPorConta, montarColunas, montarFluxo, type MovimentoFluxo, type SaldoConta } from "../src/lib/fluxo-caixa.ts";
 
 const OFX = `OFXHEADER:100
 DATA:OFXSGML
@@ -219,4 +219,38 @@ test("fluxo: coluna de comparação com o período anterior", () => {
   assert.equal(l("t:entrada").anterior, 50);
   assert.equal(l("resultado").anterior, -50);
   assert.equal(l("saldo").anterior, undefined);
+});
+
+test("fluxo: filtro por conta bancária", () => {
+  const mov = (m: Partial<MovimentoFluxo>): MovimentoFluxo => ({
+    data: "2026-10-05",
+    tipo: "saida",
+    natureza: "realizado",
+    categoria_id: null,
+    conta_bancaria_id: "itau",
+    empresa_id: "e1",
+    valor: 10,
+    titulos: 1,
+    ...m,
+  });
+  const saldo = (id: string, empresa: string): SaldoConta => ({ conta_bancaria_id: id, empresa_id: empresa, nome: id, data_saldo: "2026-10-01", saldo: 0 });
+  const movimentos = [
+    mov({}),
+    mov({ conta_bancaria_id: "bb" }),
+    mov({ natureza: "transferencia", conta_bancaria_id: "itau" }),
+    mov({ natureza: "previsto", conta_bancaria_id: null }),
+    mov({ natureza: "manual", conta_bancaria_id: null }),
+    mov({ natureza: "previsto", conta_bancaria_id: null, empresa_id: "e2" }),
+  ];
+  // e1 tem duas contas: a projeção fica na visão da empresa.
+  const duas = filtrarPorConta(movimentos, [saldo("itau", "e1"), saldo("bb", "e1"), saldo("caixa", "e2")], "itau");
+  assert.equal(duas.comPrevisto, false);
+  assert.deepEqual(duas.movimentos.map((m) => m.natureza), ["realizado", "transferencia"]);
+  assert.deepEqual(duas.saldos.map((s) => s.conta_bancaria_id), ["itau"]);
+  // Conta única da empresa: o previsto da empresa entra.
+  const uma = filtrarPorConta(movimentos, [saldo("itau", "e1"), saldo("caixa", "e2")], "itau");
+  assert.equal(uma.comPrevisto, true);
+  assert.deepEqual(uma.movimentos.map((m) => m.natureza), ["realizado", "transferencia", "previsto", "manual"]);
+  // Conta que a pessoa não enxerga: nada.
+  assert.equal(filtrarPorConta(movimentos, [saldo("itau", "e1")], "outra").movimentos.length, 0);
 });

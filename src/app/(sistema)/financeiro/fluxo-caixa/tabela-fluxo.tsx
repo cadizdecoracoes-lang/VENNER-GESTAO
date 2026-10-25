@@ -30,6 +30,7 @@ export function TabelaFluxo({
   empresa,
   podeDigitar,
   rotuloAnterior,
+  conta,
 }: {
   fluxo: Fluxo;
   modo: "dia" | "mes";
@@ -37,6 +38,8 @@ export function TabelaFluxo({
   empresa: string | null;
   podeDigitar: boolean;
   rotuloAnterior: string;
+  // Conta escolhida: os títulos da célula vêm só dela (e os em aberto da empresa, quando entram).
+  conta: { id: string; empresa: string; comAbertos: boolean } | null;
 }) {
   const [abertos, setAbertos] = useState<Set<string>>(new Set());
   const [editando, setEditando] = useState<string | null>(null);
@@ -56,7 +59,7 @@ export function TabelaFluxo({
 
   async function abrir(l: LinhaFluxo, r: Rastreio, de: string, ate: string, valor: number) {
     setModal({ titulo: l.rotulo, sub: de === ate ? formatarData(de) : `${formatarData(de)} a ${formatarData(ate)}`, lista: null, valorCelula: valor });
-    const res = await titulosDaCelula(r, de, ate, empresa);
+    const res = await titulosDaCelula(r, de, ate, conta ? conta.empresa : empresa, conta && { id: conta.id, comAbertos: conta.comAbertos });
     setModal((m) => (m ? { ...m, ...(Array.isArray(res) ? { lista: res } : { lista: [], erro: res.erro }) } : m));
   }
 

@@ -58,7 +58,14 @@ type Bruto = {
 };
 
 // Títulos que formam um valor do fluxo (regra: todo número abre os registros).
-export async function titulosDaCelula(r: Rastreio, de: string, ate: string, empresa: string | null): Promise<TituloDaCelula[] | { erro: string }> {
+// Com uma conta: os pagos dela e, se o previsto da empresa entra na conta, os em aberto.
+export async function titulosDaCelula(
+  r: Rastreio,
+  de: string,
+  ate: string,
+  empresa: string | null,
+  conta: { id: string; comAbertos: boolean } | null = null,
+): Promise<TituloDaCelula[] | { erro: string }> {
   if (!supabaseConfigurado) return [];
   const supabase = criarClienteNavegador();
   const hoje = hojeBrasil();
@@ -74,8 +81,11 @@ export async function titulosDaCelula(r: Rastreio, de: string, ate: string, empr
     else if (r.categorias) q = q.in("categoria_id", r.categorias);
     return q;
   };
+  let pagosQ = filtrar(supabase.from(tabela).select(sel).eq("situacao", "pago").gte(dataPago, de).lte(dataPago, ate));
+  if (conta) pagosQ = pagosQ.eq("conta_bancaria_id", conta.id);
+  const semAbertos = conta !== null && !conta.comAbertos;
   const [pagos, abertos] = await Promise.all([
-    filtrar(supabase.from(tabela).select(sel).eq("situacao", "pago").gte(dataPago, de).lte(dataPago, ate)).limit(3000),
+    pagosQ.limit(3000),
     // Em aberto: vencimento no período (5 dias antes, pelo fim de semana) e os atrasados, que caem em hoje.
     filtrar(
       supabase
@@ -111,7 +121,7 @@ export async function titulosDaCelula(r: Rastreio, de: string, ate: string, empr
     };
   };
   for (const t of (pagos.data ?? []) as unknown as Bruto[]) lista.push(montar(t, true));
-  for (const t of (abertos.data ?? []) as unknown as Bruto[]) {
+  for (const t of semAbertos ? [] : ((abertos.data ?? []) as unknown as Bruto[])) {
     const m = montar(t, false);
     if (m.dataFluxo >= de && m.dataFluxo <= ate) lista.push(m);
   }
