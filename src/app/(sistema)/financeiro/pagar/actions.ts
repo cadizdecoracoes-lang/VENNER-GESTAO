@@ -1,11 +1,8 @@
-"use server";
-
-import { revalidatePath } from "next/cache";
-import { redirect } from "next/navigation";
+import { redirect, revalidatePath } from "@/lib/navegacao";
 import { mensagemErro, semLinhas, SEM_BANCO, type Estado } from "@/lib/erros";
 import { lerNumero } from "@/lib/formato";
 import { supabaseConfigurado } from "@/lib/supabase/config";
-import { criarClienteServidor } from "@/lib/supabase/server";
+import { criarClienteNavegador } from "@/lib/supabase/client";
 
 const CAMINHO = "/financeiro/pagar";
 
@@ -43,11 +40,13 @@ export async function novaConta(_: Estado, form: FormData): Promise<Estado> {
     vencimento: somarMeses(vencimento, i),
     observacao: texto("observacao"),
   }));
-  const supabase = await criarClienteServidor();
+  const supabase = criarClienteNavegador();
   const { error } = await supabase.from("contas_pagar").insert(linhas);
   if (error) return { erro: mensagemErro(error) };
   revalidatePath(CAMINHO);
-  redirect(CAMINHO);
+  // Veio do atalho da conciliação: volta para a linha do extrato.
+  const volta = texto("volta");
+  redirect(volta?.startsWith("/financeiro/conciliacao") ? volta : CAMINHO);
 }
 
 export async function pagarConta(id: string, _: Estado, form: FormData): Promise<Estado> {
@@ -59,7 +58,7 @@ export async function pagarConta(id: string, _: Estado, form: FormData): Promise
   if (!conta) return { erro: "Escolha a conta bancária de onde saiu o pagamento." };
   if (!(valor > 0)) return { erro: "Informe o valor pago." };
 
-  const supabase = await criarClienteServidor();
+  const supabase = criarClienteNavegador();
   const { data: linhas, error } = await supabase
     .from("contas_pagar")
     .update({ situacao: "pago", data_pagamento: data, conta_bancaria_id: conta, valor_pago: valor })
@@ -75,7 +74,7 @@ export async function pagarConta(id: string, _: Estado, form: FormData): Promise
 
 async function mudarSituacao(id: string, de: string, para: Record<string, unknown>): Promise<Estado> {
   if (!supabaseConfigurado) return SEM_BANCO;
-  const supabase = await criarClienteServidor();
+  const supabase = criarClienteNavegador();
   const { data, error } = await supabase.from("contas_pagar").update(para).eq("id", id).eq("situacao", de).select("id");
   if (error) return { erro: mensagemErro(error) };
   const bloqueado = semLinhas(data);

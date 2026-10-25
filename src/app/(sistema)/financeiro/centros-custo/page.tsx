@@ -1,3 +1,5 @@
+"use client";
+
 import { Plus } from "lucide-react";
 import Link from "next/link";
 import { ATALHO_SITUACAO, Filtro } from "@/components/filtro";
@@ -17,8 +19,9 @@ import {
 } from "@/components/ui";
 import { carregarAcesso, pode } from "@/lib/acesso";
 import { supabaseConfigurado } from "@/lib/supabase/config";
-import { criarClienteServidor } from "@/lib/supabase/server";
+import { criarClienteNavegador } from "@/lib/supabase/client";
 import { salvarCentro } from "./actions";
+import { TelaCliente } from "@/components/tela-cliente";
 
 const TELA = "financeiro.centros_custo";
 
@@ -26,12 +29,12 @@ type Centro = { id: string; codigo: string; nome: string; ativo: boolean };
 
 async function carregar(): Promise<Centro[]> {
   if (!supabaseConfigurado) return [];
-  const supabase = await criarClienteServidor();
+  const supabase = criarClienteNavegador();
   const { data } = await supabase.from("centros_custo").select("id, codigo, nome, ativo").order("codigo");
   return (data ?? []) as Centro[];
 }
 
-export default async function PaginaCentrosCusto({ searchParams }: { searchParams: Promise<{ editar?: string; novo?: string }> }) {
+async function PaginaCentrosCusto({ searchParams }: { searchParams: Promise<{ editar?: string; novo?: string }> }) {
   const acesso = await carregarAcesso();
   if (!pode(acesso, TELA, "ver")) return <SemAcesso codigo={TELA} />;
 
@@ -88,4 +91,8 @@ export default async function PaginaCentrosCusto({ searchParams }: { searchParam
       </Filtro>
     </div>
   );
+}
+
+export default function Pagina() {
+  return <TelaCliente montar={PaginaCentrosCusto} />;
 }

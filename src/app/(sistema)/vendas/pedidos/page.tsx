@@ -1,3 +1,5 @@
+"use client";
+
 import { ListOrdered, Plus } from "lucide-react";
 import Link from "next/link";
 import { Filtro } from "@/components/filtro";
@@ -18,8 +20,9 @@ import { carregarEmpresas, empresaSelecionada } from "@/lib/empresa";
 import { formatarData, formatarMoeda } from "@/lib/formato";
 import { FASES_PEDIDO, PRIORIDADES } from "@/lib/rotulos";
 import { supabaseConfigurado } from "@/lib/supabase/config";
-import { criarClienteServidor } from "@/lib/supabase/server";
+import { criarClienteNavegador } from "@/lib/supabase/client";
 import { CAMPOS_PEDIDO, carregarEtapas, confirmadosNoPeriodo, nomeCliente, type PedidoResumo } from "@/lib/vendas";
+import { TelaCliente } from "@/components/tela-cliente";
 
 const TELA = "vendas.pedidos";
 const DATAS_PERIODO = { data_pedido: "Data do pedido", prazo_entrega: "Prazo de entrega" };
@@ -37,7 +40,7 @@ type Filtros = {
 
 async function carregar(empresa: string | null, periodo: Periodo, hoje: string): Promise<PedidoResumo[]> {
   if (!supabaseConfigurado) return [];
-  const supabase = await criarClienteServidor();
+  const supabase = criarClienteNavegador();
   let consulta = supabase.from("pedidos_venda_resumo").select(CAMPOS_PEDIDO).order("numero", { ascending: false }).limit(3000);
   if (periodo) consulta = consulta.gte(periodo.por, periodo.de).lte(periodo.por, periodo.ate);
   // Sem período: o funil inteiro em aberto e os encerrados recentes.
@@ -46,7 +49,7 @@ async function carregar(empresa: string | null, periodo: Periodo, hoje: string):
   return ((await consulta).data ?? []) as unknown as PedidoResumo[];
 }
 
-export default async function PaginaPedidos({ searchParams }: { searchParams: Promise<Filtros> }) {
+async function PaginaPedidos({ searchParams }: { searchParams: Promise<Filtros> }) {
   const acesso = await carregarAcesso();
   if (!pode(acesso, TELA, "ver")) return <SemAcesso codigo={TELA} />;
 
@@ -163,7 +166,7 @@ export default async function PaginaPedidos({ searchParams }: { searchParams: Pr
             return (
               <tr key={p.id} data-tags={[p.fase, atrasado && "atrasado"].filter(Boolean).join(" ")}>
                 <Celula className="tabular-nums">
-                  <LinkAcao href={`/vendas/pedidos/${p.id}`}>{p.numero}</LinkAcao>
+                  <LinkAcao href={`/vendas/pedidos/pedido?id=${p.id}`}>{p.numero}</LinkAcao>
                 </Celula>
                 <Celula className="whitespace-nowrap tabular-nums text-texto-suave">{formatarData(p.data_pedido)}</Celula>
                 {!selecionada && <Celula className="whitespace-nowrap text-texto-suave">{nomeEmpresa.get(p.empresa_id) ?? "—"}</Celula>}
@@ -208,7 +211,7 @@ export default async function PaginaPedidos({ searchParams }: { searchParams: Pr
                   </span>
                 </Celula>
                 <Celula className="text-right">
-                  <LinkAcao href={`/vendas/pedidos/${p.id}`}>Abrir</LinkAcao>
+                  <LinkAcao href={`/vendas/pedidos/pedido?id=${p.id}`}>Abrir</LinkAcao>
                 </Celula>
               </tr>
             );
@@ -217,4 +220,8 @@ export default async function PaginaPedidos({ searchParams }: { searchParams: Pr
       </Filtro>
     </div>
   );
+}
+
+export default function Pagina() {
+  return <TelaCliente montar={PaginaPedidos} />;
 }

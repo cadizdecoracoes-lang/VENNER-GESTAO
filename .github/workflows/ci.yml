@@ -19,9 +19,25 @@ jobs:
       - run: npm run typecheck
       - name: Testes do planejamento
         run: npm test
-      - run: npm run build
-      - name: Pacote para o Cloudflare
-        run: npm run cf:build
+      - name: Site estático (como no GitHub Pages)
+        run: npm run build
+        env:
+          NEXT_PUBLIC_BASE_PATH: /VENNER-GESTAO
+
+  funcoes:
+    name: Edge Functions (Deno)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+      - name: Conferir tipos das funções
+        run: |
+          cd supabase/functions
+          for f in */index.ts; do
+            deno check --config "$(dirname "$f")/deno.json" "$f"
+          done
 
   banco:
     name: Banco (migrações e regras de acesso)

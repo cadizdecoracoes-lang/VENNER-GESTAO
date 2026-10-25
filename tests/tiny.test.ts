@@ -2,9 +2,9 @@
 // completa com o Tiny e o banco simulados.
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { categoria, contato, data, pedido, produto, titulo } from "../src/lib/tiny/normalizar.ts";
-import { horarioTiny, lerTiny } from "../src/lib/tiny/robo.ts";
-import type { Lote } from "../src/lib/tiny/tipos.ts";
+import { categoria, contato, data, pedido, produto, titulo } from "../supabase/functions/_shared/tiny/normalizar.ts";
+import { horarioTiny, lerTiny } from "../supabase/functions/_shared/tiny/robo.ts";
+import type { Lote } from "../supabase/functions/_shared/tiny/tipos.ts";
 
 test("datas do Tiny em qualquer formato", () => {
   assert.equal(data("2026-10-05"), "2026-10-05");
@@ -87,8 +87,42 @@ test("pedido: parcelas, nota, canal da loja e itens", () => {
 test("produto: matéria-prima, unidade, peso e preço", () => {
   assert.deepEqual(
     produto({ id: 9, sku: "MP1", descricao: "Resina", tipo: "M", unidade: "kg", ncm: "3901.10.10", dimensoes: { pesoBruto: 0, pesoLiquido: 1.2 }, precos: { preco: 0 } }),
-    { produto_id: 9, sku: "MP1", descricao: "Resina", tipo_item: "materia_prima", unidade: "KG", ncm: "3901.10.10", peso: 1.2, preco: null },
+    {
+      produto_id: 9,
+      sku: "MP1",
+      descricao: "Resina",
+      tipo_item: "materia_prima",
+      tipo_tiny: "M",
+      unidade: "KG",
+      ncm: "3901.10.10",
+      peso: 1.2,
+      preco: null,
+      estrutura: [],
+    },
   );
+});
+
+test("produto: kit e fabricado trazem a estrutura do Tiny", () => {
+  const kit = produto({
+    id: 20,
+    sku: "10001",
+    descricao: "KIT VARÃO 19 MM 1,50 BRANCO",
+    tipo: "K",
+    kit: [
+      { produto: { id: 31, sku: "VR19", descricao: "Varão 19 mm", tipo: "P" }, quantidade: 1 },
+      { produto: { id: 32, sku: "SP19", descricao: "Suporte", tipo: "P" }, quantidade: 2 },
+      { produto: { id: 20, sku: "10001" }, quantidade: 1 },
+      { produto: { id: 33 }, quantidade: 0 },
+    ],
+  });
+  assert.equal(kit?.tipo_item, "produto_acabado");
+  assert.deepEqual(kit?.estrutura, [
+    { produto_id: 31, sku: "VR19", descricao: "Varão 19 mm", quantidade: 1 },
+    { produto_id: 32, sku: "SP19", descricao: "Suporte", quantidade: 2 },
+  ]);
+  const fabricado = produto({ id: 40, tipo: "F", producao: { produtos: [{ produto: { id: 41, sku: "TUBO" }, quantidade: 1.5 }], etapas: [] } });
+  assert.deepEqual(fabricado?.estrutura, [{ produto_id: 41, sku: "TUBO", descricao: null, quantidade: 1.5 }]);
+  assert.deepEqual(produto({ id: 50, tipo: "S", kit: [{ produto: { id: 51 }, quantidade: 1 }] })?.estrutura, []);
 });
 
 // Leitura completa com o Tiny e o banco simulados.

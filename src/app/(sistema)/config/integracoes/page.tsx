@@ -1,3 +1,5 @@
+"use client";
+
 import { FormAcao } from "@/components/form-acao";
 import {
   CabecalhoTela,
@@ -16,13 +18,14 @@ import { carregarAcesso, pode } from "@/lib/acesso";
 import { hojeBrasil, somarDias } from "@/lib/datas";
 import { carregarEmpresas } from "@/lib/empresa";
 import { carregarLocais } from "@/lib/financeiro";
-import { mlConfigurado } from "@/lib/plataformas/mercado-livre";
-import { shopeeConfigurado } from "@/lib/plataformas/shopee";
 import { NOME_CANAL, type Canal } from "@/lib/plataformas/tipos";
 import { supabaseConfigurado } from "@/lib/supabase/config";
-import { criarClienteServidor } from "@/lib/supabase/server";
+import { chamarFuncao } from "@/lib/supabase/funcoes";
+import { criarClienteNavegador } from "@/lib/supabase/client";
 import { buscarVendas, escolherLocal, removerConta } from "./actions";
 import { type AplicativoTiny, CartaoTiny, type ContaTiny } from "./cartao-tiny";
+import { ConcluirLigacao, LigarConta, type VoltaDaPlataforma } from "./ligar-conta";
+import { TelaCliente } from "@/components/tela-cliente";
 
 const TELA = "config.integracoes";
 const GUIA = "https://claude.ai/artifact/ABp37XYcittjSNPYVoNULc";
@@ -37,18 +40,27 @@ type Conta = {
   ultima_sincronizacao: string | null;
   local_baixa_id: string | null;
 };
-type Filtros = { ligada?: string; erro?: string; importadas?: string; repetidas?: string; puladas?: string; sem_anuncio?: string };
+type Filtros = Partial<VoltaDaPlataforma> & {
+  ligada?: string;
+  erro?: string;
+  importadas?: string;
+  repetidas?: string;
+  puladas?: string;
+  sem_anuncio?: string;
+};
+// O que a Edge Function integracoes informa: chaves dos aplicativos guardadas e endereços de retorno.
+type Situacao = Record<Canal, boolean> & { retorno: Record<Canal | "tiny", string> };
 
 const DIAS_PADRAO: Record<Canal, number> = { mercado_livre: 15, shopee: 10 };
 
-export default async function PaginaIntegracoes({ searchParams }: { searchParams: Promise<Filtros> }) {
+async function PaginaIntegracoes({ searchParams }: { searchParams: Promise<Filtros> }) {
   const acesso = await carregarAcesso();
   const ligar = pode(acesso, TELA, "editar") || pode(acesso, "financeiro.receber", "criar");
   if (!pode(acesso, TELA, "ver") && !ligar) return <SemAcesso codigo={TELA} />;
 
   const filtros = await searchParams;
   const [empresas, locais] = await Promise.all([carregarEmpresas(), carregarLocais()]);
-  const supabase = supabaseConfigurado ? await criarClienteServidor() : null;
+  const supabase = supabaseConfigurado ? criarClienteNavegador() : null;
   const [listadas, aplicativos, contasTiny] = supabase
     ? await Promise.all([
         supabase.rpc("listar_integracoes").then((r) => (r.data ?? []) as Conta[]),
@@ -61,12 +73,15 @@ export default async function PaginaIntegracoes({ searchParams }: { searchParams
   const nomeEmpresa = new Map(empresas.map((e) => [e.id, e.nome]));
   const nomeLocal = new Map(locais.map((l) => [l.id, l.nome]));
   const hoje = hojeBrasil();
-  const configurado: Record<Canal, boolean> = { mercado_livre: mlConfigurado(), shopee: shopeeConfigurado() };
+  const situacao = supabase ? await chamarFuncao<Situacao>(supabase, "integracoes", { acao: "situacao" }).catch(() => null) : null;
+  const configurado: Record<Canal, boolean> = { mercado_livre: !!situacao?.mercado_livre, shopee: !!situacao?.shopee };
   const semAnuncio = filtros.sem_anuncio?.split(",").filter(Boolean) ?? [];
 
   return (
     <div className="space-y-3">
       <CabecalhoTela codigo={TELA} />
+
+      {filtros.ligacao && ligar && <ConcluirLigacao volta={{ ...filtros, ligacao: filtros.ligacao }} />}
 
       {filtros.ligada === "tiny" && (
         <p className="rounded-xl bg-sucesso/10 px-4 py-2.5 text-sm text-sucesso">
@@ -101,6 +116,7 @@ export default async function PaginaIntegracoes({ searchParams }: { searchParams
         contas={contasTiny}
         editar={pode(acesso, TELA, "editar")}
         ligar={ligar}
+        retorno={situacao?.retorno.tiny ?? null}
       />
 
       <div className="grid gap-3 lg:grid-cols-2">
@@ -118,31 +134,26 @@ export default async function PaginaIntegracoes({ searchParams }: { searchParams
           >
             {!configurado[canal] ? (
               <p className="text-sm text-texto-suave">
-                Falta criar o aplicativo na plataforma e guardar as chaves no Cloudflare. O passo a passo está no{" "}
+                Falta criar o aplicativo na plataforma e guardar as chaves nos segredos das Edge Functions do Supabase. O passo a passo
+                está no{" "}
                 <a href={GUIA} target="_blank" rel="noreferrer" className="text-primaria hover:underline">
                   guia de ligação
                 </a>
                 . Enquanto isso, as vendas entram pela planilha em{" "}
                 <LinkAcao href="/financeiro/receber/importar">Contas a receber › Importar vendas</LinkAcao>.
+                {situacao && (
+                  <span className="mt-2 block text-xs">
+                    Endereço de retorno para cadastrar no aplicativo:{" "}
+                    <code className="break-all">{situacao.retorno[canal]}</code>
+                  </span>
+                )}
               </p>
             ) : ligar ? (
-              <form action={`/integracoes/${canal}/conectar`} method="get" className="flex flex-wrap items-end gap-3">
-                <Campo rotulo="Empresa dona da conta" className="min-w-56 flex-1">
-                  <select name="empresa" required defaultValue={empresas.length === 1 ? empresas[0].id : ""} className={estiloCampo}>
-                    <option value="" disabled>
-                      Escolha...
-                    </option>
-                    {empresas.map((e) => (
-                      <option key={e.id} value={e.id}>
-                        {e.nome}
-                      </option>
-                    ))}
-                  </select>
-                </Campo>
-                <button type="submit" className={estiloBotao}>
-                  {canal === "mercado_livre" ? "Ligar conta do Mercado Livre" : "Ligar loja da Shopee"}
-                </button>
-              </form>
+              <LigarConta
+                canal={canal}
+                empresas={empresas}
+                rotulo={canal === "mercado_livre" ? "Ligar conta do Mercado Livre" : "Ligar loja da Shopee"}
+              />
             ) : (
               <p className="text-sm text-texto-suave">Seu perfil só acompanha as contas ligadas.</p>
             )}
@@ -249,4 +260,8 @@ export default async function PaginaIntegracoes({ searchParams }: { searchParams
       </Fonte>
     </div>
   );
+}
+
+export default function Pagina() {
+  return <TelaCliente montar={PaginaIntegracoes} />;
 }

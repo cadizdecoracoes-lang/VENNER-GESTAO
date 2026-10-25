@@ -1,10 +1,7 @@
-"use server";
-
-import { revalidatePath } from "next/cache";
-import { redirect } from "next/navigation";
+import { redirect, revalidatePath } from "@/lib/navegacao";
 import { mensagemErro, semLinhas, SEM_BANCO, type Estado } from "@/lib/erros";
 import { supabaseConfigurado } from "@/lib/supabase/config";
-import { criarClienteServidor } from "@/lib/supabase/server";
+import { criarClienteNavegador } from "@/lib/supabase/client";
 
 const CAMINHO = "/config/perfis";
 
@@ -16,7 +13,7 @@ export async function salvarPerfil(id: string | null, todasEmpresas: boolean, _:
   if (!nome) return { erro: "Informe o nome do perfil." };
   const dados = { nome, descricao: String(form.get("descricao") ?? "").trim() || null };
 
-  const supabase = await criarClienteServidor();
+  const supabase = criarClienteNavegador();
   const { data, error } = id
     ? await supabase.from("perfis").update(dados).eq("id", id).select("id")
     : await supabase.from("perfis").insert(dados).select("id");
@@ -36,7 +33,7 @@ export async function salvarPerfil(id: string | null, todasEmpresas: boolean, _:
 
 export async function excluirPerfil(id: string): Promise<Estado> {
   if (!supabaseConfigurado) return SEM_BANCO;
-  const supabase = await criarClienteServidor();
+  const supabase = criarClienteNavegador();
   const { data, error } = await supabase.from("perfis").delete().eq("id", id).select("id");
   if (error) {
     if (error.code === "23503") return { erro: "Há usuários com este perfil. Troque o perfil deles antes de excluir." };

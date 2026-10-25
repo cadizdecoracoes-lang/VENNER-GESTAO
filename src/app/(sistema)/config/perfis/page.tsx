@@ -1,3 +1,5 @@
+"use client";
+
 import { Plus } from "lucide-react";
 import Link from "next/link";
 import { Filtro } from "@/components/filtro";
@@ -19,8 +21,9 @@ import { carregarAcesso, pode } from "@/lib/acesso";
 import { MENU, PAINEL } from "@/lib/menu";
 import { ACOES } from "@/lib/rotulos";
 import { supabaseConfigurado } from "@/lib/supabase/config";
-import { criarClienteServidor } from "@/lib/supabase/server";
+import { criarClienteNavegador } from "@/lib/supabase/client";
 import { excluirPerfil, salvarPerfil } from "./actions";
+import { TelaCliente } from "@/components/tela-cliente";
 
 const TELA = "config.perfis";
 
@@ -37,7 +40,7 @@ const GRUPOS = [{ titulo: "Painel", telas: [PAINEL] }, ...MENU.map((g) => ({ tit
 
 async function carregar() {
   if (!supabaseConfigurado) return { perfis: [] as Perfil[], usuarios: [] as { perfil_id: string | null }[] };
-  const supabase = await criarClienteServidor();
+  const supabase = criarClienteNavegador();
   const [r1, r2] = await Promise.all([
     supabase.from("perfis").select("id, nome, descricao, todas_empresas, perfil_permissoes(tela_codigo, acao)").order("nome"),
     supabase.from("usuarios").select("perfil_id"),
@@ -93,7 +96,7 @@ function MatrizPermissoes({ marcadas, travada }: { marcadas: Set<string>; travad
   );
 }
 
-export default async function PaginaPerfis({ searchParams }: { searchParams: Promise<{ editar?: string; novo?: string }> }) {
+async function PaginaPerfis({ searchParams }: { searchParams: Promise<{ editar?: string; novo?: string }> }) {
   const acesso = await carregarAcesso();
   if (!pode(acesso, TELA, "ver")) return <SemAcesso codigo={TELA} />;
 
@@ -185,4 +188,8 @@ export default async function PaginaPerfis({ searchParams }: { searchParams: Pro
       </Filtro>
     </div>
   );
+}
+
+export default function Pagina() {
+  return <TelaCliente montar={PaginaPerfis} />;
 }

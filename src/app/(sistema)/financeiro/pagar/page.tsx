@@ -1,3 +1,5 @@
+"use client";
+
 import { FileUp, Plus } from "lucide-react";
 import Link from "next/link";
 import { Filtro } from "@/components/filtro";
@@ -24,8 +26,9 @@ import { hojeBrasil, somarDias } from "@/lib/datas";
 import { formatarData, formatarMoeda } from "@/lib/formato";
 import { type SituacaoTitulo } from "@/lib/rotulos";
 import { supabaseConfigurado } from "@/lib/supabase/config";
-import { criarClienteServidor } from "@/lib/supabase/server";
+import { criarClienteNavegador } from "@/lib/supabase/client";
 import { cancelarConta, estornarPagamento, novaConta, pagarConta, reabrirConta } from "./actions";
+import { TelaCliente } from "@/components/tela-cliente";
 
 const TELA = "financeiro.pagar";
 
@@ -44,12 +47,15 @@ type Titulo = {
   plano_contas: { codigo: string; nome: string } | null;
   contas_bancarias: { nome: string } | null;
 };
-type Filtros = { novo?: string; pagar?: string; de?: string; ate?: string; por?: string; situacao?: string };
+type Filtros = { novo?: string; pagar?: string; de?: string; ate?: string; por?: string; situacao?: string } & Preenchido;
+// Atalho da conciliação bancária: abre a conta nova já preenchida com a linha do extrato.
+type Preenchido = { empresa?: string; descricao?: string; valor?: string; vencimento?: string; volta?: string };
+
 const DATAS_PERIODO = { vencimento: "Vencimento", data_pagamento: "Pagamento" };
 
 async function carregar(empresa: string | null, periodo: Periodo): Promise<Titulo[]> {
   if (!supabaseConfigurado) return [];
-  const supabase = await criarClienteServidor();
+  const supabase = criarClienteNavegador();
   let consulta = supabase
     .from("contas_pagar")
     .select(
@@ -68,7 +74,7 @@ async function carregar(empresa: string | null, periodo: Periodo): Promise<Titul
   return ((await consulta).data ?? []) as unknown as Titulo[];
 }
 
-export default async function PaginaContasPagar({ searchParams }: { searchParams: Promise<Filtros> }) {
+async function PaginaContasPagar({ searchParams }: { searchParams: Promise<Filtros> }) {
   const acesso = await carregarAcesso();
   if (!pode(acesso, TELA, "ver")) return <SemAcesso codigo={TELA} />;
 
@@ -91,7 +97,7 @@ export default async function PaginaContasPagar({ searchParams }: { searchParams
   const criando = !!filtros.novo && pode(acesso, TELA, "criar");
   const [contasBancarias, fornecedores, categorias, centros] = await Promise.all([
     pagando && supabaseConfigurado
-      ? (await criarClienteServidor())
+      ? (criarClienteNavegador())
           .from("contas_bancarias")
           .select("id, nome")
           .eq("empresa_id", pagando.empresa_id)
@@ -128,10 +134,15 @@ export default async function PaginaContasPagar({ searchParams }: { searchParams
               <Link href="/financeiro/pagar" className={estiloBotaoSecundario}>
                 Cancelar
               </Link>
-            } acao={novaConta} rotulo="Salvar" className="space-y-4">
+            }
+            acao={novaConta}
+            rotulo="Salvar"
+            className="space-y-4"
+          >
+            {filtros.volta && <input type="hidden" name="volta" value={filtros.volta} />}
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
               <Campo rotulo="Empresa que paga" className="sm:col-span-2">
-                <select name="empresa_id" required defaultValue={selecionada?.id ?? ""} className={estiloCampo}>
+                <select name="empresa_id" required defaultValue={filtros.empresa ?? selecionada?.id ?? ""} className={estiloCampo}>
                   <option value="" disabled>
                     Escolha...
                   </option>
@@ -153,7 +164,7 @@ export default async function PaginaContasPagar({ searchParams }: { searchParams
                 </select>
               </Campo>
               <Campo rotulo="Descrição" className="sm:col-span-2">
-                <input name="descricao" required placeholder="Ex.: Aluguel do galpão" className={estiloCampo} />
+                <input name="descricao" required defaultValue={filtros.descricao} placeholder="Ex.: Aluguel do galpão" className={estiloCampo} />
               </Campo>
               <Campo rotulo="Categoria financeira">
                 <select name="categoria_id" required defaultValue="" className={estiloCampo}>
@@ -178,10 +189,10 @@ export default async function PaginaContasPagar({ searchParams }: { searchParams
                 </select>
               </Campo>
               <Campo rotulo="Valor de cada parcela (R$)">
-                <input name="valor" required inputMode="decimal" className={estiloCampo} />
+                <input name="valor" required inputMode="decimal" defaultValue={filtros.valor?.replace(".", ",")} className={estiloCampo} />
               </Campo>
               <Campo rotulo="Vencimento (1ª parcela)">
-                <input name="vencimento" type="date" required defaultValue={hoje} className={estiloCampo} />
+                <input name="vencimento" type="date" required defaultValue={filtros.vencimento ?? hoje} className={estiloCampo} />
               </Campo>
               <Campo rotulo="Parcelas" dica="Uma por mês, no mesmo dia.">
                 <input name="parcelas" type="number" min={1} max={120} defaultValue={1} className={estiloCampo} />
@@ -310,7 +321,7 @@ export default async function PaginaContasPagar({ searchParams }: { searchParams
                   {t.parcela && <span className="text-texto-suave"> · {t.parcela}</span>}
                   {t.nota_id && (
                     <span className="ml-2 text-xs">
-                      <LinkAcao href={`/financeiro/notas-fornecedor/${t.nota_id}`}>Ver nota</LinkAcao>
+                      <LinkAcao href={`/financeiro/notas-fornecedor/nota?id=${t.nota_id}`}>Ver nota</LinkAcao>
                     </span>
                   )}
                 </Celula>
@@ -376,4 +387,8 @@ export default async function PaginaContasPagar({ searchParams }: { searchParams
       </Filtro>
     </div>
   );
+}
+
+export default function Pagina() {
+  return <TelaCliente montar={PaginaContasPagar} />;
 }

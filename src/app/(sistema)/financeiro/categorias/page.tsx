@@ -1,3 +1,5 @@
+"use client";
+
 import { Plus } from "lucide-react";
 import Link from "next/link";
 import { ATALHO_SITUACAO, Filtro } from "@/components/filtro";
@@ -18,8 +20,9 @@ import {
 import { carregarAcesso, pode } from "@/lib/acesso";
 import { TIPOS_PLANO_CONTA, type TipoPlanoConta } from "@/lib/rotulos";
 import { supabaseConfigurado } from "@/lib/supabase/config";
-import { criarClienteServidor } from "@/lib/supabase/server";
+import { criarClienteNavegador } from "@/lib/supabase/client";
 import { salvarPlanoConta } from "./actions";
+import { TelaCliente } from "@/components/tela-cliente";
 
 const TELA = "financeiro.categorias";
 
@@ -28,7 +31,7 @@ type Filtros = { editar?: string; novo?: string; pai?: string };
 
 async function carregar(): Promise<PlanoConta[]> {
   if (!supabaseConfigurado) return [];
-  const supabase = await criarClienteServidor();
+  const supabase = criarClienteNavegador();
   const { data } = await supabase.from("plano_contas").select("id, codigo, nome, tipo, pai_id, ativa");
   return (data ?? []) as PlanoConta[];
 }
@@ -51,7 +54,7 @@ function proximoCodigo(pai: PlanoConta, contas: PlanoConta[]) {
   return `${pai.codigo}.${String(Math.max(0, ...filhas) + 1).padStart(2, "0")}`;
 }
 
-export default async function PaginaCategorias({ searchParams }: { searchParams: Promise<Filtros> }) {
+async function PaginaCategorias({ searchParams }: { searchParams: Promise<Filtros> }) {
   const acesso = await carregarAcesso();
   if (!pode(acesso, TELA, "ver")) return <SemAcesso codigo={TELA} />;
 
@@ -169,4 +172,8 @@ export default async function PaginaCategorias({ searchParams }: { searchParams:
       </Filtro>
     </div>
   );
+}
+
+export default function Pagina() {
+  return <TelaCliente montar={PaginaCategorias} />;
 }

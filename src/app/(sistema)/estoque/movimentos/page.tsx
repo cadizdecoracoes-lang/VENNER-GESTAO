@@ -1,3 +1,5 @@
+"use client";
+
 import { Filtro } from "@/components/filtro";
 import { FiltroPeriodo, lerPeriodo, type Periodo } from "@/components/periodo";
 import { CabecalhoTela, Celula, Etiqueta, Fonte, LinkAcao, SemAcesso, Tabela } from "@/components/ui";
@@ -5,7 +7,8 @@ import { carregarAcesso, pode } from "@/lib/acesso";
 import { hojeBrasil, somarDias } from "@/lib/datas";
 import { formatarData, formatarMoeda, formatarNumero } from "@/lib/formato";
 import { supabaseConfigurado } from "@/lib/supabase/config";
-import { criarClienteServidor } from "@/lib/supabase/server";
+import { criarClienteNavegador } from "@/lib/supabase/client";
+import { TelaCliente } from "@/components/tela-cliente";
 
 const TELA = "estoque.movimentos";
 const DATAS_PERIODO = { data: "Data do movimento" };
@@ -32,7 +35,7 @@ type Filtros = { item?: string; de?: string; ate?: string; por?: string };
 
 async function carregar(item: string | undefined, periodo: Periodo, hoje: string): Promise<Movimento[]> {
   if (!supabaseConfigurado) return [];
-  const supabase = await criarClienteServidor();
+  const supabase = criarClienteNavegador();
   let consulta = supabase
     .from("movimentos_estoque")
     .select(
@@ -48,12 +51,12 @@ async function carregar(item: string | undefined, periodo: Periodo, hoje: string
 }
 
 function linkOrigem(m: Movimento) {
-  if (m.origem_tipo === "nota_fornecedor" && m.origem_id) return `/financeiro/notas-fornecedor/${m.origem_id}`;
-  if (m.origem_tipo === "pedido_venda" && m.origem_id) return `/vendas/pedidos/${m.origem_id}`;
+  if (m.origem_tipo === "nota_fornecedor" && m.origem_id) return `/financeiro/notas-fornecedor/nota?id=${m.origem_id}`;
+  if (m.origem_tipo === "pedido_venda" && m.origem_id) return `/vendas/pedidos/pedido?id=${m.origem_id}`;
   return null;
 }
 
-export default async function PaginaMovimentos({ searchParams }: { searchParams: Promise<Filtros> }) {
+async function PaginaMovimentos({ searchParams }: { searchParams: Promise<Filtros> }) {
   const acesso = await carregarAcesso();
   if (!pode(acesso, TELA, "ver") && !pode(acesso, "estoque.saldos", "ver")) return <SemAcesso codigo={TELA} />;
   const filtros = await searchParams;
@@ -134,4 +137,8 @@ export default async function PaginaMovimentos({ searchParams }: { searchParams:
       </Fonte>
     </div>
   );
+}
+
+export default function Pagina() {
+  return <TelaCliente montar={PaginaMovimentos} />;
 }

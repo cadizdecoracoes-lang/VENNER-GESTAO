@@ -1,16 +1,32 @@
-import { redirect } from "next/navigation";
+"use client";
+
+import { useSearchParams } from "next/navigation";
+import { Suspense, useEffect } from "react";
+import { redirect } from "@/lib/navegacao";
 import { FormLogin } from "./form-login";
 
-type Busca = { code?: string; erro?: string; error_description?: string };
+function Login() {
+  const busca = useSearchParams();
+  const codigo = busca.get("code");
 
-export default async function PaginaLogin({ searchParams }: { searchParams: Promise<Busca> }) {
-  const busca = await searchParams;
-  // Link de e-mail que caiu no endereço principal (Site URL) em vez da tela de confirmação.
-  if (busca.code) redirect(`/login/confirmar?code=${encodeURIComponent(busca.code)}&proximo=/login/nova-senha`);
+  useEffect(() => {
+    // Link de e-mail que caiu no endereço principal (Site URL) em vez da tela de confirmação.
+    if (codigo) redirect(`/login/confirmar?code=${encodeURIComponent(codigo)}&proximo=/login/nova-senha`);
+  }, [codigo]);
 
   const erro =
-    busca.erro === "link" || busca.error_description
-      ? "O link do e-mail expirou ou já foi usado. Peça um novo em “Esqueci minha senha”."
-      : undefined;
+    busca.get("erro") === "inatividade"
+      ? "Sua sessão foi encerrada depois de 15 minutos sem uso. Entre de novo."
+      : busca.get("erro") === "link" || busca.get("error_description")
+        ? "O link do e-mail expirou ou já foi usado. Peça um novo em “Esqueci minha senha”."
+        : undefined;
   return <FormLogin erroInicial={erro} />;
+}
+
+export default function PaginaLogin() {
+  return (
+    <Suspense>
+      <Login />
+    </Suspense>
+  );
 }

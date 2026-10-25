@@ -1,3 +1,5 @@
+"use client";
+
 import { Plus } from "lucide-react";
 import Link from "next/link";
 import { Filtro } from "@/components/filtro";
@@ -19,8 +21,9 @@ import { carregarAcesso, pode } from "@/lib/acesso";
 import { formatarCnpj, formatarData } from "@/lib/formato";
 import { ATIVIDADES, REGIMES, type Regime } from "@/lib/rotulos";
 import { supabaseConfigurado } from "@/lib/supabase/config";
-import { criarClienteServidor } from "@/lib/supabase/server";
+import { criarClienteNavegador } from "@/lib/supabase/client";
 import { salvarEmpresa } from "./actions";
+import { TelaCliente } from "@/components/tela-cliente";
 
 const TELA = "config.empresas";
 
@@ -38,7 +41,7 @@ type Historico = { regime_tributario: Regime; vigencia_inicio: string };
 
 async function carregar(editar?: string) {
   if (!supabaseConfigurado) return { empresas: [] as Empresa[], historico: [] as Historico[] };
-  const supabase = await criarClienteServidor();
+  const supabase = criarClienteNavegador();
   const [{ data: empresas }, { data: historico }] = await Promise.all([
     supabase.from("empresas").select("id, razao_social, nome_fantasia, cnpj, regime_tributario, atividades, ativa").order("razao_social"),
     editar
@@ -52,7 +55,7 @@ async function carregar(editar?: string) {
   return { empresas: (empresas ?? []) as Empresa[], historico: (historico ?? []) as Historico[] };
 }
 
-export default async function PaginaEmpresas({ searchParams }: { searchParams: Promise<{ editar?: string; novo?: string }> }) {
+async function PaginaEmpresas({ searchParams }: { searchParams: Promise<{ editar?: string; novo?: string }> }) {
   const acesso = await carregarAcesso();
   if (!pode(acesso, TELA, "ver")) return <SemAcesso codigo={TELA} />;
 
@@ -186,4 +189,8 @@ export default async function PaginaEmpresas({ searchParams }: { searchParams: P
       </Filtro>
     </div>
   );
+}
+
+export default function Pagina() {
+  return <TelaCliente montar={PaginaEmpresas} />;
 }

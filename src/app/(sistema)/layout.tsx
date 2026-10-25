@@ -1,18 +1,47 @@
+"use client";
+
 import { Clock, LogOut } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
 import { AbasProvider } from "@/components/abas";
 import { BarraAbas } from "@/components/barra-abas";
 import { MenuLateral } from "@/components/menu-lateral";
+import { SaidaPorInatividade } from "@/components/saida-inatividade";
 import { SeletorEmpresa } from "@/components/seletor-empresa";
-import { carregarAcesso, telasVisiveis } from "@/lib/acesso";
-import { carregarEmpresas, empresaSelecionada } from "@/lib/empresa";
+import { Carregando } from "@/components/tela-cliente";
+import { type Acesso, carregarAcesso, telasVisiveis } from "@/lib/acesso";
+import { carregarEmpresas, empresaSelecionada, type EmpresaResumo } from "@/lib/empresa";
+import { aoRecarregar, registrarNavegacao } from "@/lib/navegacao";
+import { supabaseConfigurado } from "@/lib/supabase/config";
 import { sair } from "../login/actions";
 
-export default async function LayoutSistema({ children }: { children: React.ReactNode }) {
-  const [acesso, empresas, selecionada] = await Promise.all([carregarAcesso(), carregarEmpresas(), empresaSelecionada()]);
+type Dados = { acesso: Acesso; empresas: EmpresaResumo[]; selecionada: EmpresaResumo | null };
+
+export default function LayoutSistema({ children }: { children: React.ReactNode }) {
+  const router = useRouter();
+  const [dados, setDados] = useState<Dados | null>(null);
+  const [versao, setVersao] = useState(0);
+
+  useEffect(() => {
+    registrarNavegacao((url) => router.push(url));
+    return aoRecarregar(() => setVersao((v) => v + 1));
+  }, [router]);
+
+  useEffect(() => {
+    Promise.all([carregarAcesso(), carregarEmpresas(), empresaSelecionada()]).then(([acesso, empresas, selecionada]) => {
+      // Sem login: vai para a tela de entrada (antes era o proxy do servidor).
+      if (supabaseConfigurado && !acesso.email) router.replace("/login");
+      else setDados({ acesso, empresas, selecionada });
+    });
+  }, [router, versao]);
+
+  if (!dados) return <div className="p-6"><Carregando /></div>;
+  const { acesso, empresas, selecionada } = dados;
   const { email } = acesso;
 
   return (
     <AbasProvider>
+      {supabaseConfigurado && <SaidaPorInatividade />}
       <div className="flex h-full">
         <MenuLateral telas={telasVisiveis(acesso)} />
         <div className="flex min-w-0 flex-1 flex-col">

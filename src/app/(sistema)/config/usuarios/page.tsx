@@ -1,3 +1,5 @@
+"use client";
+
 import Link from "next/link";
 import { Filtro } from "@/components/filtro";
 import { FormAcao } from "@/components/form-acao";
@@ -16,8 +18,9 @@ import {
 import { carregarAcesso, pode } from "@/lib/acesso";
 import { formatarData } from "@/lib/formato";
 import { supabaseConfigurado } from "@/lib/supabase/config";
-import { criarClienteServidor } from "@/lib/supabase/server";
+import { criarClienteNavegador } from "@/lib/supabase/client";
 import { salvarUsuario } from "./actions";
+import { TelaCliente } from "@/components/tela-cliente";
 
 const TELA = "config.usuarios";
 
@@ -35,7 +38,7 @@ type Usuario = {
 
 async function carregar() {
   if (!supabaseConfigurado) return { usuarios: [] as Usuario[], perfis: [] as Perfil[], empresas: [] as Empresa[] };
-  const supabase = await criarClienteServidor();
+  const supabase = criarClienteNavegador();
   const [r1, r2, r3] = await Promise.all([
     supabase.from("usuarios").select("id, nome, email, ativo, perfil_id, criado_em, usuario_empresas(empresa_id)").order("nome"),
     supabase.from("perfis").select("id, nome, descricao, todas_empresas").order("nome"),
@@ -44,7 +47,7 @@ async function carregar() {
   return { usuarios: (r1.data ?? []) as Usuario[], perfis: (r2.data ?? []) as Perfil[], empresas: (r3.data ?? []) as Empresa[] };
 }
 
-export default async function PaginaUsuarios({ searchParams }: { searchParams: Promise<{ editar?: string }> }) {
+async function PaginaUsuarios({ searchParams }: { searchParams: Promise<{ editar?: string }> }) {
   const acesso = await carregarAcesso();
   if (!pode(acesso, TELA, "ver")) return <SemAcesso codigo={TELA} />;
 
@@ -171,4 +174,8 @@ export default async function PaginaUsuarios({ searchParams }: { searchParams: P
       </Filtro>
     </div>
   );
+}
+
+export default function Pagina() {
+  return <TelaCliente montar={PaginaUsuarios} />;
 }

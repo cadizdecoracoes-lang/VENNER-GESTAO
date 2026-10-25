@@ -1,11 +1,14 @@
+"use client";
+
 import Link from "next/link";
 import { Filtro } from "@/components/filtro";
 import { CabecalhoTela, Cartao, Celula, Etiqueta, Fonte, Indicador, LinkAcao, SemAcesso, Tabela } from "@/components/ui";
 import { carregarAcesso, pode } from "@/lib/acesso";
 import { hojeBrasil, somarDias } from "@/lib/datas";
 import { formatarData, formatarMoeda, formatarNumero } from "@/lib/formato";
-import { necessidadeMateriais, type ItemPlan } from "@/lib/planejamento";
+import { comprado, necessidadeMateriais, type ItemPlan } from "@/lib/planejamento";
 import { carregarPlanejamento } from "@/lib/planejamento-servidor";
+import { TelaCliente } from "@/components/tela-cliente";
 
 const TELA = "compras.sugestoes";
 const COMPRADOS = ["materia_prima", "embalagem"];
@@ -21,7 +24,7 @@ type Linha = {
   so_minimo: boolean;
 };
 
-export default async function PaginaSugestoes() {
+async function PaginaSugestoes() {
   const acesso = await carregarAcesso();
   if (!pode(acesso, TELA, "ver")) return <SemAcesso codigo={TELA} />;
   const hoje = hojeBrasil();
@@ -32,7 +35,7 @@ export default async function PaginaSugestoes() {
 
   const doMrp = new Set(linhasMrp.map((l) => l.item.id));
   const linhas: Linha[] = [
-    ...linhasMrp.filter((l) => !l.produzido && l.sugestao > 0).map((l) => ({ ...l, so_minimo: false })),
+    ...linhasMrp.filter((l) => comprado(l) && l.sugestao > 0).map((l) => ({ ...l, so_minimo: false })),
     // Fora dos pedidos: só a reposição do estoque mínimo.
     ...(dados?.itens ?? [])
       .filter((i) => COMPRADOS.includes(i.tipo) && !doMrp.has(i.id) && Number(i.estoque_minimo) > Number(i.saldo))
@@ -48,6 +51,7 @@ export default async function PaginaSugestoes() {
       })),
   ].sort((a, b) => (a.data_limite ?? "9999").localeCompare(b.data_limite ?? "9999") || a.item.codigo.localeCompare(b.item.codigo));
   const produzir = linhasMrp.filter((l) => l.produzido && l.falta > 0);
+  const semFicha = linhasMrp.filter((l) => l.sem_ficha && l.falta > 0);
 
   const paraPedidos = linhas.filter((l) => l.falta > 0);
   const atrasadas = paraPedidos.filter((l) => l.data_limite && l.data_limite <= hoje);
@@ -150,7 +154,7 @@ export default async function PaginaSugestoes() {
                       {l.pedidos.map((n, k) => (
                         <span key={n}>
                           {k > 0 && ", "}
-                          <LinkAcao href={`/vendas/pedidos/${idPedido.get(n)}`}>{n}</LinkAcao>
+                          <LinkAcao href={`/vendas/pedidos/pedido?id=${idPedido.get(n)}`}>{n}</LinkAcao>
                         </span>
                       ))}
                     </Celula>
@@ -165,6 +169,45 @@ export default async function PaginaSugestoes() {
             entrega entre os pedidos que usam o item, menos o prazo de reposição do cadastro. Clique no estoque para ver as movimentações e
             no número do pedido para abri-lo.
           </Fonte>
+
+          {semFicha.length > 0 && (
+            <Cartao
+              titulo="Produtos sem ficha técnica"
+              acoes={<Etiqueta cor="alerta">{semFicha.length} fora da conta</Etiqueta>}
+            >
+              <Tabela colunas={["Produto", "Pedidos precisam", "Estoque", "Falta", "Pedidos"]} embutida>
+                {semFicha.map((l) => (
+                  <tr key={l.item.id}>
+                    <Celula>
+                      <LinkAcao href={`/producao/ficha-tecnica?item=${l.item.id}`}>
+                        <span className="font-medium">{l.item.codigo}</span> · {l.item.descricao}
+                      </LinkAcao>
+                    </Celula>
+                    <Celula className="whitespace-nowrap tabular-nums">
+                      {formatarNumero(l.necessidade)} {l.item.unidade}
+                    </Celula>
+                    <Celula className="whitespace-nowrap tabular-nums">{formatarNumero(l.saldo)}</Celula>
+                    <Celula className="whitespace-nowrap tabular-nums font-medium text-perigo">{formatarNumero(l.falta)}</Celula>
+                    <Celula className="text-sm">
+                      {l.pedidos.map((n, k) => (
+                        <span key={n}>
+                          {k > 0 && ", "}
+                          <LinkAcao href={`/vendas/pedidos/pedido?id=${idPedido.get(n)}`}>{n}</LinkAcao>
+                        </span>
+                      ))}
+                    </Celula>
+                  </tr>
+                ))}
+              </Tabela>
+              <div className="mt-3">
+                <Fonte>
+                  Produtos vendidos que a fábrica produz, mas ainda sem ficha técnica ativa: sem ela não dá para saber a matéria-prima, então
+                  eles não aparecem na lista de compra. A estrutura (kit ou produção) cadastrada no Tiny vira a ficha técnica sozinha na
+                  próxima leitura; os demais são cadastrados clicando no produto.
+                </Fonte>
+              </div>
+            </Cartao>
+          )}
 
           {produzir.length > 0 && (
             <Cartao titulo="Subconjuntos e produtos a produzir">
@@ -183,7 +226,7 @@ export default async function PaginaSugestoes() {
                       {l.pedidos.map((n, k) => (
                         <span key={n}>
                           {k > 0 && ", "}
-                          <LinkAcao href={`/vendas/pedidos/${idPedido.get(n)}`}>{n}</LinkAcao>
+                          <LinkAcao href={`/vendas/pedidos/pedido?id=${idPedido.get(n)}`}>{n}</LinkAcao>
                         </span>
                       ))}
                     </Celula>
@@ -206,4 +249,8 @@ export default async function PaginaSugestoes() {
       )}
     </div>
   );
+}
+
+export default function Pagina() {
+  return <TelaCliente montar={PaginaSugestoes} />;
 }

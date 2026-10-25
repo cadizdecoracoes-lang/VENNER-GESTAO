@@ -1,11 +1,12 @@
 name: Publicar banco
 
-# Aplica no Supabase de produção as migrações que entraram no ramo principal.
-# Só roda depois que um Pull Request é aprovado e mesclado (merge).
+# Aplica no Supabase de produção as migrações que entraram no ramo principal e
+# publica as Edge Functions (supabase/functions). Só roda depois que um Pull
+# Request é aprovado e mesclado (merge).
 on:
   push:
     branches: [main]
-    paths: ["supabase/migrations/**", ".github/workflows/publicar-banco.yml"]
+    paths: ["supabase/migrations/**", "supabase/functions/**", "supabase/config.toml", ".github/workflows/publicar-banco.yml"]
   workflow_dispatch:
 
 concurrency: publicar-banco
@@ -46,5 +47,16 @@ jobs:
           fi
           # A CLI também lê SUPABASE_PROJECT_ID do ambiente; passa só o ID limpo.
           export SUPABASE_PROJECT_ID="$ref"
+          echo "ref=$ref" >> "$GITHUB_ENV"
           supabase link --project-ref "$ref" --password "$SUPABASE_DB_PASSWORD"
           supabase db push --password "$SUPABASE_DB_PASSWORD"
+      - name: Publicar Edge Functions
+        if: steps.segredos.outputs.pronto == 'true'
+        run: |
+          export SUPABASE_PROJECT_ID="$ref"
+          # verify_jwt de cada função vem do supabase/config.toml.
+          supabase functions deploy --project-ref "$ref" --use-api
+          # Aponta o robô do Tiny (agendado no banco) para a função robo-tiny.
+          curl -fsS -X POST "https://$ref.supabase.co/functions/v1/robo-tiny" \
+            -H "content-type: application/json" -d '{"registrar": true}'
+          echo

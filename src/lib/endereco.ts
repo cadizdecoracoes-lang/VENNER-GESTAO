@@ -1,12 +1,12 @@
-import { headers } from "next/headers";
+// Endereço base do site (no GitHub Pages: /VENNER-GESTAO). Os links do Next
+// (Link, router) já somam o base; links montados à mão usam comBase.
+export const BASE = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
 
-// Endereço público do sistema (https://...), lido dos cabeçalhos repassados
-// pelo Cloudflare. Usado nos links que saem por e-mail.
-export async function enderecoPublico() {
-  const h = await headers();
-  const host = h.get("x-forwarded-host") ?? h.get("host") ?? "localhost:3000";
-  const protocolo = h.get("x-forwarded-proto") ?? (host.startsWith("localhost") || host.startsWith("127.") ? "http" : "https");
-  return `${protocolo}://${host.split(",")[0].trim()}`;
+export const comBase = (caminho: string) => `${BASE}${caminho}`;
+
+// Endereço público do sistema (https://...), para os links que saem por e-mail.
+export function enderecoPublico() {
+  return `${window.location.origin}${BASE}`;
 }
 
 // Só aceita caminhos internos, para o link do e-mail não levar a outro site.

@@ -77,10 +77,21 @@ export type LinhaNecessidade = {
   sugestao: number;
   // Item com ficha técnica: a falta é produzida, não comprada.
   produzido: boolean;
+  // Produto acabado ou subconjunto sem ficha técnica ativa: não dá para saber a
+  // matéria-prima dele, então não entra na compra (precisa cadastrar a ficha).
+  sem_ficha: boolean;
   // Data limite para o item estar disponível: menor prazo dos pedidos, menos o prazo de reposição.
   data_limite: string | null;
   pedidos: number[];
 };
+
+// Tipos que a fábrica produz: sem ficha técnica, não viram compra.
+const FABRICADOS = new Set(["produto_acabado", "subconjunto"]);
+
+// Itens que entram na sugestão de compra quando faltam.
+export function comprado(l: LinhaNecessidade): boolean {
+  return !l.produzido && !l.sem_ficha && l.item.tipo !== "servico";
+}
 
 export function necessidadeMateriais(d: DadosPlanejamento, hoje: string): LinhaNecessidade[] {
   const fichas = new Map(d.fichas.map((f) => [f.item_id, f]));
@@ -119,6 +130,7 @@ export function necessidadeMateriais(d: DadosPlanejamento, hoje: string): LinhaN
       falta: arred(falta),
       sugestao: arred(Math.max(0, total + n(item.estoque_minimo) - saldo)),
       produzido: !!f,
+      sem_ficha: !f && FABRICADOS.has(item.tipo),
       data_limite: limite ? somarDias(limite, -n(item.prazo_reposicao_dias)) : null,
       pedidos: [...(origem.get(id) ?? [])].sort((a, b) => a - b),
     });
@@ -205,7 +217,7 @@ export function filaProducao(d: DadosPlanejamento, hoje: string): PosicaoFila[] 
       if (resto <= 1e-9) return;
       const f = fichas.get(id);
       if (!f || caminho.has(id)) {
-        if (!f && itens.get(id)?.tipo !== "materia_prima" && itens.get(id)?.tipo !== "embalagem" && itens.get(id)?.tipo !== "servico") {
+        if (!f && FABRICADOS.has(itens.get(id)?.tipo ?? "")) {
           semFicha.add(id);
         } else if (itens.get(id)?.tipo !== "servico") {
           faltas.set(id, (faltas.get(id) ?? 0) + resto);

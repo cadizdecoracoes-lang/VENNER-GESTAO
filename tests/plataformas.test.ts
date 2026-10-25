@@ -3,8 +3,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { acharCabecalho, lerData, lerValor, lerVendas, mapearColunas } from "../src/lib/plataformas/planilha.ts";
-import { converterPedidoML } from "../src/lib/plataformas/mercado-livre.ts";
-import { converterPedidoShopee } from "../src/lib/plataformas/shopee.ts";
+import { converterPedidoML } from "../supabase/functions/_shared/plataformas/mercado-livre.ts";
+import { converterPedidoShopee } from "../supabase/functions/_shared/plataformas/shopee.ts";
 import { diasDaCondicao, dividirParcelas } from "../src/lib/parcelas.ts";
 
 test("valores e datas no formato brasileiro", () => {

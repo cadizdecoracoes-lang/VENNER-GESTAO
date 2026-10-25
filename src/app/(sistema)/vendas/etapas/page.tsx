@@ -1,3 +1,5 @@
+"use client";
+
 import { Plus } from "lucide-react";
 import Link from "next/link";
 import { FormAcao } from "@/components/form-acao";
@@ -17,8 +19,9 @@ import {
 import { carregarAcesso, pode } from "@/lib/acesso";
 import { FASES_PEDIDO, type FasePedido } from "@/lib/rotulos";
 import { supabaseConfigurado } from "@/lib/supabase/config";
-import { criarClienteServidor } from "@/lib/supabase/server";
+import { criarClienteNavegador } from "@/lib/supabase/client";
 import { salvarEtapa } from "./actions";
+import { TelaCliente } from "@/components/tela-cliente";
 
 const TELA = "vendas.etapas";
 
@@ -32,14 +35,14 @@ const EXPLICACAO: Record<FasePedido, string> = {
   encerrado: "Entregue ou cancelado: sai do funil.",
 };
 
-export default async function PaginaEtapas({ searchParams }: { searchParams: Promise<{ editar?: string; novo?: string }> }) {
+async function PaginaEtapas({ searchParams }: { searchParams: Promise<{ editar?: string; novo?: string }> }) {
   const acesso = await carregarAcesso();
   if (!pode(acesso, TELA, "ver")) return <SemAcesso codigo={TELA} />;
   const { editar, novo } = await searchParams;
 
   let etapas: Etapa[] = [];
   if (supabaseConfigurado) {
-    const supabase = await criarClienteServidor();
+    const supabase = criarClienteNavegador();
     etapas = ((await supabase.from("etapas_pedido").select("id, nome, ordem, fase, ativa").order("ordem")).data ?? []) as Etapa[];
   }
   const emEdicao = editar ? etapas.find((e) => e.id === editar) : undefined;
@@ -110,4 +113,8 @@ export default async function PaginaEtapas({ searchParams }: { searchParams: Pro
       </Tabela>
     </div>
   );
+}
+
+export default function Pagina() {
+  return <TelaCliente montar={PaginaEtapas} />;
 }

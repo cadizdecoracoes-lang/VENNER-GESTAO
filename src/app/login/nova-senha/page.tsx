@@ -17,7 +17,7 @@ export default function PaginaNovaSenha() {
       <form action={acao} className="space-y-4">
         <CampoEntrada rotulo="Senha nova" name="senha" type="password" autoComplete="new-password" minLength={8} />
         <CampoEntrada rotulo="Repita a senha nova" name="confirmacao" type="password" autoComplete="new-password" minLength={8} />
-        <Mensagens erro={estado.erro} />
+        <Mensagens erro={estado?.erro} />
         <BotaoEntrada enviando={enviando} rotulo="Salvar e entrar" rotuloEnviando="Salvando..." />
       </form>
       <LinkEntrada href="/login">Voltar para o login</LinkEntrada>

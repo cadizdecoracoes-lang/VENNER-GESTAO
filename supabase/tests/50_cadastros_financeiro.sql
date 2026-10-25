@@ -72,7 +72,11 @@ update usuarios set perfil_id = (select id from perfis where nome = 'Contabilida
 set role authenticated;
 set request.jwt.claim.sub = '00000000-0000-0000-0000-00000000000e';
 select pg_temp.esperar((select count(*) from plano_contas) = 24, 'contabilidade consulta o plano de contas');
-select pg_temp.esperar((select count(*) from contas_bancarias) = 0, 'contabilidade não vê contas bancárias');
+-- Desde o pacote 17 a contabilidade enxerga as contas do CNPJ liberado para consultar a conciliação.
+select pg_temp.esperar((select count(*) from contas_bancarias) = 1, 'contabilidade vê só as contas do CNPJ liberado');
+select pg_temp.esperar_erro(
+  $$insert into contas_bancarias (empresa_id, nome) values ((select id from empresas where cnpj = '11111111000111'), 'Outra')$$,
+  'row-level security', 'contabilidade não cadastra conta bancária');
 reset role;
 
 set role authenticated;

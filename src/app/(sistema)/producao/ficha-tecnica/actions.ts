@@ -1,16 +1,13 @@
-"use server";
-
-import { revalidatePath } from "next/cache";
-import { redirect } from "next/navigation";
+import { redirect, revalidatePath } from "@/lib/navegacao";
 import { mensagemErro, semLinhas, SEM_BANCO, type Estado } from "@/lib/erros";
 import { lerNumero } from "@/lib/formato";
 import { supabaseConfigurado } from "@/lib/supabase/config";
-import { criarClienteServidor } from "@/lib/supabase/server";
+import { criarClienteNavegador } from "@/lib/supabase/client";
 
 const CAMINHO = "/producao/ficha-tecnica";
 
 async function cliente() {
-  return supabaseConfigurado ? criarClienteServidor() : null;
+  return supabaseConfigurado ? criarClienteNavegador() : null;
 }
 
 export async function criarVersao(itemId: string): Promise<Estado> {

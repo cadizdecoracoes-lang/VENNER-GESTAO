@@ -1,3 +1,5 @@
+"use client";
+
 import { Plus } from "lucide-react";
 import Link from "next/link";
 import { ATALHO_SITUACAO, Filtro } from "@/components/filtro";
@@ -20,8 +22,9 @@ import { carregarEmpresas, empresaSelecionada } from "@/lib/empresa";
 import { formatarData, formatarMoeda } from "@/lib/formato";
 import { TIPOS_CONTA_BANCARIA, type TipoContaBancaria } from "@/lib/rotulos";
 import { supabaseConfigurado } from "@/lib/supabase/config";
-import { criarClienteServidor } from "@/lib/supabase/server";
+import { criarClienteNavegador } from "@/lib/supabase/client";
 import { salvarConta } from "./actions";
+import { TelaCliente } from "@/components/tela-cliente";
 
 const TELA = "financeiro.contas_bancarias";
 
@@ -42,7 +45,7 @@ type Filtros = { editar?: string; novo?: string };
 
 async function carregar(empresa: string | null): Promise<Conta[]> {
   if (!supabaseConfigurado) return [];
-  const supabase = await criarClienteServidor();
+  const supabase = criarClienteNavegador();
   let consulta = supabase
     .from("contas_bancarias")
     .select("id, empresa_id, nome, tipo, banco_codigo, banco_nome, agencia, conta, saldo_inicial, data_saldo_inicial, ativa")
@@ -52,7 +55,7 @@ async function carregar(empresa: string | null): Promise<Conta[]> {
   return (data ?? []) as Conta[];
 }
 
-export default async function PaginaContasBancarias({ searchParams }: { searchParams: Promise<Filtros> }) {
+async function PaginaContasBancarias({ searchParams }: { searchParams: Promise<Filtros> }) {
   const acesso = await carregarAcesso();
   if (!pode(acesso, TELA, "ver")) return <SemAcesso codigo={TELA} />;
 
@@ -207,4 +210,8 @@ export default async function PaginaContasBancarias({ searchParams }: { searchPa
       )}
     </div>
   );
+}
+
+export default function Pagina() {
+  return <TelaCliente montar={PaginaContasBancarias} />;
 }

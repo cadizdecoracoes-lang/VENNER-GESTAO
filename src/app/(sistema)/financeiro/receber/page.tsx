@@ -1,3 +1,5 @@
+"use client";
+
 import { FileUp, Plus } from "lucide-react";
 import Link from "next/link";
 import { Filtro } from "@/components/filtro";
@@ -26,8 +28,9 @@ import { formatarData, formatarMoeda } from "@/lib/formato";
 import { CANAIS, type SituacaoTitulo } from "@/lib/rotulos";
 import { carregarClientes } from "@/lib/vendas";
 import { supabaseConfigurado } from "@/lib/supabase/config";
-import { criarClienteServidor } from "@/lib/supabase/server";
+import { criarClienteNavegador } from "@/lib/supabase/client";
 import { cancelarConta, estornarRecebimento, novaConta, receberConta, reabrirConta } from "./actions";
+import { TelaCliente } from "@/components/tela-cliente";
 
 const TELA = "financeiro.receber";
 
@@ -61,12 +64,15 @@ type Filtros = {
   pedido?: string;
   importadas?: string;
   repetidas?: string;
-};
+} & Preenchido;
+// Atalho da conciliação bancária: abre a conta nova já preenchida com a linha do extrato.
+type Preenchido = { empresa?: string; descricao?: string; valor?: string; vencimento?: string; volta?: string };
+
 const DATAS_PERIODO = { vencimento: "Vencimento", data_recebimento: "Recebimento" };
 
 async function carregar(empresa: string | null, periodo: Periodo, pedido: string | null): Promise<Titulo[]> {
   if (!supabaseConfigurado) return [];
-  const supabase = await criarClienteServidor();
+  const supabase = criarClienteNavegador();
   let consulta = supabase
     .from("contas_receber")
     .select(
@@ -87,7 +93,7 @@ async function carregar(empresa: string | null, periodo: Periodo, pedido: string
   return ((await consulta).data ?? []) as unknown as Titulo[];
 }
 
-export default async function PaginaContasReceber({ searchParams }: { searchParams: Promise<Filtros> }) {
+async function PaginaContasReceber({ searchParams }: { searchParams: Promise<Filtros> }) {
   const acesso = await carregarAcesso();
   if (!pode(acesso, TELA, "ver")) return <SemAcesso codigo={TELA} />;
 
@@ -147,10 +153,15 @@ export default async function PaginaContasReceber({ searchParams }: { searchPara
               <Link href="/financeiro/receber" className={estiloBotaoSecundario}>
                 Cancelar
               </Link>
-            } acao={novaConta} rotulo="Salvar" className="space-y-4">
+            }
+            acao={novaConta}
+            rotulo="Salvar"
+            className="space-y-4"
+          >
+            {filtros.volta && <input type="hidden" name="volta" value={filtros.volta} />}
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
               <Campo rotulo="Empresa que recebe" className="sm:col-span-2">
-                <select name="empresa_id" required defaultValue={selecionada?.id ?? ""} className={estiloCampo}>
+                <select name="empresa_id" required defaultValue={filtros.empresa ?? selecionada?.id ?? ""} className={estiloCampo}>
                   <option value="" disabled>
                     Escolha...
                   </option>
@@ -172,7 +183,7 @@ export default async function PaginaContasReceber({ searchParams }: { searchPara
                 </select>
               </Campo>
               <Campo rotulo="Descrição" className="sm:col-span-2">
-                <input name="descricao" required placeholder="Ex.: Venda avulsa no showroom" className={estiloCampo} />
+                <input name="descricao" required defaultValue={filtros.descricao} placeholder="Ex.: Venda avulsa no showroom" className={estiloCampo} />
               </Campo>
               <Campo rotulo="Categoria financeira" className="sm:col-span-2">
                 <select name="categoria_id" required defaultValue="" className={estiloCampo}>
@@ -187,10 +198,10 @@ export default async function PaginaContasReceber({ searchParams }: { searchPara
                 </select>
               </Campo>
               <Campo rotulo="Valor de cada parcela (R$)">
-                <input name="valor" required inputMode="decimal" className={estiloCampo} />
+                <input name="valor" required inputMode="decimal" defaultValue={filtros.valor?.replace(".", ",")} className={estiloCampo} />
               </Campo>
               <Campo rotulo="Vencimento (1ª parcela)">
-                <input name="vencimento" type="date" required defaultValue={hoje} className={estiloCampo} />
+                <input name="vencimento" type="date" required defaultValue={filtros.vencimento ?? hoje} className={estiloCampo} />
               </Campo>
               <Campo rotulo="Parcelas" dica="Uma por mês, no mesmo dia.">
                 <input name="parcelas" type="number" min={1} max={120} defaultValue={1} className={estiloCampo} />
@@ -247,7 +258,7 @@ export default async function PaginaContasReceber({ searchParams }: { searchPara
 
       {pedido && (
         <p className="text-sm">
-          {origem}. <LinkAcao href={`/vendas/pedidos/${pedido}`}>Abrir o pedido</LinkAcao> ·{" "}
+          {origem}. <LinkAcao href={`/vendas/pedidos/pedido?id=${pedido}`}>Abrir o pedido</LinkAcao> ·{" "}
           <LinkAcao href="/financeiro/receber">Ver todas as contas</LinkAcao>
         </p>
       )}
@@ -342,7 +353,7 @@ export default async function PaginaContasReceber({ searchParams }: { searchPara
                 {!selecionada && <Celula className="whitespace-nowrap text-texto-suave">{nomeEmpresa.get(t.empresa_id) ?? "—"}</Celula>}
                 <Celula>
                   {t.pedido_id ? (
-                    <Link href={`/vendas/pedidos/${t.pedido_id}`} className="font-medium text-primaria hover:underline">
+                    <Link href={`/vendas/pedidos/pedido?id=${t.pedido_id}`} className="font-medium text-primaria hover:underline">
                       {t.descricao}
                     </Link>
                   ) : (
@@ -426,4 +437,8 @@ export default async function PaginaContasReceber({ searchParams }: { searchPara
       </Fonte>
     </div>
   );
+}
+
+export default function Pagina() {
+  return <TelaCliente montar={PaginaContasReceber} />;
 }

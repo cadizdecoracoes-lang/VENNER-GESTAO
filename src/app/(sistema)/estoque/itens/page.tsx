@@ -1,3 +1,5 @@
+"use client";
+
 import { Plus } from "lucide-react";
 import Link from "next/link";
 import { ATALHO_SITUACAO, Filtro } from "@/components/filtro";
@@ -19,8 +21,9 @@ import { carregarAcesso, pode } from "@/lib/acesso";
 import { formatarMoeda, formatarNumero } from "@/lib/formato";
 import { TIPOS_COM_FICHA, TIPOS_ITEM, type TipoItem } from "@/lib/rotulos";
 import { supabaseConfigurado } from "@/lib/supabase/config";
-import { criarClienteServidor } from "@/lib/supabase/server";
+import { criarClienteNavegador } from "@/lib/supabase/client";
 import { salvarItem } from "./actions";
+import { TelaCliente } from "@/components/tela-cliente";
 
 const TELA = "estoque.itens";
 
@@ -45,7 +48,7 @@ type Filtros = { editar?: string; novo?: string };
 
 async function carregar() {
   if (!supabaseConfigurado) return { itens: [] as Item[], unidades: [{ sigla: "UN", descricao: "Unidade" }] as Unidade[] };
-  const supabase = await criarClienteServidor();
+  const supabase = criarClienteNavegador();
   const consulta = supabase
     .from("itens")
     .select("id, codigo, descricao, tipo, unidade, estoque_minimo, prazo_reposicao_dias, custo_medio, preco_venda, ncm, peso_kg, ativo")
@@ -58,7 +61,7 @@ async function carregar() {
   return { itens: (itens ?? []) as Item[], unidades: (unidades ?? []) as Unidade[] };
 }
 
-export default async function PaginaItens({ searchParams }: { searchParams: Promise<Filtros> }) {
+async function PaginaItens({ searchParams }: { searchParams: Promise<Filtros> }) {
   const acesso = await carregarAcesso();
   if (!pode(acesso, TELA, "ver")) return <SemAcesso codigo={TELA} />;
 
@@ -67,7 +70,7 @@ export default async function PaginaItens({ searchParams }: { searchParams: Prom
   let emEdicao = filtros.editar ? itens.find((i) => i.id === filtros.editar) : undefined;
   if (filtros.editar && !emEdicao && supabaseConfigurado) {
     // O item pode estar fora do filtro atual.
-    const supabase = await criarClienteServidor();
+    const supabase = criarClienteNavegador();
     const { data } = await supabase
       .from("itens")
       .select("id, codigo, descricao, tipo, unidade, estoque_minimo, prazo_reposicao_dias, custo_medio, preco_venda, ncm, peso_kg, ativo")
@@ -186,4 +189,8 @@ export default async function PaginaItens({ searchParams }: { searchParams: Prom
       </Filtro>
     </div>
   );
+}
+
+export default function Pagina() {
+  return <TelaCliente montar={PaginaItens} />;
 }
