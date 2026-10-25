@@ -84,6 +84,27 @@ export function dataNoFluxo(m: { data: string; natureza: Natureza }, hoje: strin
   return m.data;
 }
 
+// Fluxo de uma conta bancária só: o realizado e as transferências dela e o
+// saldo dela. Título em aberto ainda não tem conta (ela é escolhida na baixa),
+// então o previsto da empresa só entra quando a empresa tem essa conta como
+// única conta ativa; com várias contas, a projeção fica na visão da empresa.
+export function filtrarPorConta(
+  movimentos: MovimentoFluxo[],
+  saldos: SaldoConta[],
+  conta: string,
+): { movimentos: MovimentoFluxo[]; saldos: SaldoConta[]; comPrevisto: boolean } {
+  const escolhida = saldos.find((s) => s.conta_bancaria_id === conta);
+  if (!escolhida) return { movimentos: [], saldos: [], comPrevisto: false };
+  const comPrevisto = saldos.filter((s) => s.empresa_id === escolhida.empresa_id).length === 1;
+  return {
+    movimentos: movimentos.filter((m) =>
+      m.natureza === "realizado" || m.natureza === "transferencia" ? m.conta_bancaria_id === conta : comPrevisto && m.empresa_id === escolhida.empresa_id,
+    ),
+    saldos: [escolhida],
+    comPrevisto,
+  };
+}
+
 export function ultimoDiaMes(iso: string): string {
   const [a, m] = iso.split("-").map(Number);
   return new Date(Date.UTC(a, m, 0)).toISOString().slice(0, 10);
