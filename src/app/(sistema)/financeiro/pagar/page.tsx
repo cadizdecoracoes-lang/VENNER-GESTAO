@@ -457,6 +457,7 @@ async function PaginaContasPagar({ searchParams }: { searchParams: Promise<Filtr
           ],
         }}
         ferramentas={<FiltroPeriodo periodo={periodo} hoje={hoje} campos={DATAS_PERIODO} semPeriodo="Em aberto + pagas no mês" />}
+        periodo={false}
         placeholder="Filtrar por fornecedor, descrição, empresa, valor..."
         iniciais={{ Situação: filtros.situacao ?? "aberto" }}
       >

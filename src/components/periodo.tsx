@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { intervaloDeDias as dias, intervaloDoMes as mes } from "@/lib/filtro";
 import { formatarData } from "@/lib/formato";
 import { estiloBotaoSecundario, estiloCampo } from "./ui";
 
@@ -8,20 +9,6 @@ import { estiloBotaoSecundario, estiloCampo } from "./ui";
 const campoCurto = estiloCampo.replace("w-full", "w-auto").replace("py-1.5", "py-1");
 
 export type Periodo = { de: string; ate: string; por: string } | null;
-
-function mes(hoje: string, deslocamento: number): { de: string; ate: string } {
-  const [a, m] = hoje.split("-").map(Number);
-  const inicio = new Date(Date.UTC(a, m - 1 + deslocamento, 1));
-  const fim = new Date(Date.UTC(a, m + deslocamento, 0));
-  return { de: inicio.toISOString().slice(0, 10), ate: fim.toISOString().slice(0, 10) };
-}
-
-function dias(hoje: string, quantidade: number): { de: string; ate: string } {
-  const d = new Date(`${hoje}T12:00:00Z`);
-  d.setUTCDate(d.getUTCDate() + quantidade);
-  const outro = d.toISOString().slice(0, 10);
-  return quantidade >= 0 ? { de: hoje, ate: outro } : { de: outro, ate: hoje };
-}
 
 export function lerPeriodo(params: { de?: string; ate?: string; por?: string }, campos: string[]): Periodo {
   const data = /^\d{4}-\d{2}-\d{2}$/;
