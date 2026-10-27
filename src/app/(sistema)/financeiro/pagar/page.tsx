@@ -27,7 +27,7 @@ import { formatarData, formatarMoeda } from "@/lib/formato";
 import { type SituacaoTitulo } from "@/lib/rotulos";
 import { supabaseConfigurado } from "@/lib/supabase/config";
 import { criarClienteNavegador } from "@/lib/supabase/client";
-import { cancelarConta, estornarPagamento, novaConta, pagarConta, reabrirConta } from "./actions";
+import { cancelarConta, editarConta, estornarPagamento, novaConta, pagarConta, reabrirConta } from "./actions";
 import { TelaCliente } from "@/components/tela-cliente";
 
 const TELA = "financeiro.pagar";
@@ -43,11 +43,16 @@ type Titulo = {
   data_pagamento: string | null;
   valor_pago: number | null;
   nota_id: string | null;
+  fornecedor_id: string | null;
+  categoria_id: string | null;
+  centro_custo_id: string | null;
+  observacao: string | null;
+  tiny_id: number | null;
   fornecedores: { nome: string; nome_fantasia: string | null } | null;
   plano_contas: { codigo: string; nome: string } | null;
   contas_bancarias: { nome: string } | null;
 };
-type Filtros = { novo?: string; pagar?: string; de?: string; ate?: string; por?: string; situacao?: string } & Preenchido;
+type Filtros = { novo?: string; pagar?: string; editar?: string; de?: string; ate?: string; por?: string; situacao?: string } & Preenchido;
 // Atalho da conciliação bancária: abre a conta nova já preenchida com a linha do extrato.
 type Preenchido = { empresa?: string; descricao?: string; valor?: string; vencimento?: string; volta?: string };
 
@@ -59,7 +64,7 @@ async function carregar(empresa: string | null, periodo: Periodo): Promise<Titul
   let consulta = supabase
     .from("contas_pagar")
     .select(
-      "id, empresa_id, descricao, parcela, valor, vencimento, situacao, data_pagamento, valor_pago, nota_id, fornecedores(nome, nome_fantasia), plano_contas(codigo, nome), contas_bancarias(nome)",
+      "id, empresa_id, descricao, parcela, valor, vencimento, situacao, data_pagamento, valor_pago, nota_id, fornecedor_id, categoria_id, centro_custo_id, observacao, tiny_id, fornecedores(nome, nome_fantasia), plano_contas(codigo, nome), contas_bancarias(nome)",
     )
     .order("vencimento")
     .limit(3000);
@@ -94,7 +99,9 @@ async function PaginaContasPagar({ searchParams }: { searchParams: Promise<Filtr
   const soma = (l: Titulo[], campo: "valor" | "valor_pago" = "valor") => l.reduce((s, t) => s + Number(t[campo] ?? 0), 0);
 
   const pagando = filtros.pagar ? abertos.find((t) => t.id === filtros.pagar) : undefined;
+  const editando = filtros.editar && pode(acesso, TELA, "editar") ? abertos.find((t) => t.id === filtros.editar) : undefined;
   const criando = !!filtros.novo && pode(acesso, TELA, "criar");
+  const comCadastros = criando || !!editando;
   const [contasBancarias, fornecedores, categorias, centros] = await Promise.all([
     pagando && supabaseConfigurado
       ? (criarClienteNavegador())
@@ -105,12 +112,21 @@ async function PaginaContasPagar({ searchParams }: { searchParams: Promise<Filtr
           .order("tipo")
           .order("nome")
       : Promise.resolve({ data: [] as { id: string; nome: string }[] }),
-    criando ? carregarFornecedores() : Promise.resolve([]),
-    criando ? carregarCategoriasDespesa() : Promise.resolve([]),
-    criando ? carregarCentrosCusto() : Promise.resolve([]),
+    comCadastros ? carregarFornecedores() : Promise.resolve([]),
+    comCadastros ? carregarCategoriasDespesa() : Promise.resolve([]),
+    comCadastros ? carregarCentrosCusto() : Promise.resolve([]),
   ]);
+  // Fornecedor inativo continua aparecendo na conta que já é dele.
+  if (editando?.fornecedor_id && editando.fornecedores && !fornecedores.some((f) => f.id === editando.fornecedor_id)) {
+    fornecedores.unshift({
+      id: editando.fornecedor_id,
+      nome: editando.fornecedores.nome_fantasia || editando.fornecedores.nome,
+      documento: null,
+    });
+  }
+  const filtroPeriodo = periodo ? `&de=${periodo.de}&ate=${periodo.ate}&por=${periodo.por}` : "";
 
-  const colunas = ["Vencimento", ...(selecionada ? [] : ["Empresa"]), "Conta", "Categoria", "Valor", "Situação", ""];
+  const colunas = ["Vencimento", ...(selecionada ? [] : ["Empresa"]), "Fornecedor", "Conta", "Categoria", "Valor", "Situação", ""];
 
   return (
     <div className="space-y-3">
@@ -205,6 +221,76 @@ async function PaginaContasPagar({ searchParams }: { searchParams: Promise<Filtr
         </Cartao>
       )}
 
+      {editando && (
+        <Cartao titulo={`Editar: ${editando.descricao}${editando.parcela ? ` (${editando.parcela})` : ""} · ${nomeEmpresa.get(editando.empresa_id) ?? ""}`}>
+          <FormAcao
+            key={editando.id}
+            extra={
+              <Link href="/financeiro/pagar" className={estiloBotaoSecundario}>
+                Cancelar
+              </Link>
+            }
+            acao={editarConta.bind(null, editando.id)}
+            rotulo="Salvar"
+            className="space-y-4"
+          >
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <Campo rotulo="Fornecedor (opcional)" className="sm:col-span-2">
+                <select name="fornecedor_id" defaultValue={editando.fornecedor_id ?? ""} className={estiloCampo}>
+                  <option value="">Nenhum</option>
+                  {fornecedores.map((f) => (
+                    <option key={f.id} value={f.id}>
+                      {f.nome}
+                    </option>
+                  ))}
+                </select>
+              </Campo>
+              <Campo rotulo="Descrição" className="sm:col-span-2">
+                <input name="descricao" required defaultValue={editando.descricao} className={estiloCampo} />
+              </Campo>
+              <Campo rotulo="Categoria financeira">
+                <select name="categoria_id" defaultValue={editando.categoria_id ?? ""} className={estiloCampo}>
+                  <option value="">Sem categoria</option>
+                  {categorias.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.codigo} · {c.nome}
+                    </option>
+                  ))}
+                </select>
+              </Campo>
+              <Campo rotulo="Centro de custo">
+                <select name="centro_custo_id" defaultValue={editando.centro_custo_id ?? ""} className={estiloCampo}>
+                  <option value="">Nenhum</option>
+                  {centros.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.codigo} · {c.nome}
+                    </option>
+                  ))}
+                </select>
+              </Campo>
+              <Campo rotulo="Valor (R$)">
+                <input
+                  name="valor"
+                  required
+                  inputMode="decimal"
+                  defaultValue={String(editando.valor).replace(".", ",")}
+                  className={estiloCampo}
+                />
+              </Campo>
+              <Campo
+                rotulo="Vencimento"
+                dica={editando.tiny_id ? "Veio do Tiny: se a conta for alterada lá, a versão do Tiny volta a valer." : undefined}
+              >
+                <input name="vencimento" type="date" required defaultValue={editando.vencimento} className={estiloCampo} />
+              </Campo>
+              <Campo rotulo="Observação" className="sm:col-span-2">
+                <input name="observacao" defaultValue={editando.observacao ?? ""} className={estiloCampo} />
+              </Campo>
+            </div>
+          </FormAcao>
+        </Cartao>
+      )}
+
       {pagando && pode(acesso, TELA, "editar") && (
         <Cartao titulo={`Pagar: ${pagando.descricao}${pagando.parcela ? ` (${pagando.parcela})` : ""}`}>
           <FormAcao
@@ -242,7 +328,7 @@ async function PaginaContasPagar({ searchParams }: { searchParams: Promise<Filtr
           colunas={["Vencido", "Próximos 7 dias", "Em aberto", periodo ? "Pago no período" : "Pago neste mês"]}
           filtros={["vencido", "semana", "aberto", "pago"]}
           caminho="/financeiro/pagar"
-          extra={periodo ? `&de=${periodo.de}&ate=${periodo.ate}&por=${periodo.por}` : ""}
+          extra={filtroPeriodo}
           linhas={empresas.map((e) => {
             const grupos = [vencidos, proximos, abertos, pagos].map((l) => l.filter((t) => t.empresa_id === e.id));
             return {
@@ -317,6 +403,15 @@ async function PaginaContasPagar({ searchParams }: { searchParams: Promise<Filtr
                 </Celula>
                 {!selecionada && <Celula className="whitespace-nowrap text-texto-suave">{nomeEmpresa.get(t.empresa_id) ?? "—"}</Celula>}
                 <Celula>
+                  {t.fornecedores ? (
+                    <span className="block max-w-[16rem] truncate" title={t.fornecedores.nome}>
+                      {t.fornecedores.nome_fantasia || t.fornecedores.nome}
+                    </span>
+                  ) : (
+                    <span className="text-texto-suave">—</span>
+                  )}
+                </Celula>
+                <Celula>
                   <span className="font-medium">{t.descricao}</span>
                   {t.parcela && <span className="text-texto-suave"> · {t.parcela}</span>}
                   {t.nota_id && (
@@ -353,15 +448,14 @@ async function PaginaContasPagar({ searchParams }: { searchParams: Promise<Filtr
                     <div className="flex items-center justify-end gap-3">
                       {t.situacao === "aberto" && (
                         <>
-                          <LinkAcao href={`?pagar=${t.id}${periodo ? `&de=${periodo.de}&ate=${periodo.ate}&por=${periodo.por}` : ""}`}>
-                            Pagar
-                          </LinkAcao>
+                          <LinkAcao href={`?pagar=${t.id}${filtroPeriodo}`}>Pagar</LinkAcao>
+                          <LinkAcao href={`?editar=${t.id}${filtroPeriodo}`}>Editar</LinkAcao>
                           <FormAcao
                             acao={cancelarConta.bind(null, t.id)}
                             rotulo="Cancelar"
                             enviando="..."
                             discreto
-                            confirmar="Cancelar esta conta a pagar?"
+                            confirmar="Cancelar esta conta? Ela deixa de contar como a pagar e pode ser reaberta depois em Canceladas."
                           />
                         </>
                       )}
