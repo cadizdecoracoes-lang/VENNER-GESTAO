@@ -1,6 +1,6 @@
 "use client";
 
-import { FileUp, Plus } from "lucide-react";
+import { FileUp, Plus, RefreshCw } from "lucide-react";
 import Link from "next/link";
 import { Filtro } from "@/components/filtro";
 import { ResumoPorEmpresa } from "@/components/por-empresa";
@@ -165,6 +165,11 @@ async function PaginaContasPagar({ searchParams }: { searchParams: Promise<Filtr
         {pode(acesso, "financeiro.notas_fornecedor", "criar") && (
           <Link href="/financeiro/notas-fornecedor/importar" className={estiloBotaoSecundario}>
             <FileUp size={16} /> Importar nota
+          </Link>
+        )}
+        {pode(acesso, TELA, "editar") && (
+          <Link href="/financeiro/pagar/conferir-tiny" className={estiloBotaoSecundario} title="Deixa situação e data do pagamento iguais à planilha do Tiny">
+            <RefreshCw size={16} /> Conferir com o Tiny
           </Link>
         )}
         {pode(acesso, TELA, "criar") && !criando && (
