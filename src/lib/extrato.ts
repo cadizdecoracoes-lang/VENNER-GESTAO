@@ -15,13 +15,21 @@ export type LinhaExtrato = {
   id_banco: string | null;
   // A leitura não teve certeza se é entrada ou saída (PDF sem C/D).
   sinalIncerto?: boolean;
+  // PDF lido por imagem (OCR) ou dia cujo saldo não fecha: conferir a linha.
+  conferir?: boolean;
+  // Aplicação/resgate automático do banco (ex.: BB Rende Fácil).
+  aplicacao?: boolean;
 };
 
 export type ExtratoLido = {
   linhas: LinhaExtrato[];
   saldoFinal: number | null;
+  // Saldo antes do primeiro lançamento, quando o extrato informa.
+  saldoInicial?: number | null;
   conta: { banco: string | null; agencia: string | null; numero: string | null };
   avisos: string[];
+  // Banco reconhecido no PDF (leitor próprio do layout).
+  banco?: string | null;
 };
 
 const arred2 = (n: number) => Math.round(n * 100) / 100;

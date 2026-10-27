@@ -12,6 +12,7 @@ import { formatarData, formatarMoeda } from "@/lib/formato";
 import { conciliar, conciliarSugestoes, desfazer } from "./actions";
 import { carregarCandidatos, carregarConferencia, carregarContas, carregarIndicadores, carregarLinhas, carregarPendentes, nomePessoa, type LinhaConciliacao } from "./dados";
 import { PainelResolver } from "./painel-resolver";
+import { SeletorConta } from "./seletor-conta";
 import { TelaCliente } from "@/components/tela-cliente";
 
 const TELA = "financeiro.conciliacao";
@@ -107,7 +108,18 @@ async function PaginaConciliacao({ searchParams }: { searchParams: Promise<Filtr
 
   return (
     <div className="space-y-3">
+      {/* Cabeçalho numa linha: título, conta e botões. */}
       <CabecalhoTela codigo={TELA} empresa={selecionada}>
+        {contas.length > 0 && (
+          <SeletorConta
+            contas={contas.map((c) => ({
+              id: c.id,
+              nome: selecionada ? c.nome : `${c.nome} · ${nomeEmpresa.get(c.empresa_id) ?? ""}`,
+              pendentes: pendentes.get(c.id) ?? 0,
+            }))}
+            atual={conta?.id ?? null}
+          />
+        )}
         <Link href="/financeiro/conciliacao/importar#banco" className={estiloBotaoSecundario}>
           <Link2 size={16} /> Ligar com o banco
         </Link>
@@ -132,17 +144,6 @@ async function PaginaConciliacao({ searchParams }: { searchParams: Promise<Filtr
         </p>
       ) : (
         <>
-          {/* Contas: uma aba por conta, com quantas linhas faltam conciliar. */}
-          <nav className="flex flex-wrap items-center gap-1 border-b border-borda pb-1.5 text-sm">
-            {contas.map((c) => (
-              <Link key={c.id} href={`?conta=${c.id}`} className={pilula(c.id === conta?.id)}>
-                {c.nome}
-                {!selecionada && <span className="text-xs text-texto-suave"> · {nomeEmpresa.get(c.empresa_id)}</span>}
-                {pendentes.get(c.id) ? <span className="ml-1 rounded-full bg-alerta/15 px-1.5 text-xs text-alerta">{pendentes.get(c.id)}</span> : null}
-              </Link>
-            ))}
-          </nav>
-
           {/* Faixa fina: situação, mês e conferência de saldo. */}
           <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
             <span className="flex items-center gap-1">
@@ -187,34 +188,32 @@ async function PaginaConciliacao({ searchParams }: { searchParams: Promise<Filtr
                 )}
               </span>
             )}
+            {indMes && indAnterior && (
+              <span
+                className="text-xs text-texto-suave"
+                title={[
+                  `Linhas do extrato desta conta em ${indMes.mes.slice(5)}/${indMes.mes.slice(0, 4)}, pela data do lançamento.`,
+                  indAnterior.linhas > 0
+                    ? `Mês anterior: ${indAnterior.linhas} linha(s), ${Math.round((indAnterior.resolvidas / indAnterior.linhas) * 100)}% conciliadas.`
+                    : "",
+                  indAnterior.entradas > 0 ? `Entradas ${variacao(indMes.entradas, indAnterior.entradas)} vs ${formatarMoeda(indAnterior.entradas)} no mês anterior.` : "",
+                  indAnterior.saidas > 0 ? `Saídas ${variacao(indMes.saidas, indAnterior.saidas)} vs ${formatarMoeda(indAnterior.saidas)} no mês anterior.` : "",
+                ]
+                  .filter(Boolean)
+                  .join(" ")}
+              >
+                {indMes.mes.slice(5)}/{indMes.mes.slice(0, 4)}: <strong className="text-texto">{indMes.linhas}</strong> linha(s),{" "}
+                <strong className="text-texto">{indMes.linhas ? Math.round((indMes.resolvidas / indMes.linhas) * 100) : 0}%</strong> conciliadas · entradas{" "}
+                <strong className="tabular-nums text-sucesso">{formatarMoeda(indMes.entradas)}</strong> · saídas{" "}
+                <strong className="tabular-nums text-perigo">{formatarMoeda(indMes.saidas)}</strong>
+              </span>
+            )}
             {podeEditar && pares.length > 1 && (
               <FormAcao acao={conciliarSugestoes} rotulo={`Aceitar as ${pares.length} sugestões`} enviando="Conciliando..." secundario className="ml-auto">
                 <input type="hidden" name="pares" value={JSON.stringify(pares)} />
               </FormAcao>
             )}
           </div>
-
-          {indMes && indAnterior && (
-            <p className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-texto-suave" title="Linhas do extrato desta conta, por mês da data do lançamento">
-              <span>
-                Extrato {indMes.mes.slice(5)}/{indMes.mes.slice(0, 4)}: <strong className="text-texto">{indMes.linhas}</strong> linha(s),{" "}
-                <strong className="text-texto">{indMes.linhas ? Math.round((indMes.resolvidas / indMes.linhas) * 100) : 0}%</strong> conciliadas
-              </span>
-              <span>
-                entradas <strong className="tabular-nums text-sucesso">{formatarMoeda(indMes.entradas)}</strong>
-                {indAnterior.entradas > 0 && <> ({variacao(indMes.entradas, indAnterior.entradas)} vs {formatarMoeda(indAnterior.entradas)} no mês anterior)</>}
-              </span>
-              <span>
-                saídas <strong className="tabular-nums text-perigo">{formatarMoeda(indMes.saidas)}</strong>
-                {indAnterior.saidas > 0 && <> ({variacao(indMes.saidas, indAnterior.saidas)} vs {formatarMoeda(indAnterior.saidas)} no mês anterior)</>}
-              </span>
-              {indAnterior.linhas > 0 && (
-                <span>
-                  mês anterior: {indAnterior.linhas} linha(s), {Math.round((indAnterior.resolvidas / indAnterior.linhas) * 100)}% conciliadas
-                </span>
-              )}
-            </p>
-          )}
 
           {resolvendo && conta && podeEditar && (
             <PainelResolver
