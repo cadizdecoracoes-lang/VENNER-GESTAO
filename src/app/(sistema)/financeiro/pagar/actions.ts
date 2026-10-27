@@ -94,3 +94,36 @@ export async function cancelarConta(id: string): Promise<Estado> {
 export async function reabrirConta(id: string): Promise<Estado> {
   return mudarSituacao(id, "cancelado", { situacao: "aberto" });
 }
+
+// Corrige uma conta ainda em aberto (valor, vencimento, fornecedor, categoria...).
+export async function editarConta(id: string, _: Estado, form: FormData): Promise<Estado> {
+  if (!supabaseConfigurado) return SEM_BANCO;
+  const texto = (campo: string) => String(form.get(campo) ?? "").trim() || null;
+  const descricao = texto("descricao");
+  const valor = lerNumero(form.get("valor"));
+  const vencimento = texto("vencimento");
+  if (!descricao) return { erro: "Descreva a conta, ex.: Aluguel do galpão." };
+  if (!(valor > 0)) return { erro: "Informe o valor." };
+  if (!vencimento) return { erro: "Informe o vencimento." };
+
+  const supabase = criarClienteNavegador();
+  const { data, error } = await supabase
+    .from("contas_pagar")
+    .update({
+      fornecedor_id: texto("fornecedor_id"),
+      descricao,
+      categoria_id: texto("categoria_id"),
+      centro_custo_id: texto("centro_custo_id"),
+      valor,
+      vencimento,
+      observacao: texto("observacao"),
+    })
+    .eq("id", id)
+    .eq("situacao", "aberto")
+    .select("id");
+  if (error) return { erro: mensagemErro(error) };
+  const bloqueado = semLinhas(data);
+  if (bloqueado) return bloqueado;
+  revalidatePath(CAMINHO);
+  redirect(CAMINHO);
+}
