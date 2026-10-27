@@ -31,6 +31,7 @@ create function pg_temp.nota(numero text, chave text, empresa text, preco_a nume
     'valor_produtos', 2 * preco_a + 50, 'valor_frete', 10, 'valor_total', 2 * preco_a + 60,
     'fornecedor', jsonb_build_object('documento', '44.444.444/0001-44', 'nome', 'Parafusos Brasil Ltda', 'uf', 'sp'),
     'categoria_id', (select id from plano_contas where codigo = '3.01'),
+    'justificativa_sem_pedido', 'Compra anterior aos pedidos de compra no sistema',
     'itens', jsonb_build_array(
       jsonb_build_object('codigo', 'A1', 'descricao', 'Parafuso cx 100', 'unidade', 'CX', 'quantidade', 2, 'valor_unitario', preco_a, 'valor_total', 2 * preco_a),
       jsonb_build_object('codigo', 'B2', 'descricao', 'Arruela', 'unidade', 'UN', 'quantidade', 5, 'valor_unitario', 10, 'valor_total', 50)),

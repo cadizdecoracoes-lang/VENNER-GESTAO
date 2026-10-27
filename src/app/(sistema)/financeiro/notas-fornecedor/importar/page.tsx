@@ -2,6 +2,7 @@
 
 import { CabecalhoTela, SemAcesso } from "@/components/ui";
 import { carregarAcesso, pode } from "@/lib/acesso";
+import { carregarPedidosParaNota } from "@/lib/compras";
 import { carregarCategoriasDespesa, carregarCentrosCusto, carregarFornecedores } from "@/lib/financeiro";
 import { supabaseConfigurado } from "@/lib/supabase/config";
 import { criarClienteNavegador } from "@/lib/supabase/client";
@@ -33,20 +34,22 @@ async function carregarUltimos() {
   return ultimos;
 }
 
-async function PaginaImportarNota() {
+async function PaginaImportarNota({ searchParams }: { searchParams: Promise<{ pedido?: string }> }) {
   const acesso = await carregarAcesso();
   if (!pode(acesso, TELA, "criar")) return <SemAcesso codigo={TELA} />;
-  const [empresas, fornecedores, categorias, centros, ultimos] = await Promise.all([
+  const { pedido } = await searchParams;
+  const [empresas, fornecedores, categorias, centros, ultimos, pedidos] = await Promise.all([
     carregarEmpresasComCnpj(),
     carregarFornecedores(),
     carregarCategoriasDespesa(),
     carregarCentrosCusto(),
     carregarUltimos(),
+    carregarPedidosParaNota(),
   ]);
   return (
     <div className="space-y-3">
       <CabecalhoTela codigo={TELA} />
-      <ImportarNota empresas={empresas} fornecedores={fornecedores} categorias={categorias} centros={centros} ultimos={ultimos} />
+      <ImportarNota empresas={empresas} fornecedores={fornecedores} categorias={categorias} centros={centros} ultimos={ultimos} pedidos={pedidos} pedidoInicial={pedido} />
     </div>
   );
 }

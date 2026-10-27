@@ -24,6 +24,8 @@ export async function importarNota(_: Estado, form: FormData): Promise<Estado> {
   if (!dados.data_emissao) return { erro: "Informe a data de emissão." };
   if (!dados.fornecedor_id && !(dados.fornecedor as { documento?: string })?.documento) return { erro: "Informe o fornecedor." };
   if (!(Number(dados.valor_total) > 0)) return { erro: "Informe o valor total da nota." };
+  if (!dados.pedido_compra_id && String(dados.justificativa_sem_pedido ?? "").trim().length < 15)
+    return { erro: "Escolha o pedido de compra aprovado ou escreva a justificativa de lançar sem pedido (pelo menos 15 letras)." };
   const parcelas = (dados.parcelas ?? []) as { valor: number; vencimento: string }[];
   if (parcelas.some((p) => !p.vencimento || !(p.valor > 0))) return { erro: "Cada parcela precisa de vencimento e valor." };
 
@@ -50,6 +52,7 @@ export async function importarNota(_: Estado, form: FormData): Promise<Estado> {
   }
   revalidatePath(CAMINHO);
   revalidatePath("/financeiro/pagar");
+  revalidatePath("/compras/pedidos");
   redirect(`${CAMINHO}/nota?id=${id}`);
 }
 

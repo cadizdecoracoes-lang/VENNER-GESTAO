@@ -123,3 +123,38 @@ export const SITUACOES_NF = {
   cancelada: "Cancelada",
 } as const;
 export type SituacaoNF = keyof typeof SITUACOES_NF;
+
+// Etapas do pedido de compra (pedidos_compra.etapa), na ordem do fluxo.
+export const ETAPAS_COMPRA = {
+  criacao: "Criação",
+  orcamento: "Orçamento",
+  aprovacao: "Em aprovação",
+  aprovado: "Aprovado",
+  recebido: "Recebido",
+  cancelado: "Cancelado",
+} as const;
+export type EtapaCompra = keyof typeof ETAPAS_COMPRA;
+
+// Frete por conta, com os códigos do Tiny.
+export const FRETE_POR_CONTA = {
+  R: "Remetente (fornecedor)",
+  D: "Destinatário (nós)",
+  T: "Terceiros",
+  "3": "Próprio remetente",
+  "4": "Próprio destinatário",
+  S: "Sem transporte",
+} as const;
+
+// Meios de pagamento das parcelas, com os códigos do Tiny.
+export const MEIOS_PAGAMENTO = {
+  "15": "Boleto",
+  "17": "Pix",
+  "18": "Transferência",
+  "16": "Depósito",
+  "14": "Duplicata",
+  "1": "Dinheiro",
+  "2": "Cheque",
+  "3": "Cartão de crédito",
+  "4": "Cartão de débito",
+  "99": "Outros",
+} as const;
