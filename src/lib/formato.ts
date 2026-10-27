@@ -56,6 +56,19 @@ export function formatarData(iso: string | null): string {
   return `${d}/${m}/${a}`;
 }
 
+// Data e hora de Brasília, ex.: 27/10/2026 14:05.
+export function formatarDataHora(iso: string | null): string {
+  if (!iso) return "—";
+  return new Date(iso).toLocaleString("pt-BR", {
+    timeZone: "America/Sao_Paulo",
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
 // Aceita "1.234,56" ou "1234.56". Campo vazio vira 0.
 export function lerNumero(valor: FormDataEntryValue | null): number {
   const texto = String(valor ?? "").trim();
