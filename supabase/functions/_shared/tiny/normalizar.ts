@@ -61,10 +61,33 @@ export function contato(v: unknown): Contato | null {
 
 function situacaoTitulo(v: unknown, valorPago: number, saldo: number): Titulo["situacao"] {
   const s = (texto(v) ?? "").toLowerCase();
-  if (s === "cancelada" || s === "cancelado") return "cancelado";
-  if (s === "pago") return "pago";
+  if (s.startsWith("cancel")) return "cancelado";
+  if (["pago", "paga", "liquidado", "liquidada", "quitado", "quitada"].includes(s)) return "pago";
   if (s === "parcial" || (valorPago > 0 && saldo > 0)) return "parcial";
   return "aberto";
+}
+
+// Situações do Tiny em que o título não tem baixa (não vale ler os pagamentos).
+export function semBaixa(v: unknown): boolean {
+  const s = (texto(v) ?? "").toLowerCase();
+  return !s || s.startsWith("cancel") || ["aberto", "aberta", "prevista", "previsto", "atrasado", "atrasada", "emissao"].includes(s);
+}
+
+// Recebimentos/pagamentos de um título: o Tiny devolve uma lista ou { itens }.
+// Cada baixa traz a data em que o dinheiro entrou/saiu da conta (a "data de
+// banco"), a conta financeira e o valor.
+type Baixa = { data: string | null; conta: number | null; valor: number };
+function baixasDoTitulo(v: unknown): Baixa[] {
+  const o = obj(v);
+  const itens = Array.isArray(v) ? v : lista(o.itens ?? o.recebimentos ?? o.pagamentos ?? o.baixas);
+  return itens
+    .map(obj)
+    .map((b) => ({
+      data: data(b.data ?? b.dataRecebimento ?? b.dataPagamento ?? b.dataLiquidacao ?? b.dataBaixa),
+      conta: inteiro(b.idConta ?? b.idContaFinanceira ?? obj(b.conta).id ?? obj(b.contaFinanceira).id),
+      valor: numero(b.valorPago ?? b.valorRecebido ?? b.valor),
+    }))
+    .filter((b) => b.valor > 0);
 }
 
 // Detalhe de uma conta a receber ou a pagar + os recebimentos/pagamentos dela.
@@ -73,9 +96,9 @@ export function titulo(v: unknown, baixas: unknown): Titulo | null {
   const id = inteiro(d.id);
   const vencimento = data(d.dataVencimento) ?? data(d.data);
   if (!id || !vencimento) return null;
-  const pagamentos = lista(baixas).map(obj).filter((b) => numero(b.valorPago) > 0);
-  const ultima = pagamentos.slice().sort((a, b) => String(a.data ?? "").localeCompare(String(b.data ?? ""))).pop();
-  const valorPago = numero(d.valorPago) || arred2(pagamentos.reduce((s, b) => s + numero(b.valorPago), 0));
+  const pagamentos = baixasDoTitulo(baixas);
+  const ultima = pagamentos.slice().sort((a, b) => (a.data ?? "").localeCompare(b.data ?? "")).pop();
+  const valorPago = numero(d.valorPago) || arred2(pagamentos.reduce((s, b) => s + b.valor, 0));
   const saldo = numero(d.saldo);
   const documento = texto(d.numeroDocumento);
   const categoria = obj(d.categoria);
@@ -84,7 +107,8 @@ export function titulo(v: unknown, baixas: unknown): Titulo | null {
     situacao: situacaoTitulo(d.situacao, valorPago, saldo),
     emissao: data(d.data),
     vencimento,
-    liquidacao: data(d.dataLiquidacao) ?? data(ultima?.data),
+    // Data de banco: a da última baixa; sem baixa, a liquidação do título.
+    liquidacao: ultima?.data ?? data(d.dataLiquidacao ?? d.dataPagamento ?? d.dataBaixa),
     valor: arred2(numero(d.valor)),
     valor_pago: arred2(valorPago),
     saldo: arred2(saldo),
@@ -93,7 +117,7 @@ export function titulo(v: unknown, baixas: unknown): Titulo | null {
     contato: contato(d.cliente ?? d.contato),
     categoria_id: inteiro(categoria.id),
     categoria_nome: texto(categoria.descricao),
-    conta_id: inteiro(ultima?.idConta),
+    conta_id: ultima?.conta ?? inteiro(d.idConta ?? obj(d.conta).id ?? obj(d.contaFinanceira).id),
   };
 }
 

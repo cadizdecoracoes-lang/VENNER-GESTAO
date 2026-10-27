@@ -65,12 +65,15 @@ async function PaginaUsuarios({ searchParams }: { searchParams: Promise<{ editar
 
   return (
     <div className="space-y-3">
-      <CabecalhoTela codigo={TELA} />
-
-      <p className="rounded-xl bg-primaria-suave px-4 py-2.5 text-sm text-primaria">
-        O login de uma pessoa nova é criado no Supabase (Authentication → Users → Add user). Ele aparece aqui como &quot;aguardando
-        liberação&quot;; escolha o perfil, os CNPJs e libere o acesso.
-      </p>
+      <CabecalhoTela
+        codigo={TELA}
+        ajuda={
+          <>
+            O login de uma pessoa nova é criado no Supabase (Authentication → Users → Add user). Ele aparece aqui como &quot;aguardando
+            liberação&quot;; escolha o perfil, os CNPJs e libere o acesso.
+          </>
+        }
+      />
 
       {emEdicao && (
         <Cartao titulo={`Acesso de ${emEdicao.nome}`}>

@@ -154,15 +154,6 @@ async function PaginaContasBancarias({ searchParams }: { searchParams: Promise<F
       )}
 
 
-      {blocos.length === 0 && (
-        <Tabela
-          colunas={["Conta", "Banco", "Agência / conta", "Saldo inicial", ""]}
-          vazio={selecionada ? "Nenhuma conta nesta empresa." : "Nenhuma conta bancária cadastrada ainda."}
-        >
-          {[]}
-        </Tabela>
-      )}
-
       <Filtro
         atalhos={[
           { rotulo: "Tipo", opcoes: Object.entries(TIPOS_CONTA_BANCARIA).map(([valor, rotulo]) => ({ valor, rotulo })) },
@@ -171,6 +162,14 @@ async function PaginaContasBancarias({ searchParams }: { searchParams: Promise<F
         placeholder="Filtrar por conta, banco, agência..."
       >
         <div className="space-y-3">
+          {blocos.length === 0 && (
+            <Tabela
+              colunas={["Conta", "Banco", "Agência / conta", "Saldo inicial", ""]}
+              vazio={selecionada ? "Nenhuma conta nesta empresa." : "Nenhuma conta bancária cadastrada ainda."}
+            >
+              {[]}
+            </Tabela>
+          )}
           {blocos.map(({ empresa, contas: daEmpresa }) => (
             <div key={empresa.id} data-bloco-filtro>
               <Cartao
