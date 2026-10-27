@@ -323,6 +323,7 @@ async function PaginaContasReceber({ searchParams }: { searchParams: Promise<Fil
         ferramentas={
           !pedido && <FiltroPeriodo periodo={periodo} hoje={hoje} campos={DATAS_PERIODO} semPeriodo="Em aberto + recebidas no mês" />
         }
+        periodo={false}
         atalhos={[
           {
             rotulo: "Origem",

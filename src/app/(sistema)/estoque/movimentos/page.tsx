@@ -89,13 +89,16 @@ async function PaginaMovimentos({ searchParams }: { searchParams: Promise<Filtro
           <LinkAcao href="/estoque/movimentos">Ver todos os itens</LinkAcao>
         </div>
       )}
-      <FiltroPeriodo
-        periodo={periodo}
-        hoje={hoje}
-        campos={DATAS_PERIODO}
-        semPeriodo={filtros.item ? "Desde o início" : "Últimos 60 dias"}
-      />
       <Filtro
+        ferramentas={
+          <FiltroPeriodo
+            periodo={periodo}
+            hoje={hoje}
+            campos={DATAS_PERIODO}
+            semPeriodo={filtros.item ? "Desde o início" : "Últimos 60 dias"}
+          />
+        }
+        periodo={false}
         atalhos={[{ rotulo: "Tipo", opcoes: Object.entries(TIPOS).map(([valor, rotulo]) => ({ valor, rotulo })) }]}
         placeholder="Filtrar por item, local, origem..."
       >

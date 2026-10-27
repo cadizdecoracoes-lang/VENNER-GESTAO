@@ -149,6 +149,7 @@ async function PaginaPedidos({ searchParams }: { searchParams: Promise<Filtros> 
 
       <Filtro
         ferramentas={<FiltroPeriodo periodo={periodo} hoje={hoje} campos={DATAS_PERIODO} semPeriodo="Em aberto e recentes" />}
+        periodo={false}
         atalhos={[
           {
             rotulo: "Fase",
