@@ -7,6 +7,7 @@ import { FormAcao } from "@/components/form-acao";
 import { Campo, Cartao, Celula, Etiqueta, Tabela, estiloBotaoSecundario, estiloCampo } from "@/components/ui";
 import { formatarDocumento, formatarMoeda, formatarNumero, somenteDigitos } from "@/lib/formato";
 import { lerPdfDanfe, lerXmlNfe, type NotaLida, type Parcela } from "@/lib/nfe";
+import { ETAPAS_COMPRA, type EtapaCompra } from "@/lib/rotulos";
 import { importarNota } from "../actions";
 
 type Opcao = { id: string; nome: string };
@@ -17,9 +18,14 @@ type Props = {
   centros: (Opcao & { codigo: string })[];
   // Categoria e centro de custo usados por último com cada fornecedor.
   ultimos: Record<string, { categoria_id: string | null; centro_custo_id: string | null }>;
+  // Pedidos de compra aprovados (a nota precisa de um, ou de justificativa).
+  pedidos: { id: string; numero: number; empresa_id: string; fornecedor_id: string | null; fornecedor_nome: string | null; valor_total: number; etapa: EtapaCompra }[];
+  // Pedido vindo da tela do pedido (?pedido=...).
+  pedidoInicial?: string;
 };
 
 const NOVO = "__novo__";
+const SEM_PEDIDO = "__sem_pedido__";
 
 function somarDias(iso: string, dias: number): string {
   const d = new Date(`${iso || new Date().toISOString().slice(0, 10)}T12:00:00`);
@@ -27,7 +33,7 @@ function somarDias(iso: string, dias: number): string {
   return d.toISOString().slice(0, 10);
 }
 
-export function ImportarNota({ empresas, fornecedores, categorias, centros, ultimos }: Props) {
+export function ImportarNota({ empresas, fornecedores, categorias, centros, ultimos, pedidos, pedidoInicial }: Props) {
   const [nota, setNota] = useState<NotaLida | null>(null);
   const [lendo, setLendo] = useState(false);
   const [nomeArquivo, setNomeArquivo] = useState<string | null>(null);
@@ -45,6 +51,8 @@ export function ImportarNota({ empresas, fornecedores, categorias, centros, ulti
   const [categoria, setCategoria] = useState("");
   const [centro, setCentro] = useState("");
   const [observacao, setObservacao] = useState("");
+  const [pedido, setPedido] = useState(pedidoInicial ?? "");
+  const [justificativa, setJustificativa] = useState("");
 
   async function ler(arquivo: File | undefined) {
     setNota(null);
@@ -71,6 +79,11 @@ export function ImportarNota({ empresas, fornecedores, categorias, centros, ulti
       setEmissao(lida.data_emissao);
       setTotal(lida.valor_total ? String(lida.valor_total) : "");
       setParcelas(lida.parcelas.length > 0 ? lida.parcelas : [{ vencimento: somarDias(lida.data_emissao, 30), valor: lida.valor_total }]);
+      // Um só pedido aprovado deste fornecedor nesta empresa: já vem escolhido.
+      const doFornecedor = pedidos.filter(
+        (p) => p.etapa === "aprovado" && conhecido && p.fornecedor_id === conhecido.id && p.empresa_id === empresaDaNota?.id,
+      );
+      setPedido((atual) => atual || (doFornecedor.length === 1 ? doFornecedor[0].id : ""));
       const ultimo = conhecido ? ultimos[conhecido.id] : undefined;
       setCategoria(ultimo?.categoria_id ?? "");
       setCentro(ultimo?.centro_custo_id ?? "");
@@ -110,8 +123,14 @@ export function ImportarNota({ empresas, fornecedores, categorias, centros, ulti
       categoria_id: categoria || null,
       centro_custo_id: centro || null,
       observacao,
+      pedido_compra_id: pedido && pedido !== SEM_PEDIDO ? pedido : null,
+      justificativa_sem_pedido: pedido === SEM_PEDIDO ? justificativa.trim() : null,
     });
-  }, [nota, empresa, fornecedor, novoDoc, novoNome, numero, serie, emissao, valorTotal, parcelas, categoria, centro, observacao]);
+  }, [nota, empresa, fornecedor, novoDoc, novoNome, numero, serie, emissao, valorTotal, parcelas, categoria, centro, observacao, pedido, justificativa]);
+  // Pedidos que servem para esta nota: mesma empresa e mesmo fornecedor.
+  const pedidosDaNota = pedidos.filter((p) => p.empresa_id === empresa && fornecedor !== NOVO && p.fornecedor_id === fornecedor);
+  const pedidoEscolhido = pedidos.find((p) => p.id === pedido);
+  const pedidoFora = pedidoEscolhido && !pedidosDaNota.some((p) => p.id === pedidoEscolhido.id);
 
   const alterarParcela = (i: number, campo: keyof Parcela, valor: string) =>
     setParcelas((lista) =>
@@ -219,6 +238,52 @@ export function ImportarNota({ empresas, fornecedores, categorias, centros, ulti
               <p className="mt-3 text-sm text-perigo">
                 A nota foi emitida para o CNPJ {formatarDocumento(nota.destinatario_cnpj!)}, que não é o da empresa escolhida.
               </p>
+            )}
+          </Cartao>
+
+          <Cartao titulo="Pedido de compra">
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Campo
+                rotulo="Pedido aprovado desta compra"
+                dica={
+                  pedidosDaNota.length === 0 && pedido !== SEM_PEDIDO
+                    ? "Nenhum pedido aprovado deste fornecedor nesta empresa. Sem pedido, justifique."
+                    : undefined
+                }
+              >
+                <select value={pedido} onChange={(e) => setPedido(e.target.value)} required className={estiloCampo}>
+                  <option value="" disabled>
+                    Escolha...
+                  </option>
+                  {pedidosDaNota.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      Nº {p.numero} · {formatarMoeda(Number(p.valor_total))}
+                      {p.etapa !== "aprovado" ? ` · ${ETAPAS_COMPRA[p.etapa]}` : ""}
+                    </option>
+                  ))}
+                  {pedidoFora && (
+                    <option value={pedidoEscolhido.id}>
+                      Nº {pedidoEscolhido.numero} · {pedidoEscolhido.fornecedor_nome ?? "outro fornecedor"} (não confere com a nota)
+                    </option>
+                  )}
+                  <option value={SEM_PEDIDO}>Sem pedido de compra (justificar)</option>
+                </select>
+              </Campo>
+              {pedido === SEM_PEDIDO && (
+                <Campo rotulo="Justificativa de lançar sem pedido" dica="Obrigatória, pelo menos 15 letras. Fica gravada na nota.">
+                  <input
+                    value={justificativa}
+                    onChange={(e) => setJustificativa(e.target.value)}
+                    required
+                    minLength={15}
+                    placeholder="Ex.: compra emergencial de balcão, paga no ato"
+                    className={estiloCampo}
+                  />
+                </Campo>
+              )}
+            </div>
+            {pedidoFora && (
+              <p className="mt-2 text-sm text-perigo">O pedido escolhido é de outra empresa ou de outro fornecedor: o banco não vai aceitar.</p>
             )}
           </Cartao>
 

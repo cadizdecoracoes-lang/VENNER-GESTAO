@@ -39,6 +39,9 @@ type Nota = {
   origem: OrigemNota;
   arquivo: string | null;
   observacao: string | null;
+  pedido_compra_id: string | null;
+  justificativa_sem_pedido: string | null;
+  pedidos_compra: { numero: number } | null;
   entrada_em: string | null;
   empresas: { razao_social: string; nome_fantasia: string | null; cnpj: string } | null;
   fornecedores: { nome: string; documento: string | null } | null;
@@ -91,7 +94,7 @@ async function PaginaNota({
     supabase
       .from("notas_fornecedor")
       .select(
-        "id, numero, serie, chave, data_emissao, valor_produtos, valor_frete, valor_desconto, valor_total, origem, arquivo, observacao, entrada_em, empresas(razao_social, nome_fantasia, cnpj), fornecedores(nome, documento), locais_estoque(nome)",
+        "id, numero, serie, chave, data_emissao, valor_produtos, valor_frete, valor_desconto, valor_total, origem, arquivo, observacao, pedido_compra_id, justificativa_sem_pedido, pedidos_compra(numero), entrada_em, empresas(razao_social, nome_fantasia, cnpj), fornecedores(nome, documento), locais_estoque(nome)",
       )
       .eq("id", id)
       .maybeSingle(),
@@ -173,6 +176,19 @@ async function PaginaNota({
           )}
           {n.chave && (
             <div className="text-xs text-texto-suave sm:col-span-2 lg:col-span-4">Chave {n.chave.replace(/(\d{4})/g, "$1 ").trim()}</div>
+          )}
+          {n.pedido_compra_id ? (
+            <div className="sm:col-span-2 lg:col-span-4">
+              <span className="text-texto-suave">Pedido de compra </span>
+              <LinkAcao href={`/compras/pedidos/pedido?id=${n.pedido_compra_id}`}>nº {n.pedidos_compra?.numero ?? "—"}</LinkAcao>
+            </div>
+          ) : (
+            n.justificativa_sem_pedido && (
+              <div className="sm:col-span-2 lg:col-span-4">
+                <span className="text-texto-suave">Sem pedido de compra: </span>
+                {n.justificativa_sem_pedido}
+              </div>
+            )
           )}
           {n.observacao && <div className="sm:col-span-2 lg:col-span-4">{n.observacao}</div>}
         </dl>
