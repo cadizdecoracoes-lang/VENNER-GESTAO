@@ -18,6 +18,8 @@ exception when others then
 end $$;
 
 select set_config('teste.importacao', id::text, false) from extrato_importacoes where arquivo = 'itau.ofx';
+select set_config('teste.industria', id::text, false) from empresas where cnpj = '11111111000111';
+select set_config('teste.conta', id::text, false) from contas_bancarias where nome = 'Itaú movimento';
 -- Títulos que a conciliação baixou (teste 98) e os que só ligou.
 create temp table baixados as
   select coalesce(c.conta_pagar_id, c.conta_receber_id) as id, c.efeito
@@ -63,3 +65,27 @@ select pg_temp.esperar_erro(
   'não encontrada', 'excluir de novo avisa que não existe');
 delete from perfil_permissoes
 where tela_codigo = 'financeiro.conciliacao' and acao = 'excluir' and perfil_id = (select id from perfis where nome = 'Financeiro');
+
+-- Pago pelo Tiny sem a conta da baixa casa com o extrato de qualquer conta da
+-- empresa: passa para a conta e a data do extrato e volta se desfizer.
+select set_config('teste.semconta', tiny_conta(current_setting('teste.industria')::uuid, null)::text, false);
+insert into contas_pagar (empresa_id, descricao, categoria_id, valor, vencimento, situacao, data_pagamento, valor_pago, conta_bancaria_id)
+values (current_setting('teste.industria')::uuid, 'TINY pago sem conta', (select id from plano_contas where codigo = '4.06'), 777, '2026-11-10',
+  'pago', '2026-11-10', 777, current_setting('teste.semconta')::uuid);
+set role authenticated;
+set request.jwt.claim.sub = '00000000-0000-0000-0000-00000000000e';
+select importar_extrato(current_setting('teste.conta')::uuid, 'pdf', 'novembro.pdf',
+  '[{"data": "2026-11-12", "descricao": "PIX ENVIADO", "valor": -777}]'::jsonb);
+select conciliar_lancamento(
+  (select id from extrato_lancamentos where descricao = 'PIX ENVIADO' and data = '2026-11-12'),
+  array[(select id from contas_pagar where descricao = 'TINY pago sem conta')]);
+select pg_temp.esperar(
+  (select conta_bancaria_id = current_setting('teste.conta')::uuid and data_pagamento = '2026-11-12' and situacao = 'pago'
+   from contas_pagar where descricao = 'TINY pago sem conta'),
+  'pago do Tiny sem conta passa para a conta e a data do extrato');
+select desfazer_conciliacao((select id from extrato_lancamentos where descricao = 'PIX ENVIADO' and data = '2026-11-12'));
+select pg_temp.esperar(
+  (select conta_bancaria_id = current_setting('teste.semconta')::uuid and data_pagamento = '2026-11-10' and situacao = 'pago'
+   from contas_pagar where descricao = 'TINY pago sem conta'),
+  'desfazer devolve a conta e a data de antes');
+reset role;

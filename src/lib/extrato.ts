@@ -290,6 +290,9 @@ export type TituloCandidato = {
   // Data do pagamento (pago) ou vencimento (em aberto).
   data: string;
   pago: boolean;
+  // Pago pelo Tiny sem a conta da baixa ("Tiny · conta não informada"): a data
+  // pode ser o vencimento, então vale a folga de título em aberto.
+  semConta?: boolean;
 };
 
 // certa: casa sem dúvida e é conciliada sozinha ao importar (título já baixado
@@ -320,7 +323,7 @@ export function sugerirConciliacao(linhas: { id: string; data: string; valor: nu
     for (const t of titulos) {
       if (t.tipo !== tipo || usados.has(t.id) || Math.abs(t.valor - alvo) > 0.01) continue;
       const dias = Math.abs(diasEntre(t.data, l.data));
-      if (dias > (t.pago ? 3 : 10)) continue;
+      if (dias > (t.pago && !t.semConta ? 3 : 10)) continue;
       const nome = palavras(`${t.pessoa ?? ""} ${t.descricao}`);
       const comuns = [...nome].filter((p) => doHistorico.has(p)).length;
       const pontos = (t.pago ? 20 : 0) + comuns * 15 - dias * 2;
@@ -331,8 +334,8 @@ export function sugerirConciliacao(linhas: { id: string; data: string; valor: nu
       const quando = melhor.dias === 0 ? "mesmo dia" : `${melhor.dias} dia(s) de diferença`;
       resultado.set(l.id, {
         titulos: [melhor.t.id],
-        motivo: `mesmo valor, ${quando}${melhor.t.pago ? ", já baixado nesta conta" : ""}`,
-        certa: melhor.t.pago || melhor.dias === 0 || (melhor.comuns > 0 && melhor.dias <= 3),
+        motivo: `mesmo valor, ${quando}${melhor.t.semConta ? ", pago no Tiny sem a conta" : melhor.t.pago ? ", já baixado nesta conta" : ""}`,
+        certa: (melhor.t.pago && !melhor.t.semConta) || melhor.dias === 0 || (melhor.comuns > 0 && melhor.dias <= 3),
       });
     }
   }
