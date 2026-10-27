@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { CabecalhoTela, SemAcesso, estiloBotaoSecundario } from "@/components/ui";
+import { CabecalhoTela, Indicador, SemAcesso, estiloBotaoSecundario } from "@/components/ui";
 import { carregarAcesso, pode } from "@/lib/acesso";
 import { hojeBrasil } from "@/lib/datas";
 import { carregarEmpresas, empresaSelecionada } from "@/lib/empresa";
@@ -9,6 +9,7 @@ import { filtrarPorConta, montarFluxo, somarMeses, ultimoDiaMes, type CategoriaF
 import { formatarData, formatarMoeda } from "@/lib/formato";
 import { supabaseConfigurado } from "@/lib/supabase/config";
 import { criarClienteNavegador } from "@/lib/supabase/client";
+import { SeletorConta } from "./seletor-conta";
 import { TabelaFluxo } from "./tabela-fluxo";
 import { TelaCliente } from "@/components/tela-cliente";
 
@@ -95,52 +96,38 @@ async function PaginaFluxoCaixa({ searchParams }: { searchParams: Promise<{ modo
 
   const link = (p: Record<string, string>) => `?${new URLSearchParams(conta ? { ...p, conta: conta.conta_bancaria_id } : p).toString()}`;
   const periodo: Record<string, string> = modo === "dia" ? { mes: mes.slice(0, 7) } : { modo: "mes", inicio: inicio.slice(0, 7) };
-  const linkConta = (id: string | null) => `?${new URLSearchParams(id ? { ...periodo, conta: id } : periodo).toString()}`;
-  const aba = (ativo: boolean) =>
-    `rounded-md px-2 py-0.5 text-xs font-medium ${ativo ? "bg-texto text-white" : "border border-borda bg-superficie text-texto-suave hover:text-texto"}`;
   const anterior = modo === "dia" ? link({ mes: somarMeses(mes, -1).slice(0, 7) }) : link({ modo: "mes", inicio: somarMeses(inicio, -1).slice(0, 7) });
   const proximo = modo === "dia" ? link({ mes: somarMeses(mes, 1).slice(0, 7) }) : link({ modo: "mes", inicio: somarMeses(inicio, 1).slice(0, 7) });
   const seg = (ativo: boolean) => `px-2.5 py-1 text-sm font-medium ${ativo ? "bg-texto text-white" : "bg-superficie text-texto-suave hover:text-texto"}`;
   const podeDigitar = !!selecionada && !conta && pode(acesso, TELA, "editar") && modo === "dia";
-  const item = (rotulo: string, valor: React.ReactNode, dica: string, href?: string, cor = "") => {
-    const corpo = (
-      <>
-        <span className="text-texto-suave">{rotulo}</span> <strong className={`tabular-nums ${cor}`}>{valor}</strong>
-      </>
-    );
-    return href ? (
-      <Link href={href} title={dica} className="hover:underline">
-        {corpo}
-      </Link>
-    ) : (
-      <span title={dica}>{corpo}</span>
-    );
-  };
+  const ajuda = (
+    <>
+      Até ontem: pagos e recebidos (realizado). De hoje em diante: em aberto pelo vencimento, no dia útil seguinte; atrasados em hoje. Clique no grupo
+      para abrir; num valor para ver os títulos. As duas últimas colunas comparam o total com {rotuloAnterior}.
+      {podeDigitar
+        ? " Na linha Previsão digitada, clique no dia e digite (Enter grava)."
+        : modo === "dia"
+          ? conta
+            ? " Para digitar previsões, volte para “Todas” as contas."
+            : " Para digitar previsões, escolha uma empresa."
+          : ""}
+    </>
+  );
 
   return (
     <div className="space-y-3">
-      <CabecalhoTela codigo={TELA} empresa={selecionada}>
-        <span className="text-xs text-texto-suave">{selecionada ? selecionada.nome : "Grupo (consolidado)"}</span>
-      </CabecalhoTela>
-
-      {/* Contas bancárias: todas (da empresa ou do grupo) ou uma só. */}
-      {contas.length > 0 && (
-        <div className="flex flex-wrap items-center gap-1.5">
-          <span className="mr-1 text-xs text-texto-suave">Conta</span>
-          <Link href={linkConta(null)} className={aba(!conta)}>
-            Todas · {contas.length}
-          </Link>
-          {contas.map((c) => (
-            <Link key={c.conta_bancaria_id} href={linkConta(c.conta_bancaria_id)} className={aba(conta?.conta_bancaria_id === c.conta_bancaria_id)}>
-              {c.nome}
-              {!selecionada && <span className="opacity-70"> · {nomeEmpresa.get(c.empresa_id) ?? ""}</span>}
-            </Link>
-          ))}
-        </div>
-      )}
-
-      {/* Barra: modo, período e resumo numa linha fina. */}
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
+      {/* Cabeçalho numa linha: título à esquerda; conta, modo e período à direita. */}
+      <CabecalhoTela codigo={TELA} empresa={selecionada} ajuda={ajuda}>
+        {contas.length > 0 && (
+          <SeletorConta
+            contas={contas.map((c) => ({
+              id: c.conta_bancaria_id,
+              nome: selecionada ? c.nome : `${c.nome} · ${nomeEmpresa.get(c.empresa_id) ?? ""}`,
+            }))}
+            atual={conta?.conta_bancaria_id ?? null}
+            periodo={periodo}
+          />
+        )}
         <span className="inline-flex overflow-hidden rounded-md border border-borda">
           <Link href={link({ mes: mes.slice(0, 7) })} className={seg(modo === "dia")}>
             Diário
@@ -149,11 +136,11 @@ async function PaginaFluxoCaixa({ searchParams }: { searchParams: Promise<{ modo
             12 meses
           </Link>
         </span>
-        <span className="flex items-center gap-1">
+        <span className="flex items-center gap-1 text-sm">
           <Link href={anterior} className={`${estiloBotaoSecundario} px-2 py-0.5`} aria-label="Anterior">
             ‹
           </Link>
-          <span className="min-w-36 text-center font-semibold">{modo === "dia" ? rotuloMes(mes) : `${curto(inicio)} a ${curto(somarMeses(inicio, 11))}`}</span>
+          <span className="min-w-32 text-center font-semibold">{modo === "dia" ? rotuloMes(mes) : `${curto(inicio)} a ${curto(somarMeses(inicio, 11))}`}</span>
           <Link href={proximo} className={`${estiloBotaoSecundario} px-2 py-0.5`} aria-label="Próximo">
             ›
           </Link>
@@ -161,33 +148,51 @@ async function PaginaFluxoCaixa({ searchParams }: { searchParams: Promise<{ modo
             hoje
           </Link>
         </span>
-        {item(
-          `Saldo hoje`,
-          r.saldoHoje === null ? "—" : formatarMoeda(r.saldoHoje),
-          "Saldo das contas até agora + o que vence hoje e os atrasados (fonte: contas bancárias, pagar e receber)",
-          undefined,
-          r.saldoHoje !== null && r.saldoHoje < 0 ? "text-perigo" : "",
-        )}
-        {r.menorSaldo &&
-          item(
-            "Menor saldo previsto",
-            `${formatarMoeda(r.menorSaldo.valor)} em ${formatarData(r.menorSaldo.data).slice(0, 5)}`,
-            "Menor saldo do período, de hoje em diante",
-            undefined,
-            r.menorSaldo.valor < 0 ? "text-perigo" : "",
-          )}
-        {item("A receber previsto", formatarMoeda(r.entradasPrevistas), "Em aberto, atrasados e previsões digitadas no período", "/financeiro/receber", "text-sucesso")}
-        {item("A pagar previsto", formatarMoeda(r.saidasPrevistas), "Em aberto, atrasados e previsões digitadas no período", "/financeiro/pagar")}
-        {(r.atrasadoPagar > 0 || r.atrasadoReceber > 0) &&
-          item(
-            "Atrasados (em hoje)",
-            `−${formatarMoeda(r.atrasadoPagar)} / +${formatarMoeda(r.atrasadoReceber)}`,
-            "Títulos vencidos e em aberto: o fluxo considera que saem/entram hoje",
-            "/financeiro/pagar?situacao=vencido",
-            "text-alerta",
-          )}
-        {dados.pendentesExtrato > 0 &&
-          item("Extrato a conciliar", String(dados.pendentesExtrato), "Linhas do extrato ainda sem título: o realizado pode estar incompleto", "/financeiro/conciliacao", "text-alerta")}
+      </CabecalhoTela>
+
+      {/* Resumo: cartões compactos numa faixa só. */}
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-6">
+        <Indicador
+          rotulo="Saldo hoje"
+          valor={r.saldoHoje === null ? "—" : formatarMoeda(r.saldoHoje)}
+          cor={r.saldoHoje !== null && r.saldoHoje < 0 ? "text-perigo" : ""}
+          fonte="Saldo das contas até agora + o que vence hoje e os atrasados (fonte: contas bancárias, pagar e receber)"
+        />
+        <Indicador
+          rotulo="Menor saldo previsto"
+          valor={r.menorSaldo ? formatarMoeda(r.menorSaldo.valor) : "—"}
+          detalhe={r.menorSaldo ? `em ${formatarData(r.menorSaldo.data).slice(0, 5)}` : undefined}
+          cor={r.menorSaldo && r.menorSaldo.valor < 0 ? "text-perigo" : ""}
+          fonte="Menor saldo do período, de hoje em diante"
+        />
+        <Indicador
+          rotulo="A receber previsto"
+          valor={formatarMoeda(r.entradasPrevistas)}
+          cor="text-sucesso"
+          href="/financeiro/receber"
+          fonte="Em aberto, atrasados e previsões digitadas no período"
+        />
+        <Indicador
+          rotulo="A pagar previsto"
+          valor={formatarMoeda(r.saidasPrevistas)}
+          href="/financeiro/pagar"
+          fonte="Em aberto, atrasados e previsões digitadas no período"
+        />
+        <Indicador
+          rotulo="Atrasados (contam em hoje)"
+          valor={r.atrasadoPagar > 0 || r.atrasadoReceber > 0 ? `−${formatarMoeda(r.atrasadoPagar)}` : "—"}
+          detalhe={r.atrasadoReceber > 0 ? `+${formatarMoeda(r.atrasadoReceber)} a receber` : undefined}
+          cor={r.atrasadoPagar > 0 ? "text-alerta" : ""}
+          href="/financeiro/pagar?situacao=vencido"
+          fonte="Títulos vencidos e em aberto: o fluxo considera que saem/entram hoje"
+        />
+        <Indicador
+          rotulo="Extrato a conciliar"
+          valor={String(dados.pendentesExtrato)}
+          cor={dados.pendentesExtrato > 0 ? "text-alerta" : ""}
+          href="/financeiro/conciliacao"
+          fonte="Linhas do extrato ainda sem título: o realizado pode estar incompleto"
+        />
       </div>
 
       {conta && !comPrevisto && (
@@ -213,17 +218,6 @@ async function PaginaFluxoCaixa({ searchParams }: { searchParams: Promise<{ modo
         <span>
           <i className="mr-1 inline-block h-2.5 w-3 border border-borda bg-[#eceff3] align-middle" />
           fim de semana · ★ feriado
-        </span>
-        <span>
-          Até ontem: pagos e recebidos (realizado). De hoje em diante: em aberto pelo vencimento, no dia útil seguinte; atrasados em hoje. Clique no
-          grupo para abrir; num valor para ver os títulos. As duas últimas colunas comparam o total com {rotuloAnterior}.
-          {podeDigitar
-            ? " Na linha Previsão digitada, clique no dia e digite (Enter grava)."
-            : modo === "dia"
-              ? conta
-                ? " Para digitar previsões, volte para “Todas” as contas."
-                : " Para digitar previsões, escolha uma empresa."
-              : ""}
         </span>
       </p>
     </div>
