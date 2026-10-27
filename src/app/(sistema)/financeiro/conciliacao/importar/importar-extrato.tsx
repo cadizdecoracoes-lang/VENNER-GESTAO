@@ -10,16 +10,17 @@ import {
   CAMPOS_EXTRATO,
   lerOfx,
   lerPlanilhaExtrato,
-  lerTextoExtratoPdf,
   mapearColunasExtrato,
   type CampoExtrato,
   type ExtratoLido,
   type LinhaExtrato,
   type MapaExtrato,
 } from "@/lib/extrato";
+import { lerExtratoPdf } from "@/lib/extrato-pdf";
 import { formatarData, formatarMoeda } from "@/lib/formato";
 import type { Celula } from "@/lib/plataformas/planilha";
 import { importarExtrato } from "../actions";
+import { linhasDoPdf } from "./ler-pdf";
 
 type Conta = { id: string; nome: string; empresa: string; numero: string | null };
 type Origem = "ofx" | "planilha" | "pdf";
@@ -66,35 +67,6 @@ async function lerTexto(f: File): Promise<string> {
   }
 }
 
-// Texto do PDF em linhas, na ordem da página (itens agrupados pela altura).
-async function linhasDoPdf(f: File): Promise<string[]> {
-  const pdfjs = await import("pdfjs-dist");
-  pdfjs.GlobalWorkerOptions.workerSrc = new URL("pdfjs-dist/build/pdf.worker.min.mjs", import.meta.url).toString();
-  const pdf = await pdfjs.getDocument({ data: new Uint8Array(await f.arrayBuffer()) }).promise;
-  const saida: string[] = [];
-  for (let p = 1; p <= Math.min(pdf.numPages, 40); p++) {
-    const conteudo = await (await pdf.getPage(p)).getTextContent();
-    const itens = conteudo.items
-      .filter((i): i is typeof i & { str: string; transform: number[] } => "str" in i && !!i.str.trim())
-      .map((i) => ({ x: i.transform[4], y: i.transform[5], t: i.str }));
-    itens.sort((a, b) => b.y - a.y || a.x - b.x);
-    let atual: typeof itens = [];
-    const fechar = () => {
-      if (atual.length) saida.push(atual.sort((a, b) => a.x - b.x).map((i) => i.t).join(" "));
-      atual = [];
-    };
-    for (const i of itens) {
-      if (atual.length && Math.abs(atual[0].y - i.y) > 2.5) fechar();
-      atual.push(i);
-    }
-    fechar();
-  }
-  if (saida.join("").replace(/\s/g, "").length < 30) {
-    throw new Error("Este PDF é uma imagem (digitalizado) e não tem texto para ler. Baixe o extrato em OFX ou Excel no internet banking.");
-  }
-  return saida;
-}
-
 const so = (t: string | null) => (t ?? "").replace(/\D/g, "").replace(/^0+/, "");
 
 export function ImportarExtrato({ contas, contaInicial }: { contas: Conta[]; contaInicial: string }) {
@@ -110,6 +82,7 @@ export function ImportarExtrato({ contas, contaInicial }: { contas: Conta[]; con
   const [invertidas, setInvertidas] = useState<Set<number>>(new Set());
   const [erro, setErro] = useState<string | null>(null);
   const [lendo, setLendo] = useState(false);
+  const [progresso, setProgresso] = useState<string | null>(null);
 
   async function ler(f: File | undefined) {
     setErro(null);
@@ -126,7 +99,8 @@ export function ImportarExtrato({ contas, contaInicial }: { contas: Conta[]; con
         setLido(lerOfx(await lerTexto(f)));
       } else if (/\.pdf$/i.test(f.name)) {
         setOrigem("pdf");
-        setLido(lerTextoExtratoPdf(await linhasDoPdf(f)));
+        const { linhas, ocr } = await linhasDoPdf(f, setProgresso);
+        setLido(lerExtratoPdf(linhas, { ocr }));
       } else if (/\.(xlsx|csv|txt)$/i.test(f.name)) {
         setOrigem("planilha");
         let dados: Celula[][];
@@ -145,9 +119,10 @@ export function ImportarExtrato({ contas, contaInicial }: { contas: Conta[]; con
         throw new Error("Use o extrato em OFX, Excel (.xlsx), CSV ou PDF.");
       }
     } catch (e) {
-      setErro(e instanceof Error ? e.message : "Não foi possível ler o arquivo.");
+      setErro(e instanceof Error ? e.message : typeof e === "string" ? e : "Não foi possível ler o arquivo.");
     } finally {
       setLendo(false);
+      setProgresso(null);
     }
   }
 
@@ -167,6 +142,8 @@ export function ImportarExtrato({ contas, contaInicial }: { contas: Conta[]; con
   const contaDiferente =
     leitura?.conta.numero && escolhida?.numero && !so(escolhida.numero).includes(so(leitura.conta.numero).slice(0, 5)) && !so(leitura.conta.numero).includes(so(escolhida.numero).slice(0, 5));
   const colunas = planilha?.[cabecalho] ?? [];
+  const aplicacoes = linhas.filter((l) => l.aplicacao && !fora.has(l.i));
+  const aConferir = linhas.filter((l) => (l.conferir || (l.sinalIncerto && !invertidas.has(l.i))) && !fora.has(l.i)).length;
 
   const alternar = (s: Set<number>, i: number, set: (n: Set<number>) => void) => {
     const n = new Set(s);
@@ -204,16 +181,17 @@ export function ImportarExtrato({ contas, contaInicial }: { contas: Conta[]; con
           </Campo>
           {leitura && (
             <div className="text-sm">
-              <p className="text-texto-suave">Resumo do arquivo</p>
+              <p className="text-texto-suave">Resumo do arquivo{leitura.banco ? ` · ${leitura.banco}` : ""}</p>
               <p>
                 <strong>{valendo.length}</strong> lançamento(s) · entradas <span className="tabular-nums text-sucesso">{formatarMoeda(entradas)}</span> · saídas{" "}
                 <span className="tabular-nums text-perigo">{formatarMoeda(saidas)}</span>
               </p>
+              {(leitura.saldoInicial ?? null) !== null && <p className="text-texto-suave">Saldo anterior: {formatarMoeda(leitura.saldoInicial!)}</p>}
               {leitura.saldoFinal !== null && <p className="text-texto-suave">Saldo final informado: {formatarMoeda(leitura.saldoFinal)}</p>}
             </div>
           )}
         </div>
-        {lendo && <p className="mt-2 text-sm text-texto-suave">Lendo o arquivo...</p>}
+        {lendo && <p className="mt-2 text-sm text-texto-suave">{progresso ?? "Lendo o arquivo..."}</p>}
         {erro && <p className="mt-2 text-sm text-perigo">{erro}</p>}
         {contaDiferente && (
           <p className="mt-2 text-sm text-alerta">
@@ -221,7 +199,7 @@ export function ImportarExtrato({ contas, contaInicial }: { contas: Conta[]; con
           </p>
         )}
         {leitura?.avisos.map((a) => (
-          <p key={a} className="mt-1 text-sm text-alerta">
+          <p key={a} className={`mt-1 text-sm ${a.startsWith("Conferido") ? "text-sucesso" : "text-alerta"}`}>
             {a}
           </p>
         ))}
@@ -265,7 +243,24 @@ export function ImportarExtrato({ contas, contaInicial }: { contas: Conta[]; con
       )}
 
       {linhas.length > 0 && (
-        <Cartao titulo="Confira antes de importar">
+        <Cartao
+          titulo="Confira antes de importar"
+          acoes={
+            <span className="flex flex-wrap items-center gap-3 text-xs">
+              {aConferir > 0 && <span className="text-alerta">{aConferir} linha(s) em amarelo para conferir</span>}
+              {aplicacoes.length > 0 && (
+                <button
+                  type="button"
+                  title="Aplicação e resgate automáticos do banco (ex.: BB Rende Fácil): não têm título no pagar/receber"
+                  onClick={() => setFora(new Set([...fora, ...aplicacoes.map((l) => l.i)]))}
+                  className="text-primaria hover:underline"
+                >
+                  Tirar {aplicacoes.length} aplicação(ões) automática(s)
+                </button>
+              )}
+            </span>
+          }
+        >
           <div className="max-h-[28rem] overflow-auto">
             <table className="w-full text-sm">
               <thead className="sticky top-0 bg-superficie">
@@ -279,7 +274,7 @@ export function ImportarExtrato({ contas, contaInicial }: { contas: Conta[]; con
               </thead>
               <tbody className="divide-y divide-borda/70">
                 {linhas.map((l) => (
-                  <tr key={l.i} className={fora.has(l.i) ? "text-texto-suave line-through" : l.sinalIncerto && !invertidas.has(l.i) ? "bg-alerta/10" : ""}>
+                  <tr key={l.i} className={fora.has(l.i) ? "text-texto-suave line-through" : l.conferir || (l.sinalIncerto && !invertidas.has(l.i)) ? "bg-alerta/10" : ""}>
                     <td className="whitespace-nowrap px-2 py-1 tabular-nums">{formatarData(l.data)}</td>
                     <td className="px-2 py-1">
                       {l.descricao}
