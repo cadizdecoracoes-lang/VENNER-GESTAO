@@ -23,7 +23,7 @@ import { carregarAcesso, pode } from "@/lib/acesso";
 import { carregarEmpresas, empresaSelecionada } from "@/lib/empresa";
 import { carregarCategoriasDespesa, carregarCentrosCusto, carregarFornecedores } from "@/lib/financeiro";
 import { hojeBrasil, somarDias } from "@/lib/datas";
-import { formatarData, formatarMoeda } from "@/lib/formato";
+import { formatarData, formatarDataHora, formatarMoeda } from "@/lib/formato";
 import { type SituacaoTitulo } from "@/lib/rotulos";
 import { supabaseConfigurado } from "@/lib/supabase/config";
 import { criarClienteNavegador } from "@/lib/supabase/client";
@@ -48,13 +48,42 @@ type Titulo = {
   centro_custo_id: string | null;
   observacao: string | null;
   tiny_id: number | null;
+  criado_em: string;
+  integrado_em: string | null;
   fornecedores: { nome: string; nome_fantasia: string | null } | null;
   plano_contas: { codigo: string; nome: string } | null;
   contas_bancarias: { nome: string } | null;
 };
-type Filtros = { novo?: string; pagar?: string; editar?: string; de?: string; ate?: string; por?: string; situacao?: string } & Preenchido;
+type Filtros = { novo?: string; pagar?: string; editar?: string; ver?: string; de?: string; ate?: string; por?: string; situacao?: string } & Preenchido;
 // Atalho da conciliação bancária: abre a conta nova já preenchida com a linha do extrato.
 type Preenchido = { empresa?: string; descricao?: string; valor?: string; vencimento?: string; volta?: string };
+
+type Historico = {
+  id: string;
+  quando: string;
+  evento: "criada" | "alterada";
+  origem: Origem;
+  usuario_nome: string | null;
+  mudancas: Record<string, [string | null, string | null]>;
+};
+type Origem = "manual" | "nota" | "tiny" | "sistema";
+const ROTULO_ORIGEM: Record<Origem, string> = { manual: "Lançada à mão", nota: "Nota do fornecedor", tiny: "Tiny", sistema: "Sistema" };
+
+// Origem curta mostrada na linha: de onde a conta veio.
+function origemDaConta(t: Titulo): string {
+  if (t.nota_id) return t.tiny_id ? "Nota · Tiny" : "Nota";
+  return t.tiny_id ? "Tiny" : "Manual";
+}
+
+async function carregarHistorico(conta: string): Promise<Historico[]> {
+  if (!supabaseConfigurado) return [];
+  const { data } = await criarClienteNavegador()
+    .from("contas_pagar_historico")
+    .select("id, quando, evento, origem, usuario_nome, mudancas")
+    .eq("conta_id", conta)
+    .order("quando");
+  return (data ?? []) as Historico[];
+}
 
 const DATAS_PERIODO = { vencimento: "Vencimento", data_pagamento: "Pagamento" };
 
@@ -64,7 +93,7 @@ async function carregar(empresa: string | null, periodo: Periodo): Promise<Titul
   let consulta = supabase
     .from("contas_pagar")
     .select(
-      "id, empresa_id, descricao, parcela, valor, vencimento, situacao, data_pagamento, valor_pago, nota_id, fornecedor_id, categoria_id, centro_custo_id, observacao, tiny_id, fornecedores(nome, nome_fantasia), plano_contas(codigo, nome), contas_bancarias(nome)",
+      "id, empresa_id, descricao, parcela, valor, vencimento, situacao, data_pagamento, valor_pago, nota_id, fornecedor_id, categoria_id, centro_custo_id, observacao, tiny_id, criado_em, integrado_em, fornecedores(nome, nome_fantasia), plano_contas(codigo, nome), contas_bancarias(nome)",
     )
     .order("vencimento")
     .limit(3000);
@@ -102,6 +131,8 @@ async function PaginaContasPagar({ searchParams }: { searchParams: Promise<Filtr
   const editando = filtros.editar && pode(acesso, TELA, "editar") ? abertos.find((t) => t.id === filtros.editar) : undefined;
   const criando = !!filtros.novo && pode(acesso, TELA, "criar");
   const comCadastros = criando || !!editando;
+  const vendo = filtros.ver ? titulos.find((t) => t.id === filtros.ver) : undefined;
+  const historico = vendo ? await carregarHistorico(vendo.id) : [];
   const [contasBancarias, fornecedores, categorias, centros] = await Promise.all([
     pagando && supabaseConfigurado
       ? (criarClienteNavegador())
@@ -218,6 +249,51 @@ async function PaginaContasPagar({ searchParams }: { searchParams: Promise<Filtr
               </Campo>
             </div>
           </FormAcao>
+        </Cartao>
+      )}
+
+      {vendo && (
+        <Cartao
+          titulo={`Origem e histórico: ${vendo.descricao}${vendo.parcela ? ` (${vendo.parcela})` : ""}`}
+          acoes={<LinkAcao href={`/financeiro/pagar${filtroPeriodo.replace("&", "?")}`}>Fechar</LinkAcao>}
+        >
+          <div className="space-y-2 text-sm">
+            <p className="flex flex-wrap gap-x-5 gap-y-1">
+              <span>
+                <span className="text-texto-suave">Origem:</span> {origemDaConta(vendo)}
+              </span>
+              <span>
+                <span className="text-texto-suave">Criada em:</span> {formatarDataHora(vendo.criado_em)}
+                {historico[0]?.evento === "criada" && historico[0].usuario_nome && ` por ${historico[0].usuario_nome}`}
+              </span>
+              {vendo.tiny_id && (
+                <span>
+                  <span className="text-texto-suave">Integrada do Tiny em:</span> {formatarDataHora(vendo.integrado_em)} · nº {vendo.tiny_id}
+                </span>
+              )}
+            </p>
+            <Tabela colunas={["Quando", "Feito por", "O que mudou"]} vazio="Sem alterações registradas." embutida>
+              {historico.map((h) => (
+                <tr key={h.id}>
+                  <Celula className="whitespace-nowrap tabular-nums">{formatarDataHora(h.quando)}</Celula>
+                  <Celula className="whitespace-nowrap">
+                    {h.origem === "tiny" ? "Tiny" : h.usuario_nome ?? ROTULO_ORIGEM[h.origem]}
+                  </Celula>
+                  <Celula>
+                    {h.evento === "criada" ? (
+                      <span className="text-texto-suave">Criada ({ROTULO_ORIGEM[h.origem]})</span>
+                    ) : (
+                      Object.entries(h.mudancas).map(([campo, [antes, depois]]) => (
+                        <span key={campo} className="mr-4 inline-block">
+                          <span className="text-texto-suave">{campo}:</span> {antes ?? "—"} → <span className="font-medium">{depois ?? "—"}</span>
+                        </span>
+                      ))
+                    )}
+                  </Celula>
+                </tr>
+              ))}
+            </Tabela>
+          </div>
         </Cartao>
       )}
 
@@ -414,6 +490,13 @@ async function PaginaContasPagar({ searchParams }: { searchParams: Promise<Filtr
                 <Celula>
                   <span className="font-medium">{t.descricao}</span>
                   {t.parcela && <span className="text-texto-suave"> · {t.parcela}</span>}
+                  <Link
+                    href={`?ver=${t.id}${filtroPeriodo}`}
+                    title="Ver origem e histórico de alterações"
+                    className="ml-2 text-xs text-texto-suave hover:text-primaria hover:underline"
+                  >
+                    {origemDaConta(t)}
+                  </Link>
                   {t.nota_id && (
                     <span className="ml-2 text-xs">
                       <LinkAcao href={`/financeiro/notas-fornecedor/nota?id=${t.nota_id}`}>Ver nota</LinkAcao>
