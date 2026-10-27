@@ -292,7 +292,9 @@ export type TituloCandidato = {
   pago: boolean;
 };
 
-export type Sugestao = { titulos: string[]; motivo: string };
+// certa: casa sem dúvida e é conciliada sozinha ao importar (título já baixado
+// nesta conta, ou em aberto no mesmo dia ou com o nome no histórico em até 3 dias).
+export type Sugestao = { titulos: string[]; motivo: string; certa: boolean };
 
 function palavras(t: string): Set<string> {
   return new Set(
@@ -314,7 +316,7 @@ export function sugerirConciliacao(linhas: { id: string; data: string; valor: nu
     const tipo = l.valor < 0 ? "pagar" : "receber";
     const alvo = Math.abs(l.valor);
     const doHistorico = palavras(l.descricao);
-    let melhor: { t: TituloCandidato; pontos: number; dias: number } | null = null;
+    let melhor: { t: TituloCandidato; pontos: number; dias: number; comuns: number } | null = null;
     for (const t of titulos) {
       if (t.tipo !== tipo || usados.has(t.id) || Math.abs(t.valor - alvo) > 0.01) continue;
       const dias = Math.abs(diasEntre(t.data, l.data));
@@ -322,7 +324,7 @@ export function sugerirConciliacao(linhas: { id: string; data: string; valor: nu
       const nome = palavras(`${t.pessoa ?? ""} ${t.descricao}`);
       const comuns = [...nome].filter((p) => doHistorico.has(p)).length;
       const pontos = (t.pago ? 20 : 0) + comuns * 15 - dias * 2;
-      if (!melhor || pontos > melhor.pontos) melhor = { t, pontos, dias };
+      if (!melhor || pontos > melhor.pontos) melhor = { t, pontos, dias, comuns };
     }
     if (melhor) {
       usados.add(melhor.t.id);
@@ -330,6 +332,7 @@ export function sugerirConciliacao(linhas: { id: string; data: string; valor: nu
       resultado.set(l.id, {
         titulos: [melhor.t.id],
         motivo: `mesmo valor, ${quando}${melhor.t.pago ? ", já baixado nesta conta" : ""}`,
+        certa: melhor.t.pago || melhor.dias === 0 || (melhor.comuns > 0 && melhor.dias <= 3),
       });
     }
   }

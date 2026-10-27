@@ -1,8 +1,9 @@
 import { redirect, revalidatePath } from "@/lib/navegacao";
 import { mensagemErro, SEM_BANCO, type Estado } from "@/lib/erros";
-import type { LinhaExtrato } from "@/lib/extrato";
+import { sugerirConciliacao, type LinhaExtrato } from "@/lib/extrato";
 import { supabaseConfigurado } from "@/lib/supabase/config";
 import { criarClienteNavegador } from "@/lib/supabase/client";
+import { carregarCandidatos, carregarContas, carregarLinhas } from "./dados";
 
 const CAMINHO = "/financeiro/conciliacao";
 const ORIGENS = ["ofx", "planilha", "pdf"] as const;
@@ -30,8 +31,10 @@ export async function importarExtrato(_: Estado, form: FormData): Promise<Estado
   });
   if (error) return { erro: mensagemErro(error) };
   const r = data as { importadas: number; repetidas: number };
+  // O que casa sem dúvida com um título já sai conciliado: na lista ficam só as divergências.
+  const auto = await conciliarCertas(dados.conta);
   revalidatePath(CAMINHO);
-  redirect(`${CAMINHO}?conta=${dados.conta}&importadas=${r.importadas}&repetidas=${r.repetidas}`);
+  redirect(`${CAMINHO}?conta=${dados.conta}&importadas=${r.importadas}&repetidas=${r.repetidas}&automaticas=${auto}`);
 }
 
 async function chamar(funcao: string, args: Record<string, unknown>): Promise<Estado> {
@@ -80,4 +83,31 @@ export async function ignorar(lancamento: string, _: Estado, form: FormData): Pr
 
 export async function desfazer(lancamento: string): Promise<Estado> {
   return chamar("desfazer_conciliacao", { lancamento });
+}
+
+// Apaga uma importação inteira (linhas do extrato), desfazendo as baixas que a
+// conciliação fez nos títulos.
+export async function excluirImportacao(importacao: string): Promise<Estado> {
+  return chamar("excluir_importacao_extrato", { importacao });
+}
+
+// Concilia as linhas pendentes da conta que casam sem dúvida com um título
+// (ver Sugestao.certa). Devolve quantas foram conciliadas; erro numa linha não
+// para as outras (ela só continua pendente).
+export async function conciliarCertas(contaId: string): Promise<number> {
+  const conta = (await carregarContas(null)).find((c) => c.id === contaId);
+  if (!conta) return 0;
+  const pend = await carregarLinhas(conta.id, "pendente", null);
+  if (!pend.length) return 0;
+  const candidatos = await carregarCandidatos(conta, pend[0].data, pend[pend.length - 1].data);
+  const tipo = new Map(candidatos.map((t) => [t.id, t.tipo]));
+  const supabase = criarClienteNavegador();
+  let feitas = 0;
+  for (const [linha, s] of sugerirConciliacao(pend, candidatos)) {
+    if (!s.certa) continue;
+    const pagar = tipo.get(s.titulos[0]) === "pagar";
+    const { error } = await supabase.rpc("conciliar_lancamento", { lancamento: linha, pagar: pagar ? s.titulos : [], receber: pagar ? [] : s.titulos });
+    if (!error) feitas++;
+  }
+  return feitas;
 }

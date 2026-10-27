@@ -179,3 +179,30 @@ export async function carregarIndicadores(conta: string, mes: string): Promise<[
   }
   return r;
 }
+
+export type ImportacaoExtrato = {
+  id: string;
+  arquivo: string | null;
+  origem: string;
+  periodo_de: string | null;
+  periodo_ate: string | null;
+  importadas: number;
+  criado_em: string;
+  conciliadas: number;
+};
+
+// Importações da conta, da mais nova para a mais velha, com quantas linhas já
+// foram resolvidas (conciliadas, transferência ou ignoradas).
+export async function carregarImportacoes(contaId: string): Promise<ImportacaoExtrato[]> {
+  if (!supabaseConfigurado) return [];
+  const supabase = criarClienteNavegador();
+  const { data } = await supabase
+    .from("extrato_importacoes")
+    .select("id, arquivo, origem, periodo_de, periodo_ate, importadas, criado_em, extrato_lancamentos(situacao)")
+    .eq("conta_bancaria_id", contaId)
+    .order("criado_em", { ascending: false })
+    .limit(200);
+  return ((data ?? []) as (Omit<ImportacaoExtrato, "conciliadas"> & { extrato_lancamentos: { situacao: string }[] })[]).map(
+    ({ extrato_lancamentos, ...i }) => ({ ...i, conciliadas: extrato_lancamentos.filter((l) => l.situacao !== "pendente").length }),
+  );
+}

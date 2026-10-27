@@ -9,15 +9,25 @@ import { hojeBrasil } from "@/lib/datas";
 import { carregarEmpresas, empresaSelecionada } from "@/lib/empresa";
 import { sugerirConciliacao, type TituloCandidato } from "@/lib/extrato";
 import { formatarData, formatarMoeda } from "@/lib/formato";
-import { conciliar, conciliarSugestoes, desfazer } from "./actions";
-import { carregarCandidatos, carregarConferencia, carregarContas, carregarIndicadores, carregarLinhas, carregarPendentes, nomePessoa, type LinhaConciliacao } from "./dados";
+import { conciliar, conciliarSugestoes, desfazer, excluirImportacao } from "./actions";
+import {
+  carregarCandidatos,
+  carregarConferencia,
+  carregarContas,
+  carregarImportacoes,
+  carregarIndicadores,
+  carregarLinhas,
+  carregarPendentes,
+  nomePessoa,
+  type LinhaConciliacao,
+} from "./dados";
 import { PainelResolver } from "./painel-resolver";
 import { SeletorConta } from "./seletor-conta";
 import { TelaCliente } from "@/components/tela-cliente";
 
 const TELA = "financeiro.conciliacao";
 const variacao = (atual: number, antes: number) => `${atual >= antes ? "+" : ""}${Math.round(((atual - antes) / antes) * 100)}%`;
-type Filtros = { conta?: string; situacao?: string; mes?: string; linha?: string; importadas?: string; repetidas?: string };
+type Filtros = { conta?: string; situacao?: string; mes?: string; linha?: string; importadas?: string; repetidas?: string; automaticas?: string };
 
 const SITUACOES = [
   { valor: "pendente", rotulo: "Pendentes" },
@@ -71,6 +81,8 @@ async function PaginaConciliacao({ searchParams }: { searchParams: Promise<Filtr
   const sugestoes = sugerirConciliacao(pend, candidatos);
   const porId = new Map(candidatos.map((t) => [t.id, t]));
   const conferencia = conta ? await carregarConferencia(conta) : null;
+  const podeExcluir = pode(acesso, TELA, "excluir");
+  const importacoes = conta ? await carregarImportacoes(conta.id) : [];
   const [indMes, indAnterior] = conta ? await carregarIndicadores(conta.id, mes ?? hojeBrasil().slice(0, 7)) : [null, null];
 
   // Painel de resolver uma linha: candidatos mais amplos (30 dias).
@@ -133,7 +145,8 @@ async function PaginaConciliacao({ searchParams }: { searchParams: Promise<Filtr
       {filtros.importadas !== undefined && (
         <p className="rounded-lg bg-sucesso/10 px-3 py-1.5 text-sm text-sucesso">
           Extrato importado: {filtros.importadas} lançamento(s) novo(s)
-          {Number(filtros.repetidas) > 0 && `, ${filtros.repetidas} já estavam no sistema e não entraram de novo`}.
+          {Number(filtros.repetidas) > 0 && `, ${filtros.repetidas} já estavam no sistema e não entraram de novo`}
+          {Number(filtros.automaticas) > 0 && `; ${filtros.automaticas} bateram com títulos e já foram conciliadas`}. Abaixo ficam só as divergências.
         </p>
       )}
 
@@ -214,6 +227,36 @@ async function PaginaConciliacao({ searchParams }: { searchParams: Promise<Filtr
               </FormAcao>
             )}
           </div>
+
+          {/* Arquivos importados nesta conta, recolhidos numa linha. */}
+          {importacoes.length > 0 && (
+            <details className="text-sm">
+              <summary className="cursor-pointer text-texto-suave hover:text-texto">Importações desta conta ({importacoes.length})</summary>
+              <ul className="mt-1 divide-y divide-borda/70 rounded-lg bg-superficie px-3">
+                {importacoes.map((i) => (
+                  <li key={i.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 py-1.5">
+                    <span className="font-medium">{i.arquivo ?? i.origem.toUpperCase()}</span>
+                    <span className="text-xs text-texto-suave">
+                      {i.periodo_de && i.periodo_ate ? `${formatarData(i.periodo_de)} a ${formatarData(i.periodo_ate)} · ` : ""}
+                      {i.importadas} linha(s), {i.conciliadas} resolvida(s) · importado em {formatarData(i.criado_em.slice(0, 10))}
+                    </span>
+                    {podeExcluir && (
+                      <FormAcao
+                        acao={excluirImportacao.bind(null, i.id)}
+                        rotulo="Excluir"
+                        enviando="Excluindo..."
+                        discreto
+                        className="ml-auto"
+                        confirmar={`Excluir a importação ${i.arquivo ?? ""} com ${i.importadas} linha(s)?${
+                          i.conciliadas ? ` ${i.conciliadas} já foram resolvidas: os títulos baixados pela conciliação voltam a ficar em aberto.` : ""
+                        } Não dá para desfazer.`}
+                      />
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </details>
+          )}
 
           {resolvendo && conta && podeEditar && (
             <PainelResolver

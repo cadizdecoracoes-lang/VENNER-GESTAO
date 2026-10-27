@@ -282,3 +282,18 @@ test("C6: dia que não fecha e mais de uma correção possível fica marcado, se
   );
   assert.ok(r.avisos.some((a) => a.startsWith("O saldo do dia não fecha em 06/01")));
 });
+
+test("sugestão 'certa' (conciliada sozinha ao importar): título pago, mesmo dia ou nome no histórico", async () => {
+  const { sugerirConciliacao } = await import("../src/lib/extrato.ts");
+  const t = (id: string, data: string, pago: boolean, pessoa: string | null = null) => ({ id, tipo: "pagar" as const, descricao: "Conta", pessoa, valor: 100, data, pago });
+  const l = (id: string, data: string, descricao = "PIX ENVIADO") => ({ id, data, valor: -100, descricao });
+  const r = sugerirConciliacao(
+    [l("a", "2026-10-05"), l("b", "2026-10-05"), l("c", "2026-10-05", "PIX ENVIADO HIDROREIS"), l("d", "2026-10-05")],
+    [t("pago", "2026-10-03", true), t("dia", "2026-10-05", false), t("nome", "2026-10-03", false, "Hidroreis Comercio"), t("longe", "2026-10-12", false)],
+  );
+  assert.equal(r.get("c")?.titulos[0], "nome");
+  assert.equal(r.get("c")?.certa, true);
+  const certas = [...r.values()].filter((s) => s.certa).map((s) => s.titulos[0]).sort();
+  assert.deepEqual(certas, ["dia", "nome", "pago"]);
+  assert.equal([...r.values()].find((s) => s.titulos[0] === "longe")?.certa, false);
+});
