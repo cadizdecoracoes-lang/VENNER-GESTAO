@@ -42,6 +42,21 @@ test("título pago pega a conta e a data do último recebimento", () => {
   assert.equal(t?.categoria_id, 5);
 });
 
+test("baixa do contas a pagar em { itens }, com a conta dentro e a data de banco", () => {
+  const t = titulo(
+    { id: 5, situacao: "pago", data: "2026-09-01", dataVencimento: "2026-09-10", valor: 200, saldo: 0, dataLiquidacao: "2026-09-10" },
+    { itens: [{ dataPagamento: "2026-09-12", conta: { id: 77 }, valor: 200 }] },
+  );
+  assert.equal(t?.situacao, "pago");
+  assert.equal(t?.liquidacao, "2026-09-12");
+  assert.equal(t?.conta_id, 77);
+  assert.equal(t?.valor_pago, 200);
+  const semBaixas = titulo({ id: 6, situacao: "liquidado", dataVencimento: "2026-09-10", valor: 50, dataLiquidacao: "2026-09-11" }, null);
+  assert.equal(semBaixas?.situacao, "pago");
+  assert.equal(semBaixas?.liquidacao, "2026-09-11");
+  assert.equal(titulo({ id: 7, situacao: "pago", dataVencimento: "2026-09-10", valor: 50 }, [])?.liquidacao, null);
+});
+
 test("título parcial e cancelado", () => {
   assert.equal(titulo({ id: 2, situacao: "aberto", dataVencimento: "2026-11-01", valor: 100, valorPago: 30, saldo: 70 }, [])?.situacao, "parcial");
   assert.equal(titulo({ id: 3, situacao: "cancelada", dataVencimento: "2026-11-01", valor: 100 }, [])?.situacao, "cancelado");

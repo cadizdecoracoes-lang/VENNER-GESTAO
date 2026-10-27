@@ -4,7 +4,7 @@
 // botão "Ler agora". A chave do robô é conferida pelo banco em cada chamada.
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { ApiTiny, renovarTiny, SemOrcamento } from "./api.ts";
-import { assinatura, categoria, contaFinanceira, data, pedido, produto, titulo } from "./normalizar.ts";
+import { assinatura, categoria, contaFinanceira, data, numero, pedido, produto, semBaixa, titulo } from "./normalizar.ts";
 import { HISTORICO_DESDE, type Cursor, type EstadoLeitura, type Lote, type TipoFila } from "./tipos.ts";
 
 type Inicio = {
@@ -216,7 +216,7 @@ async function detalhar(api: ApiTiny, lote: Lote, tipo: TipoFila, id: number, ag
     const caminho = tipo === "receber" ? "/contas-receber" : "/contas-pagar";
     const d = await api.ler<Record<string, unknown>>(`${caminho}/${id}`);
     if (!d) return void lote.removidos.push({ tipo, id });
-    const temBaixa = Number(d.valorPago ?? 0) > 0 || ["pago", "parcial"].includes(String(d.situacao));
+    const temBaixa = numero(d.valorPago) > 0 || !semBaixa(d.situacao);
     const baixas = temBaixa ? await api.ler(`${caminho}/${id}/recebimentos`) : [];
     const t = titulo(d, baixas);
     if (!t) throw new Error("Título sem vencimento no Tiny");
