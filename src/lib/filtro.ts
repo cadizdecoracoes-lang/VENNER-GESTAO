@@ -120,3 +120,7 @@ export function intervaloDeDias(hoje: string, quantidade: number): { de: string;
   const outro = somarDias(hoje, quantidade);
   return quantidade >= 0 ? { de: hoje, ate: outro } : { de: outro, ate: hoje };
 }
+
+// Data inteira num <input type="date">: ao digitar o ano o campo passa por
+// 0002, 0020, 0202... e só vale de 1900 em diante.
+export const dataCompleta = (v: string) => /^(19|2\d)\d{2}-\d{2}-\d{2}$/.test(v);

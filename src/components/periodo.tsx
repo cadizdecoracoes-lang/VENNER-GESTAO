@@ -1,5 +1,7 @@
+"use client";
 import Link from "next/link";
-import { intervaloDeDias as dias, intervaloDoMes as mes } from "@/lib/filtro";
+import { useRouter } from "next/navigation";
+import { dataCompleta, intervaloDeDias as dias, intervaloDoMes as mes } from "@/lib/filtro";
 import { formatarData } from "@/lib/formato";
 import { estiloBotaoSecundario, estiloCampo } from "./ui";
 
@@ -30,6 +32,7 @@ export function FiltroPeriodo({
   // O que a tela mostra sem período escolhido.
   semPeriodo: string;
 }) {
+  const router = useRouter();
   const por = periodo?.por ?? Object.keys(campos)[0];
   const atalhos = [
     { rotulo: "Mês passado", ...mes(hoje, -1) },
@@ -58,7 +61,16 @@ export function FiltroPeriodo({
         <summary className={`${pilula(livre)} cursor-pointer list-none [&::-webkit-details-marker]:hidden`}>
           {livre ? `${formatarData(periodo.de)} a ${formatarData(periodo.ate)}` : "Outras datas…"}
         </summary>
-        <form method="get" className="absolute left-0 top-full z-10 mt-1 flex flex-wrap items-center gap-2 rounded-xl bg-superficie p-2 shadow-[0_4px_16px_rgba(16,24,40,0.12)] group-open:min-w-max">
+        <form
+          method="get"
+          // Com as duas datas preenchidas a tela já atualiza; o "Aplicar" fica de reserva.
+          onChange={(e) => {
+            const f = new FormData(e.currentTarget);
+            const de = String(f.get("de") ?? "");
+            const ate = String(f.get("ate") ?? "");
+            if (dataCompleta(de) && dataCompleta(ate)) router.push(`?de=${de}&ate=${ate}&por=${f.get("por") ?? por}`);
+          }}
+          className="absolute left-0 top-full z-10 mt-1 flex flex-wrap items-center gap-2 rounded-xl bg-superficie p-2 shadow-[0_4px_16px_rgba(16,24,40,0.12)] group-open:min-w-max">
           {Object.keys(campos).length > 1 && (
             <select name="por" defaultValue={por} aria-label="Data usada no período" className={campoCurto}>
               {Object.entries(campos).map(([valor, rotulo]) => (
