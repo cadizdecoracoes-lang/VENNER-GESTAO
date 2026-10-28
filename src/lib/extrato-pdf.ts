@@ -5,7 +5,7 @@
 // reconhecido por OCR quando o PDF é só imagem ("Imprimir > Salvar como PDF").
 // Banco não reconhecido cai na leitura comum (lerTextoExtratoPdf).
 // Sem dependências do Next, para rodar também nos testes (node --test).
-import { lerTextoExtratoPdf, type ExtratoLido, type LinhaExtrato } from "./extrato.ts";
+import { ehAplicacaoAutomatica, lerTextoExtratoPdf, type ExtratoLido, type LinhaExtrato } from "./extrato.ts";
 
 // c: confiança do OCR (0 a 100), só quando o texto veio da leitura de imagem.
 export type ItemPdf = { x: number; t: string; c?: number };
@@ -91,13 +91,7 @@ function anoDaData(mes: number, ref: { ano: number; mes: number }): number {
 
 const iso = (ano: number, mes: number, dia: number) => `${ano}-${String(mes).padStart(2, "0")}-${String(dia).padStart(2, "0")}`;
 
-// Aplicação e resgate automáticos (BB Rende Fácil, Aplic Aut Mais do Itaú,
-// Invest Fácil do Bradesco): o banco tira e põe o dinheiro sozinho. A tela
-// oferece tirar essas linhas da importação de uma vez.
-const APLICACAO = /(rende facil|^(apl|res)\.? aplic aut|aplic\.? ?invest facil|resg\.? ?invest facil|^aplicacao automatica|^resgate automatico)/;
-export function ehAplicacaoAutomatica(descricao: string): boolean {
-  return APLICACAO.test(semAcento(descricao));
-}
+export { ehAplicacaoAutomatica };
 
 type Montagem = {
   linhas: LinhaExtrato[];

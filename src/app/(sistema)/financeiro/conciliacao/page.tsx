@@ -7,17 +7,27 @@ import { CabecalhoTela, Celula, Etiqueta, LinkAcao, SemAcesso, Tabela, estiloBot
 import { carregarAcesso, pode } from "@/lib/acesso";
 import { hojeBrasil } from "@/lib/datas";
 import { carregarEmpresas, empresaSelecionada } from "@/lib/empresa";
-import { sugerirConciliacao, type TituloCandidato } from "@/lib/extrato";
+import { marcasDoGrupo, naturezaSemTitulo, sugerirConciliacao, type TituloCandidato } from "@/lib/extrato";
 import { formatarData, formatarMoeda } from "@/lib/formato";
-import { conciliar, conciliarSugestoes, desfazer } from "./actions";
-import { carregarCandidatos, carregarConferencia, carregarContas, carregarIndicadores, carregarLinhas, carregarPendentes, nomePessoa, type LinhaConciliacao } from "./dados";
+import { conciliar, conciliarSugestoes, desfazer, excluirImportacao, marcarTransferencia, marcarTransferencias } from "./actions";
+import {
+  carregarCandidatos,
+  carregarConferencia,
+  carregarContas,
+  carregarImportacoes,
+  carregarIndicadores,
+  carregarLinhas,
+  carregarPendentes,
+  nomePessoa,
+  type LinhaConciliacao,
+} from "./dados";
 import { PainelResolver } from "./painel-resolver";
 import { SeletorConta } from "./seletor-conta";
 import { TelaCliente } from "@/components/tela-cliente";
 
 const TELA = "financeiro.conciliacao";
 const variacao = (atual: number, antes: number) => `${atual >= antes ? "+" : ""}${Math.round(((atual - antes) / antes) * 100)}%`;
-type Filtros = { conta?: string; situacao?: string; mes?: string; linha?: string; importadas?: string; repetidas?: string };
+type Filtros = { conta?: string; situacao?: string; mes?: string; linha?: string; importadas?: string; repetidas?: string; automaticas?: string };
 
 const SITUACOES = [
   { valor: "pendente", rotulo: "Pendentes" },
@@ -71,6 +81,8 @@ async function PaginaConciliacao({ searchParams }: { searchParams: Promise<Filtr
   const sugestoes = sugerirConciliacao(pend, candidatos);
   const porId = new Map(candidatos.map((t) => [t.id, t]));
   const conferencia = conta ? await carregarConferencia(conta) : null;
+  const podeExcluir = pode(acesso, TELA, "excluir");
+  const importacoes = conta ? await carregarImportacoes(conta.id) : [];
   const [indMes, indAnterior] = conta ? await carregarIndicadores(conta.id, mes ?? hojeBrasil().slice(0, 7)) : [null, null];
 
   // Painel de resolver uma linha: candidatos mais amplos (30 dias).
@@ -92,6 +104,15 @@ async function PaginaConciliacao({ searchParams }: { searchParams: Promise<Filtr
     titulos: s.titulos,
   }));
   const hoje = hojeBrasil();
+  // Linha sem título: transferência do grupo, tarifa, rendimento ou cobrança.
+  const marcas = marcasDoGrupo(empresas.map((e) => e.nome));
+  const natureza = new Map(
+    pend.filter((l) => !sugestoes.has(l.id)).flatMap((l) => {
+      const n = naturezaSemTitulo(l.descricao, Number(l.valor), marcas);
+      return n ? [[l.id, n] as const] : [];
+    }),
+  );
+  const transferencias = [...natureza].filter(([, n]) => n.tipo === "transferencia").map(([id]) => id);
   // Atalho para criar o título que falta, já preenchido; depois de salvar volta para a linha.
   const linkCriar = (l: LinhaConciliacao) => {
     const destino = Number(l.valor) < 0 ? "/financeiro/pagar" : "/financeiro/receber";
@@ -133,7 +154,8 @@ async function PaginaConciliacao({ searchParams }: { searchParams: Promise<Filtr
       {filtros.importadas !== undefined && (
         <p className="rounded-lg bg-sucesso/10 px-3 py-1.5 text-sm text-sucesso">
           Extrato importado: {filtros.importadas} lançamento(s) novo(s)
-          {Number(filtros.repetidas) > 0 && `, ${filtros.repetidas} já estavam no sistema e não entraram de novo`}.
+          {Number(filtros.repetidas) > 0 && `, ${filtros.repetidas} já estavam no sistema e não entraram de novo`}
+          {Number(filtros.automaticas) > 0 && `; ${filtros.automaticas} bateram com títulos e já foram conciliadas`}. Abaixo ficam só as divergências.
         </p>
       )}
 
@@ -208,12 +230,53 @@ async function PaginaConciliacao({ searchParams }: { searchParams: Promise<Filtr
                 <strong className="tabular-nums text-perigo">{formatarMoeda(indMes.saidas)}</strong>
               </span>
             )}
+            {podeEditar && transferencias.length > 1 && (
+              <FormAcao
+                acao={marcarTransferencias}
+                rotulo={`Marcar ${transferencias.length} transferências do grupo`}
+                enviando="Marcando..."
+                secundario
+                confirmar={`Marcar ${transferencias.length} linha(s) como transferência entre empresas do grupo? Elas saem da lista de pendentes.`}
+              >
+                <input type="hidden" name="linhas" value={JSON.stringify(transferencias)} />
+              </FormAcao>
+            )}
             {podeEditar && pares.length > 1 && (
               <FormAcao acao={conciliarSugestoes} rotulo={`Aceitar as ${pares.length} sugestões`} enviando="Conciliando..." secundario className="ml-auto">
                 <input type="hidden" name="pares" value={JSON.stringify(pares)} />
               </FormAcao>
             )}
           </div>
+
+          {/* Arquivos importados nesta conta, recolhidos numa linha. */}
+          {importacoes.length > 0 && (
+            <details className="text-sm">
+              <summary className="cursor-pointer text-texto-suave hover:text-texto">Importações desta conta ({importacoes.length})</summary>
+              <ul className="mt-1 divide-y divide-borda/70 rounded-lg bg-superficie px-3">
+                {importacoes.map((i) => (
+                  <li key={i.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 py-1.5">
+                    <span className="font-medium">{i.arquivo ?? i.origem.toUpperCase()}</span>
+                    <span className="text-xs text-texto-suave">
+                      {i.periodo_de && i.periodo_ate ? `${formatarData(i.periodo_de)} a ${formatarData(i.periodo_ate)} · ` : ""}
+                      {i.importadas} linha(s), {i.conciliadas} resolvida(s) · importado em {formatarData(i.criado_em.slice(0, 10))}
+                    </span>
+                    {podeExcluir && (
+                      <FormAcao
+                        acao={excluirImportacao.bind(null, i.id)}
+                        rotulo="Excluir"
+                        enviando="Excluindo..."
+                        discreto
+                        className="ml-auto"
+                        confirmar={`Excluir a importação ${i.arquivo ?? ""} com ${i.importadas} linha(s)?${
+                          i.conciliadas ? ` ${i.conciliadas} já foram resolvidas: os títulos baixados pela conciliação voltam a ficar em aberto.` : ""
+                        } Não dá para desfazer.`}
+                      />
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </details>
+          )}
 
           {resolvendo && conta && podeEditar && (
             <PainelResolver
@@ -257,8 +320,12 @@ async function PaginaConciliacao({ searchParams }: { searchParams: Promise<Filtr
                         <Etiqueta cor="primaria">Sugestão</Etiqueta> {titulo.pessoa ? `${titulo.pessoa} · ` : ""}
                         {titulo.descricao} · {titulo.pago ? "pago" : "vence"} {formatarData(titulo.data)}
                       </span>
+                    ) : natureza.get(l.id) ? (
+                      <span className="text-xs text-alerta">{natureza.get(l.id)!.dica}</span>
                     ) : (
-                      <span className="text-xs text-texto-suave">{l.data < hoje ? "sem título correspondente" : ""}</span>
+                      <span className="text-xs text-texto-suave" title="Nenhum título em aberto ou pago nesta conta com o mesmo valor perto desta data">
+                        {l.data < hoje ? "nenhum título com este valor" : ""}
+                      </span>
                     )}
                   </Celula>
                   <Celula className="whitespace-nowrap text-right">
@@ -274,7 +341,12 @@ async function PaginaConciliacao({ searchParams }: { searchParams: Promise<Filtr
                                 discreto
                               />
                             )}
-                            {!titulo && <LinkAcao href={linkCriar(l)}>Criar título</LinkAcao>}
+                            {!titulo && natureza.get(l.id)?.tipo === "transferencia" && (
+                              <FormAcao acao={marcarTransferencia.bind(null, l.id)} rotulo="É transferência" enviando="..." discreto />
+                            )}
+                            {!titulo && !["transferencia", "aplicacao"].includes(natureza.get(l.id)?.tipo ?? "") && (
+                              <LinkAcao href={linkCriar(l)}>Criar título</LinkAcao>
+                            )}
                             <LinkAcao href={base({ linha: l.id })}>{titulo ? "Outro" : "Escolher"}</LinkAcao>
                           </>
                         ) : (

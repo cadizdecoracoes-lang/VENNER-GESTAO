@@ -75,6 +75,15 @@ export async function carregarCandidatos(
 ): Promise<TituloCandidato[]> {
   if (!supabaseConfigurado) return [];
   const supabase = criarClienteNavegador();
+  // Pagos pelo Tiny sem a conta da baixa também servem (passam para esta conta ao conciliar).
+  const { data: semConta } = await supabase
+    .from("contas_bancarias")
+    .select("id")
+    .eq("empresa_id", conta.empresa_id)
+    .eq("nome", "Tiny · conta não informada");
+  const tinySemConta = (semConta ?? []).map((c) => c.id as string);
+  const contas = [conta.id, ...tinySemConta];
+  const folga = tinySemConta.length ? Math.max(folgaPago, folgaAberto) : folgaPago;
   const [pa, pp, ra, rp] = await Promise.all([
     supabase
       .from("contas_pagar")
@@ -86,11 +95,11 @@ export async function carregarCandidatos(
       .limit(3000),
     supabase
       .from("contas_pagar")
-      .select("id, descricao, parcela, valor_pago, data_pagamento, fornecedores(nome, nome_fantasia), extrato_conciliacoes(id)")
-      .eq("conta_bancaria_id", conta.id)
+      .select("id, descricao, parcela, valor_pago, data_pagamento, conta_bancaria_id, fornecedores(nome, nome_fantasia), extrato_conciliacoes(id)")
+      .in("conta_bancaria_id", contas)
       .eq("situacao", "pago")
-      .gte("data_pagamento", somarDias(de, -folgaPago))
-      .lte("data_pagamento", somarDias(ate, folgaPago))
+      .gte("data_pagamento", somarDias(de, -folga))
+      .lte("data_pagamento", somarDias(ate, folga))
       .limit(3000),
     supabase
       .from("contas_receber")
@@ -102,11 +111,11 @@ export async function carregarCandidatos(
       .limit(3000),
     supabase
       .from("contas_receber")
-      .select("id, descricao, parcela, valor_recebido, data_recebimento, clientes(nome, nome_fantasia), extrato_conciliacoes(id)")
-      .eq("conta_bancaria_id", conta.id)
+      .select("id, descricao, parcela, valor_recebido, data_recebimento, conta_bancaria_id, clientes(nome, nome_fantasia), extrato_conciliacoes(id)")
+      .in("conta_bancaria_id", contas)
       .eq("situacao", "pago")
-      .gte("data_recebimento", somarDias(de, -folgaPago))
-      .lte("data_recebimento", somarDias(ate, folgaPago))
+      .gte("data_recebimento", somarDias(de, -folga))
+      .lte("data_recebimento", somarDias(ate, folga))
       .limit(3000),
   ]);
   type Bruto = Record<string, unknown> & { extrato_conciliacoes?: unknown[] };
@@ -116,12 +125,12 @@ export async function carregarCandidatos(
     lista.push({ id: t.id as string, tipo: "pagar", descricao: desc(t), pessoa: nomePessoa(t.fornecedores as Pessoa), valor: Number(t.valor), data: t.vencimento as string, pago: false });
   for (const t of (pp.data ?? []) as unknown as Bruto[])
     if (!t.extrato_conciliacoes?.length)
-      lista.push({ id: t.id as string, tipo: "pagar", descricao: desc(t), pessoa: nomePessoa(t.fornecedores as Pessoa), valor: Number(t.valor_pago), data: t.data_pagamento as string, pago: true });
+      lista.push({ id: t.id as string, tipo: "pagar", descricao: desc(t), pessoa: nomePessoa(t.fornecedores as Pessoa), valor: Number(t.valor_pago), data: t.data_pagamento as string, pago: true, semConta: t.conta_bancaria_id !== conta.id });
   for (const t of (ra.data ?? []) as unknown as Bruto[])
     lista.push({ id: t.id as string, tipo: "receber", descricao: desc(t), pessoa: nomePessoa(t.clientes as Pessoa), valor: Number(t.valor_liquido), data: t.vencimento as string, pago: false });
   for (const t of (rp.data ?? []) as unknown as Bruto[])
     if (!t.extrato_conciliacoes?.length)
-      lista.push({ id: t.id as string, tipo: "receber", descricao: desc(t), pessoa: nomePessoa(t.clientes as Pessoa), valor: Number(t.valor_recebido), data: t.data_recebimento as string, pago: true });
+      lista.push({ id: t.id as string, tipo: "receber", descricao: desc(t), pessoa: nomePessoa(t.clientes as Pessoa), valor: Number(t.valor_recebido), data: t.data_recebimento as string, pago: true, semConta: t.conta_bancaria_id !== conta.id });
   return lista;
 }
 
@@ -178,4 +187,31 @@ export async function carregarIndicadores(conta: string, mes: string): Promise<[
     else alvo.saidas += -v;
   }
   return r;
+}
+
+export type ImportacaoExtrato = {
+  id: string;
+  arquivo: string | null;
+  origem: string;
+  periodo_de: string | null;
+  periodo_ate: string | null;
+  importadas: number;
+  criado_em: string;
+  conciliadas: number;
+};
+
+// Importações da conta, da mais nova para a mais velha, com quantas linhas já
+// foram resolvidas (conciliadas, transferência ou ignoradas).
+export async function carregarImportacoes(contaId: string): Promise<ImportacaoExtrato[]> {
+  if (!supabaseConfigurado) return [];
+  const supabase = criarClienteNavegador();
+  const { data } = await supabase
+    .from("extrato_importacoes")
+    .select("id, arquivo, origem, periodo_de, periodo_ate, importadas, criado_em, extrato_lancamentos(situacao)")
+    .eq("conta_bancaria_id", contaId)
+    .order("criado_em", { ascending: false })
+    .limit(200);
+  return ((data ?? []) as (Omit<ImportacaoExtrato, "conciliadas"> & { extrato_lancamentos: { situacao: string }[] })[]).map(
+    ({ extrato_lancamentos, ...i }) => ({ ...i, conciliadas: extrato_lancamentos.filter((l) => l.situacao !== "pendente").length }),
+  );
 }
