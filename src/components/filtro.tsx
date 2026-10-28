@@ -5,6 +5,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { hojeBrasil } from "@/lib/datas";
 import {
   contem,
+  dataCompleta,
   dataDaCelula,
   intervaloDeDias,
   intervaloDoMes,
@@ -347,9 +348,9 @@ export function Filtro({
               <BalaoPeriodo
                 colunas={colunasData.map((c) => c.rotulo)}
                 atual={periodoLocal}
-                aplicar={(p) => {
+                aplicar={(p, manter) => {
                   setPeriodoLocal(p);
-                  setAberto(null);
+                  if (!manter) setAberto(null);
                 }}
               />
             )}
@@ -497,7 +498,8 @@ function BalaoPeriodo({
 }: {
   colunas: string[];
   atual: PeriodoLocal | null;
-  aplicar: (p: PeriodoLocal | null) => void;
+  // aberto = filtra mas deixa o balão aberto (enquanto a pessoa digita as datas).
+  aplicar: (p: PeriodoLocal | null, aberto?: boolean) => void;
 }) {
   const hoje = hojeBrasil();
   const [coluna, setColuna] = useState(atual?.coluna ?? colunas[0]);
@@ -509,6 +511,12 @@ function BalaoPeriodo({
     { rotulo: "Últimos 30 dias", ...intervaloDeDias(hoje, -30) },
     { rotulo: "Próximos 30 dias", ...intervaloDeDias(hoje, 30) },
   ];
+  // Com as duas datas preenchidas a lista já filtra; o "Aplicar" fica de reserva.
+  const mudar = (d: string, a: string) => {
+    setDe(d);
+    setAte(a);
+    if (dataCompleta(d) && dataCompleta(a)) aplicar({ coluna, de: d <= a ? d : a, ate: d <= a ? a : d }, true);
+  };
   return (
     <div className={`${estiloBalao} right-0 w-max max-w-[92vw] space-y-2`}>
       {colunas.length > 1 && (
@@ -539,9 +547,9 @@ function BalaoPeriodo({
           if (de && ate) aplicar({ coluna, de: de <= ate ? de : ate, ate: de <= ate ? ate : de });
         }}
       >
-        <input type="date" required value={de} onChange={(e) => setDe(e.target.value)} aria-label="De" className={estiloCampoCurto} />
+        <input type="date" required value={de} onChange={(e) => mudar(e.target.value, ate)} aria-label="De" className={estiloCampoCurto} />
         <span className="text-texto-suave">até</span>
-        <input type="date" required value={ate} onChange={(e) => setAte(e.target.value)} aria-label="Até" className={estiloCampoCurto} />
+        <input type="date" required value={ate} onChange={(e) => mudar(de, e.target.value)} aria-label="Até" className={estiloCampoCurto} />
         <button type="submit" className="rounded-lg bg-primaria px-2.5 py-1 text-white hover:opacity-90">
           Aplicar
         </button>

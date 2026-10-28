@@ -23,6 +23,7 @@ import {
 } from "./dados";
 import { PainelResolver } from "./painel-resolver";
 import { SeletorConta } from "./seletor-conta";
+import { SeletorMes } from "./seletor-mes";
 import { TelaCliente } from "@/components/tela-cliente";
 
 const TELA = "financeiro.conciliacao";
@@ -166,8 +167,8 @@ async function PaginaConciliacao({ searchParams }: { searchParams: Promise<Filtr
         </p>
       ) : (
         <>
-          {/* Faixa fina: situação, mês e conferência de saldo. */}
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
+          {/* Filtros numa linha (situação e mês) e as ações em lote à direita. */}
+          <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-sm">
             <span className="flex items-center gap-1">
               {SITUACOES.map((s) => (
                 <Link key={s.valor} href={base({ situacao: s.valor === "pendente" ? undefined : s.valor })} className={pilula(s.valor === situacao)}>
@@ -175,26 +176,40 @@ async function PaginaConciliacao({ searchParams }: { searchParams: Promise<Filtr
                 </Link>
               ))}
             </span>
-            <form method="get" className="flex items-center gap-1">
-              {conta && <input type="hidden" name="conta" value={conta.id} />}
-              {situacao !== "pendente" && <input type="hidden" name="situacao" value={situacao} />}
-              <input type="month" name="mes" defaultValue={mes ?? ""} aria-label="Mês" className="rounded-md border border-borda bg-superficie px-2 py-0.5 text-sm" />
-              <button type="submit" className="text-sm text-primaria hover:underline">
-                Ver mês
-              </button>
-              {mes && (
-                <Link href={base({ mes: undefined })} className="text-xs text-texto-suave hover:underline">
-                  limpar
-                </Link>
+            <SeletorMes
+              mes={mes}
+              parametros={Object.fromEntries(
+                Object.entries({ conta: conta?.id, situacao: situacao === "pendente" ? undefined : situacao }).filter((x): x is [string, string] => !!x[1]),
               )}
-            </form>
-            <span className="text-texto-suave">
-              Pendentes: <strong className="tabular-nums text-texto">{conta ? (pendentes.get(conta.id) ?? 0) : 0}</strong>
-              {situacao === "pendente" && pend.length > 0 && <span className="tabular-nums"> ({formatarMoeda(somaPend)})</span>}
+            />
+            <span className="ml-auto flex flex-wrap items-center gap-2">
+            {podeEditar && transferencias.length > 1 && (
+              <FormAcao
+                acao={marcarTransferencias}
+                rotulo={`Marcar ${transferencias.length} transferências do grupo`}
+                enviando="Marcando..."
+                secundario
+                confirmar={`Marcar ${transferencias.length} linha(s) como transferência entre empresas do grupo? Elas saem da lista de pendentes.`}
+              >
+                <input type="hidden" name="linhas" value={JSON.stringify(transferencias)} />
+              </FormAcao>
+            )}
+            {podeEditar && pares.length > 1 && (
+              <FormAcao acao={conciliarSugestoes} rotulo={`Aceitar as ${pares.length} sugestões`} enviando="Conciliando..." secundario>
+                <input type="hidden" name="pares" value={JSON.stringify(pares)} />
+              </FormAcao>
+            )}
+            </span>
+          </div>
+
+          {/* Resumo em texto pequeno: pendentes, saldo do banco x sistema e o mês. */}
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-texto-suave">
+            <span>
+              Pendentes na conta: <strong className="tabular-nums text-texto">{conta ? (pendentes.get(conta.id) ?? 0) : 0}</strong>
+              {situacao === "pendente" && pend.length > 0 && <span className="tabular-nums"> ({formatarMoeda(somaPend)} neste filtro)</span>}
             </span>
             {conferencia && (
               <span
-                className="text-texto-suave"
                 title={`Último extrato: ${conferencia.arquivo ?? "leitura do banco"}, importado em ${formatarData(conferencia.importadoEm)}. Sistema = saldo inicial da conta + recebidos − pagos + transferências até a mesma data.`}
               >
                 Saldo em {formatarData(conferencia.ate)}: banco{" "}
@@ -212,7 +227,6 @@ async function PaginaConciliacao({ searchParams }: { searchParams: Promise<Filtr
             )}
             {indMes && indAnterior && (
               <span
-                className="text-xs text-texto-suave"
                 title={[
                   `Linhas do extrato desta conta em ${indMes.mes.slice(5)}/${indMes.mes.slice(0, 4)}, pela data do lançamento.`,
                   indAnterior.linhas > 0
@@ -229,22 +243,6 @@ async function PaginaConciliacao({ searchParams }: { searchParams: Promise<Filtr
                 <strong className="tabular-nums text-sucesso">{formatarMoeda(indMes.entradas)}</strong> · saídas{" "}
                 <strong className="tabular-nums text-perigo">{formatarMoeda(indMes.saidas)}</strong>
               </span>
-            )}
-            {podeEditar && transferencias.length > 1 && (
-              <FormAcao
-                acao={marcarTransferencias}
-                rotulo={`Marcar ${transferencias.length} transferências do grupo`}
-                enviando="Marcando..."
-                secundario
-                confirmar={`Marcar ${transferencias.length} linha(s) como transferência entre empresas do grupo? Elas saem da lista de pendentes.`}
-              >
-                <input type="hidden" name="linhas" value={JSON.stringify(transferencias)} />
-              </FormAcao>
-            )}
-            {podeEditar && pares.length > 1 && (
-              <FormAcao acao={conciliarSugestoes} rotulo={`Aceitar as ${pares.length} sugestões`} enviando="Conciliando..." secundario className="ml-auto">
-                <input type="hidden" name="pares" value={JSON.stringify(pares)} />
-              </FormAcao>
             )}
           </div>
 
@@ -291,9 +289,11 @@ async function PaginaConciliacao({ searchParams }: { searchParams: Promise<Filtr
             colunas={["Data", "Lançamento do extrato", "Valor", "Saldo", "Conciliação", ""]}
             vazio={
               situacao === "pendente"
-                ? linhas.length === 0 && !pendentes.get(conta?.id ?? "")
+                ? !pendentes.get(conta?.id ?? "")
                   ? "Nada pendente nesta conta. Importe o extrato mais recente para continuar."
-                  : "Nada pendente."
+                  : mes
+                    ? `Nada pendente em ${mes.slice(5)}/${mes.slice(0, 4)}. Há ${pendentes.get(conta?.id ?? "")} pendente(s) em outros meses: clique em “ver todos os meses”.`
+                    : "Nada pendente."
                 : "Nenhum lançamento neste filtro."
             }
           >
