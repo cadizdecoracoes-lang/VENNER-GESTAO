@@ -341,3 +341,46 @@ export function sugerirConciliacao(linhas: { id: string; data: string; valor: nu
   }
   return resultado;
 }
+
+// ---------------------------------------------------------------------------
+// Linha sem título: o que ela provavelmente é, para a tela explicar e sugerir
+// o caminho (transferência, criar título de tarifa, contas a receber).
+// ---------------------------------------------------------------------------
+export type NaturezaSemTitulo = { tipo: "transferencia" | "tarifa" | "rendimento" | "cobranca" | "aplicacao"; dica: string };
+
+const GENERICAS = new Set(["industria", "comercio", "servicos", "ltda", "eireli", "importacao", "exportacao", "prestacao", "grupo"]);
+
+// Palavras que identificam as empresas do grupo no histórico (ex.: "VENNER", "ASHI").
+export function marcasDoGrupo(nomes: string[]): string[] {
+  const marcas = new Set<string>();
+  for (const n of nomes) {
+    const p = semAcento(n)
+      .split(/[^a-z0-9]+/)
+      .find((x) => x.length >= 4 && !GENERICAS.has(x));
+    if (p) marcas.add(p);
+  }
+  return [...marcas];
+}
+
+export function naturezaSemTitulo(descricao: string, valor: number, marcas: string[]): NaturezaSemTitulo | null {
+  const d = semAcento(descricao);
+  const palavrasLinha = new Set(d.split(/[^a-z0-9]+/));
+  const doGrupo = marcas.find((m) => palavrasLinha.has(m));
+  if (doGrupo && /(pix|transf|ted|doc|des:|rem:)/.test(d))
+    return { tipo: "transferencia", dica: `Transferência entre empresas do grupo (${doGrupo.toUpperCase()}): não tem título a pagar` };
+  if (ehAplicacaoAutomatica(descricao) || /(aplic|resg)\.? ?(invest|aut)/.test(d))
+    return { tipo: "aplicacao", dica: "Aplicação/resgate automático do banco: não tem título" };
+  if (/(rentab|rendimento|rend pago|remuneracao)/.test(d)) return { tipo: "rendimento", dica: "Rendimento da aplicação: criar título no contas a receber" };
+  if (valor < 0 && /(tarifa|tar\b|encargos|juros|iof|cesta|mensalidade|manutencao conta|seguro conta)/.test(d))
+    return { tipo: "tarifa", dica: "Tarifa ou juros do banco: criar título no contas a pagar" };
+  if (valor > 0 && /(cobranca|liquidacao|liq\.)/.test(d))
+    return { tipo: "cobranca", dica: "Boletos recebidos: o título fica no contas a receber" };
+  return null;
+}
+
+// Aplicação e resgate automáticos (BB Rende Fácil, Aplic Aut Mais do Itaú,
+// Invest Fácil do Bradesco): o banco tira e põe o dinheiro sozinho.
+const APLICACAO = /(rende facil|^(apl|res)\.? aplic aut|aplic\.? ?invest facil|resg\.? ?invest facil|^aplicacao automatica|^resgate automatico)/;
+export function ehAplicacaoAutomatica(descricao: string): boolean {
+  return APLICACAO.test(semAcento(descricao));
+}

@@ -297,3 +297,16 @@ test("sugestão 'certa' (conciliada sozinha ao importar): título pago, mesmo di
   assert.deepEqual(certas, ["dia", "nome", "pago"]);
   assert.equal([...r.values()].find((s) => s.titulos[0] === "longe")?.certa, false);
 });
+
+test("linha sem título: transferência do grupo, tarifa, rendimento e cobrança", async () => {
+  const { marcasDoGrupo, naturezaSemTitulo } = await import("../src/lib/extrato.ts");
+  const marcas = marcasDoGrupo(["VENNER INDUSTRIA E COMERCIO LTDA", "ASHI II SERVICOS LTDA", "Grupo"]);
+  assert.deepEqual(marcas, ["venner", "ashi"]);
+  assert.equal(naturezaSemTitulo("PIX ENVIADO · DES: VENNER INDUSTRIA 06/01", -1300, marcas)?.tipo, "transferencia");
+  assert.equal(naturezaSemTitulo("PIX ENVIADO · DES: ASHI II 06/01", -5, marcas)?.tipo, "transferencia");
+  assert.equal(naturezaSemTitulo("ENCARGOS DESCOBERTO CC", -0.41, marcas)?.tipo, "tarifa");
+  assert.equal(naturezaSemTitulo("RENTAB.INVEST FACILCRED*", 0.02, marcas)?.tipo, "rendimento");
+  assert.equal(naturezaSemTitulo("LIQUIDACAO DE COBRANCA · VALOR DISPONIVEL", 1471.75, marcas)?.tipo, "cobranca");
+  assert.equal(naturezaSemTitulo("TRANSF CC PARA CC · GLOBAL CENTER COM FERRAGENS LTDA", 14401.73, marcas), null);
+  assert.equal(naturezaSemTitulo("PIX ENVIADO · FORNECEDOR X", -100, marcas), null);
+});

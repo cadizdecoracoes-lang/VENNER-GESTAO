@@ -111,3 +111,20 @@ export async function conciliarCertas(contaId: string): Promise<number> {
   }
   return feitas;
 }
+
+// Marca de uma vez as linhas que são transferência entre empresas do grupo.
+export async function marcarTransferencias(_: Estado, form: FormData): Promise<Estado> {
+  let ids: string[];
+  try {
+    ids = JSON.parse(String(form.get("linhas") ?? "[]"));
+  } catch {
+    return { erro: "Linhas inválidas. Recarregue a tela." };
+  }
+  let feitas = 0;
+  for (const id of ids) {
+    const r = await marcarTransferencia(id);
+    if (r.erro) return { erro: `${feitas} marcada(s). Parou numa linha: ${r.erro}` };
+    feitas++;
+  }
+  return { ok: Date.now() };
+}

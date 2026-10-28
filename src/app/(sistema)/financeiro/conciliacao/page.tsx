@@ -7,9 +7,9 @@ import { CabecalhoTela, Celula, Etiqueta, LinkAcao, SemAcesso, Tabela, estiloBot
 import { carregarAcesso, pode } from "@/lib/acesso";
 import { hojeBrasil } from "@/lib/datas";
 import { carregarEmpresas, empresaSelecionada } from "@/lib/empresa";
-import { sugerirConciliacao, type TituloCandidato } from "@/lib/extrato";
+import { marcasDoGrupo, naturezaSemTitulo, sugerirConciliacao, type TituloCandidato } from "@/lib/extrato";
 import { formatarData, formatarMoeda } from "@/lib/formato";
-import { conciliar, conciliarSugestoes, desfazer, excluirImportacao } from "./actions";
+import { conciliar, conciliarSugestoes, desfazer, excluirImportacao, marcarTransferencia, marcarTransferencias } from "./actions";
 import {
   carregarCandidatos,
   carregarConferencia,
@@ -104,6 +104,15 @@ async function PaginaConciliacao({ searchParams }: { searchParams: Promise<Filtr
     titulos: s.titulos,
   }));
   const hoje = hojeBrasil();
+  // Linha sem título: transferência do grupo, tarifa, rendimento ou cobrança.
+  const marcas = marcasDoGrupo(empresas.map((e) => e.nome));
+  const natureza = new Map(
+    pend.filter((l) => !sugestoes.has(l.id)).flatMap((l) => {
+      const n = naturezaSemTitulo(l.descricao, Number(l.valor), marcas);
+      return n ? [[l.id, n] as const] : [];
+    }),
+  );
+  const transferencias = [...natureza].filter(([, n]) => n.tipo === "transferencia").map(([id]) => id);
   // Atalho para criar o título que falta, já preenchido; depois de salvar volta para a linha.
   const linkCriar = (l: LinhaConciliacao) => {
     const destino = Number(l.valor) < 0 ? "/financeiro/pagar" : "/financeiro/receber";
@@ -221,6 +230,17 @@ async function PaginaConciliacao({ searchParams }: { searchParams: Promise<Filtr
                 <strong className="tabular-nums text-perigo">{formatarMoeda(indMes.saidas)}</strong>
               </span>
             )}
+            {podeEditar && transferencias.length > 1 && (
+              <FormAcao
+                acao={marcarTransferencias}
+                rotulo={`Marcar ${transferencias.length} transferências do grupo`}
+                enviando="Marcando..."
+                secundario
+                confirmar={`Marcar ${transferencias.length} linha(s) como transferência entre empresas do grupo? Elas saem da lista de pendentes.`}
+              >
+                <input type="hidden" name="linhas" value={JSON.stringify(transferencias)} />
+              </FormAcao>
+            )}
             {podeEditar && pares.length > 1 && (
               <FormAcao acao={conciliarSugestoes} rotulo={`Aceitar as ${pares.length} sugestões`} enviando="Conciliando..." secundario className="ml-auto">
                 <input type="hidden" name="pares" value={JSON.stringify(pares)} />
@@ -300,8 +320,12 @@ async function PaginaConciliacao({ searchParams }: { searchParams: Promise<Filtr
                         <Etiqueta cor="primaria">Sugestão</Etiqueta> {titulo.pessoa ? `${titulo.pessoa} · ` : ""}
                         {titulo.descricao} · {titulo.pago ? "pago" : "vence"} {formatarData(titulo.data)}
                       </span>
+                    ) : natureza.get(l.id) ? (
+                      <span className="text-xs text-alerta">{natureza.get(l.id)!.dica}</span>
                     ) : (
-                      <span className="text-xs text-texto-suave">{l.data < hoje ? "sem título correspondente" : ""}</span>
+                      <span className="text-xs text-texto-suave" title="Nenhum título em aberto ou pago nesta conta com o mesmo valor perto desta data">
+                        {l.data < hoje ? "nenhum título com este valor" : ""}
+                      </span>
                     )}
                   </Celula>
                   <Celula className="whitespace-nowrap text-right">
@@ -317,7 +341,12 @@ async function PaginaConciliacao({ searchParams }: { searchParams: Promise<Filtr
                                 discreto
                               />
                             )}
-                            {!titulo && <LinkAcao href={linkCriar(l)}>Criar título</LinkAcao>}
+                            {!titulo && natureza.get(l.id)?.tipo === "transferencia" && (
+                              <FormAcao acao={marcarTransferencia.bind(null, l.id)} rotulo="É transferência" enviando="..." discreto />
+                            )}
+                            {!titulo && !["transferencia", "aplicacao"].includes(natureza.get(l.id)?.tipo ?? "") && (
+                              <LinkAcao href={linkCriar(l)}>Criar título</LinkAcao>
+                            )}
                             <LinkAcao href={base({ linha: l.id })}>{titulo ? "Outro" : "Escolher"}</LinkAcao>
                           </>
                         ) : (
