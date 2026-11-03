@@ -49,7 +49,10 @@ jobs:
           export SUPABASE_PROJECT_ID="$ref"
           echo "ref=$ref" >> "$GITHUB_ENV"
           supabase link --project-ref "$ref" --password "$SUPABASE_DB_PASSWORD"
-          supabase db push --password "$SUPABASE_DB_PASSWORD"
+          # --include-all: aplica também migração do repositório com número
+          # anterior à última já aplicada no banco (quando alguma entra fora
+          # de ordem, ela não fica esquecida).
+          supabase db push --include-all --password "$SUPABASE_DB_PASSWORD"
       - name: Publicar Edge Functions
         if: steps.segredos.outputs.pronto == 'true'
         run: |
