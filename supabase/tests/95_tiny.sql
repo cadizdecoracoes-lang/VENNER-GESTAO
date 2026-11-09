@@ -220,13 +220,13 @@ select pg_temp.esperar(
 set role authenticated;
 set request.jwt.claim.sub = '00000000-0000-0000-0000-00000000000b';
 select pg_temp.esperar(
-  (select (importados ->> 'pedidos')::integer = 2 and (pendentes ->> 'pagar')::integer = 1 and ler_pagar_ate = '2026-11-02'
+  (select (importados ->> 'pedidos')::integer = 2 and (pendentes ->> 'pagar')::integer = 1 and ler_pagar_ate is null
    from situacao_tiny()),
   'situação mostra importados e pendentes');
-select ajustar_robo_tiny(current_setting('teste.tiny')::uuid, null);
+select ajustar_robo_tiny(current_setting('teste.tiny')::uuid, date '2026-01-01');
 select pg_temp.esperar(
   (select jsonb_array_length(robo_tiny_inicio(current_setting('teste.tiny')::uuid, current_setting('teste.chave')) -> 'pendentes')) = 0,
-  'sem ler contas a pagar, pendentes do pagar ficam de fora');
+  'com data para parar já passada, pendentes do pagar ficam de fora');
 select pg_temp.esperar(chave_robo_tiny(current_setting('teste.tiny')::uuid) = current_setting('teste.chave'), 'botão Ler agora usa a chave');
 
 set request.jwt.claim.sub = '00000000-0000-0000-0000-00000000000c';
