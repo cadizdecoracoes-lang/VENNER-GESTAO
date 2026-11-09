@@ -61,6 +61,8 @@ export type LinhaFluxo = {
   links?: (string | null)[];
   // Mostra os centavos (diferenças pequenas não podem virar "–").
   centavos?: boolean;
+  // Linha que pede correção (títulos sem categoria): aparece destacada.
+  alerta?: boolean;
 };
 
 export type Resumo = {
@@ -274,7 +276,16 @@ export function montarFluxo(e: {
         linhas.push({ chave: `c:${tipo}:${cid}`, tipo: "categoria", rotulo: nomeCat(cid), valores: v.map(arred2), total: soma(v), pai: chave, rastreio: { tipo, categorias: [cid], semCategoria: false } });
       }
     }
-    if (a.sem.some((v) => v)) linhas.push({ chave: `g:${tipo}:sem`, tipo: "grupo", rotulo: "Sem categoria", valores: a.sem.map(arred2), total: soma(a.sem), rastreio: { tipo, categorias: null, semCategoria: true } });
+    if (a.sem.some((v) => v)) linhas.push({
+        chave: `g:${tipo}:sem`,
+        tipo: "grupo",
+        rotulo: "⚠ Sem categoria",
+        dica: `Títulos ${tipo === "entrada" ? "a receber" : "a pagar"} sem categoria financeira: o valor entra no fluxo, mas fora dos grupos. Clique num valor para ver quais são.`,
+        alerta: true,
+        valores: a.sem.map(arred2),
+        total: soma(a.sem),
+        rastreio: { tipo, categorias: null, semCategoria: true },
+      });
     linhas.push({
       chave: `m:${tipo}`,
       tipo: "manual",

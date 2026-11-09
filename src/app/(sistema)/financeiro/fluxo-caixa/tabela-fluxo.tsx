@@ -131,8 +131,8 @@ export function TabelaFluxo({
           <tbody>
             {visiveis.map((l) => {
               const abre = temFilhos.has(l.chave);
-              const estilo = ESTILO_LINHA[l.tipo] ?? "";
-              const fundoRotulo = l.tipo === "secao" ? "bg-primaria" : l.tipo === "total" ? "bg-[#eef4ff]" : l.tipo === "saldo" ? "bg-[#fdf6ec]" : l.tipo === "manual" ? "bg-[#f4ebff]" : "bg-superficie";
+              const estilo = l.alerta ? "font-semibold bg-[#fff4e5] text-[#8a4b00]" : (ESTILO_LINHA[l.tipo] ?? "");
+              const fundoRotulo = l.alerta ? "bg-[#fff4e5]" : l.tipo === "secao" ? "bg-primaria" : l.tipo === "total" ? "bg-[#eef4ff]" : l.tipo === "saldo" ? "bg-[#fdf6ec]" : l.tipo === "manual" ? "bg-[#f4ebff]" : "bg-superficie";
               return (
                 <tr key={l.chave} className={estilo}>
                   <td
@@ -259,7 +259,7 @@ export function TabelaFluxo({
                           <td className="px-2 py-1">{t.empresa}</td>
                           <td className="px-2 py-1">{t.pessoa ?? "—"}</td>
                           <td className="px-2 py-1">{t.descricao}</td>
-                          <td className="px-2 py-1 text-texto-suave">{t.categoria ?? "—"}</td>
+                          <td className={`px-2 py-1 ${t.categoria ? "text-texto-suave" : "font-semibold text-alerta"}`}>{t.categoria ?? "Sem categoria"}</td>
                           <td className="px-2 py-1 text-texto-suave">{t.conta ?? "—"}</td>
                           <td className="whitespace-nowrap px-2 py-1 text-right tabular-nums">{formatarMoeda(t.valor)}</td>
                         </tr>

@@ -102,6 +102,11 @@ async function PaginaFluxoCaixa({ searchParams }: { searchParams: Promise<{ modo
       );
   }
   const r = fluxo.resumo;
+  // Títulos sem categoria no período: o fluxo é montado pelas categorias, então avisa.
+  const semCat = (tipo: string) => fluxo.linhas.find((l) => l.chave === `g:${tipo}:sem`)?.total ?? 0;
+  const semCatSaida = semCat("saida");
+  const semCatEntrada = semCat("entrada");
+  const temSemCat = Math.abs(semCatSaida) >= 0.01 || Math.abs(semCatEntrada) >= 0.01;
 
   const link = (p: Record<string, string>) => `?${new URLSearchParams(conta ? { ...p, conta: conta.conta_bancaria_id } : p).toString()}`;
   const periodo: Record<string, string> = modo === "dia" ? { mes: mes.slice(0, 7) } : { modo: "mes", inicio: inicio.slice(0, 7) };
@@ -160,7 +165,7 @@ async function PaginaFluxoCaixa({ searchParams }: { searchParams: Promise<{ modo
       </CabecalhoTela>
 
       {/* Resumo: cartões compactos numa faixa só. */}
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-6">
+      <div className={`grid grid-cols-2 gap-2 sm:grid-cols-3 ${temSemCat ? "xl:grid-cols-7" : "xl:grid-cols-6"}`}>
         <Indicador
           rotulo="Saldo hoje"
           valor={r.saldoHoje === null ? "—" : formatarMoeda(r.saldoHoje)}
@@ -202,6 +207,15 @@ async function PaginaFluxoCaixa({ searchParams }: { searchParams: Promise<{ modo
           href="/financeiro/conciliacao"
           fonte="Linhas do extrato ainda sem título: o realizado pode estar incompleto"
         />
+        {temSemCat && (
+          <Indicador
+            rotulo="⚠ Sem categoria"
+            valor={formatarMoeda(Math.abs(semCatSaida))}
+            detalhe={Math.abs(semCatEntrada) >= 0.01 ? `+${formatarMoeda(Math.abs(semCatEntrada))} a receber` : undefined}
+            cor="text-alerta"
+            fonte="Títulos sem categoria financeira no período: entram no saldo, mas fora dos grupos. Estão na linha “⚠ Sem categoria” da tabela; clique num valor dela para ver quais são."
+          />
+        )}
       </div>
 
       {conta && !comPrevisto && (
