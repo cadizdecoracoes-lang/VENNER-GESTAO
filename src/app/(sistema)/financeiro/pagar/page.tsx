@@ -165,6 +165,8 @@ async function PaginaContasPagar({ searchParams }: { searchParams: Promise<Filtr
   const aVencer = abertos.filter((t) => status(t) === "a_vencer");
   const pagos = titulos.filter((t) => t.situacao === "pago");
   const cancelados = titulos.filter((t) => t.situacao === "cancelado");
+  // Sem categoria financeira não entram certo no fluxo de caixa e no DRE.
+  const semCategoria = titulos.filter((t) => !t.categoria_id && t.situacao !== "cancelado");
   const valorDa = (t: Titulo) => Number(t.situacao === "pago" ? (t.valor_pago ?? t.valor) : t.valor);
   const soma = (l: Titulo[]) => l.reduce((s, t) => s + valorDa(t), 0);
 
@@ -456,6 +458,12 @@ async function PaginaContasPagar({ searchParams }: { searchParams: Promise<Filtr
               { valor: "", rotulo: "Todos", total: formatarMoeda(soma(titulos)), quantidade: titulos.length },
             ],
           }}
+          atalhos={[
+            {
+              rotulo: "Categoria",
+              opcoes: [{ valor: "sem_categoria", rotulo: `Sem categoria (${semCategoria.length})` }],
+            },
+          ]}
           ferramentas={<FiltroPeriodo periodo={periodo} hoje={hoje} campos={DATAS_PERIODO} semPeriodo="Todo o período" />}
           periodo={false}
           placeholder="Filtrar por fornecedor, descrição, empresa, valor..."
@@ -465,7 +473,12 @@ async function PaginaContasPagar({ searchParams }: { searchParams: Promise<Filtr
             {titulos.map((t) => {
               const st = status(t);
               const vencido = st === "vencido";
-              const tags = [t.situacao, st, t.situacao === "aberto" && t.vencimento >= hoje && t.vencimento <= semana && "semana"];
+              const tags = [
+                t.situacao,
+                st,
+                t.situacao === "aberto" && t.vencimento >= hoje && t.vencimento <= semana && "semana",
+                !t.categoria_id && t.situacao !== "cancelado" && "sem_categoria",
+              ];
               const encargos = Number(t.juros ?? 0) + Number(t.multa ?? 0);
               return (
                 <tr
@@ -510,7 +523,15 @@ async function PaginaContasPagar({ searchParams }: { searchParams: Promise<Filtr
                   </Celula>
                   <Celula className="text-texto-suave">
                     <span className="block max-w-[min(9rem,8vw)] truncate" title={t.plano_contas ? `${t.plano_contas.codigo} · ${t.plano_contas.nome}` : undefined}>
-                      {t.plano_contas ? `${t.plano_contas.codigo} · ${t.plano_contas.nome}` : "—"}
+                      {t.plano_contas ? (
+                        `${t.plano_contas.codigo} · ${t.plano_contas.nome}`
+                      ) : t.situacao === "cancelado" ? (
+                        "—"
+                      ) : (
+                        <span className="font-medium text-alerta" title="Sem categoria financeira: não aparece certo no fluxo de caixa. Use Editar ou marque várias e Alterar.">
+                          Sem categoria
+                        </span>
+                      )}
                     </span>
                   </Celula>
                   <Celula className="whitespace-nowrap tabular-nums">
