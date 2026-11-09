@@ -1,8 +1,9 @@
 "use client";
 
-import { useSearchParams } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useRef, useState } from "react";
 import { aoRecarregar, NaoEncontrado } from "@/lib/navegacao";
+import { lembrarEndereco } from "@/lib/ultimo-endereco";
 
 type Busca = Record<string, string>;
 // Mesma forma das páginas do Next com servidor: os filtros do endereço chegam
@@ -22,12 +23,14 @@ export function TelaCliente({ montar }: { montar: Montar }) {
 function Tela({ montar }: { montar: Montar }) {
   const busca = useSearchParams();
   const chave = busca.toString();
+  const caminho = usePathname();
   const [versao, setVersao] = useState(0);
   const [conteudo, setConteudo] = useState<React.ReactNode>(null);
   const [falha, setFalha] = useState<"nao-encontrado" | string | null>(null);
   const ultima = useRef(0);
 
   useEffect(() => aoRecarregar(() => setVersao((v) => v + 1)), []);
+  useEffect(() => lembrarEndereco(caminho, chave), [caminho, chave]);
 
   useEffect(() => {
     const vez = ++ultima.current;
