@@ -342,6 +342,56 @@ export function sugerirConciliacao(linhas: { id: string; data: string; valor: nu
   return resultado;
 }
 
+// Antecipação (factoring): o banco credita o líquido, ou seja, o título a
+// receber menos os juros da antecipação lançados no contas a pagar. Para a
+// entrada que ficou sem sugestão, procura um par a receber − a pagar que bata
+// com o valor, com a conta a pagar de juros/antecipação ou com o mesmo nome
+// do título a receber (ex.: "NF 442 AKL"). Nunca é conciliada sozinha.
+const ANTECIPACAO = /antecip|desagio|factoring|fomento|securitiz|juros|desconto de (titulo|duplicata)/;
+export function sugerirAntecipacao(
+  linhas: { id: string; data: string; valor: number; descricao: string }[],
+  titulos: TituloCandidato[],
+  usados: Set<string> = new Set(),
+): Map<string, Sugestao> {
+  const resultado = new Map<string, Sugestao>();
+  const receber = new Map<number, TituloCandidato[]>();
+  for (const t of titulos)
+    if (t.tipo === "receber" && !usados.has(t.id)) {
+      const c = Math.round(t.valor * 100);
+      receber.set(c, [...(receber.get(c) ?? []), t]);
+    }
+  const juros = titulos.filter((t) => t.tipo === "pagar" && !usados.has(t.id));
+  const ocupados = new Set(usados);
+  for (const l of [...linhas].sort((a, b) => a.data.localeCompare(b.data))) {
+    if (l.valor <= 0) continue;
+    let melhor: { r: TituloCandidato; p: TituloCandidato; pontos: number } | null = null;
+    for (const p of juros) {
+      if (ocupados.has(p.id) || Math.abs(diasEntre(p.data, l.data)) > 5) continue;
+      const nomeP = palavras(`${p.pessoa ?? ""} ${p.descricao}`);
+      const ehJuros = ANTECIPACAO.test(semAcento(`${p.pessoa ?? ""} ${p.descricao}`));
+      for (const r of receber.get(Math.round((l.valor + p.valor) * 100)) ?? []) {
+        if (ocupados.has(r.id)) continue;
+        // Recebido: perto da data; em aberto: o vencimento é o do cliente (pode estar longe).
+        if (r.pago && Math.abs(diasEntre(r.data, l.data)) > 5) continue;
+        const comuns = [...palavras(`${r.pessoa ?? ""} ${r.descricao}`)].filter((x) => nomeP.has(x)).length;
+        if (!ehJuros && !comuns) continue;
+        const pontos = comuns * 15 + (ehJuros ? 10 : 0) - Math.abs(diasEntre(p.data, l.data));
+        if (!melhor || pontos > melhor.pontos) melhor = { r, p, pontos };
+      }
+    }
+    if (melhor) {
+      ocupados.add(melhor.r.id);
+      ocupados.add(melhor.p.id);
+      resultado.set(l.id, {
+        titulos: [melhor.r.id, melhor.p.id],
+        motivo: `antecipação: título a receber de ${melhor.r.valor.toFixed(2)} menos ${melhor.p.valor.toFixed(2)} a pagar (${melhor.p.descricao})`,
+        certa: false,
+      });
+    }
+  }
+  return resultado;
+}
+
 // ---------------------------------------------------------------------------
 // Lançamento repetido com a data trocada
 // ---------------------------------------------------------------------------

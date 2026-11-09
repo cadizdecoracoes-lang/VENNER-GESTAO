@@ -7,7 +7,7 @@ import { CabecalhoTela, Celula, Etiqueta, LinkAcao, SemAcesso, Tabela, estiloBot
 import { carregarAcesso, pode } from "@/lib/acesso";
 import { hojeBrasil } from "@/lib/datas";
 import { carregarEmpresas, empresaSelecionada } from "@/lib/empresa";
-import { marcasDoGrupo, naturezaSemTitulo, possiveisRepetidas, sugerirConciliacao } from "@/lib/extrato";
+import { marcasDoGrupo, naturezaSemTitulo, possiveisRepetidas, sugerirAntecipacao, sugerirConciliacao } from "@/lib/extrato";
 import { formatarData, formatarMoeda } from "@/lib/formato";
 import {
   conciliar,
@@ -113,6 +113,12 @@ async function PaginaConciliacao({ searchParams }: { searchParams: Promise<Filtr
     candidatos,
   );
   const porId = new Map(candidatos.map((t) => [t.id, t]));
+  // Entrada sem título de mesmo valor: pode ser antecipação (a receber − juros a pagar).
+  const antecipacoes = sugerirAntecipacao(
+    pend.filter((l) => !repetidas.has(l.id) && !sugestoes.has(l.id)),
+    candidatos,
+    new Set([...sugestoes.values()].flatMap((x) => x.titulos)),
+  );
 
   const base = (extra: Record<string, string | undefined>) => {
     const p = new URLSearchParams();
@@ -132,7 +138,7 @@ async function PaginaConciliacao({ searchParams }: { searchParams: Promise<Filtr
   // Linha sem título: transferência do grupo, tarifa, rendimento ou cobrança.
   const marcas = marcasDoGrupo(empresas.map((e) => e.nome));
   const natureza = new Map(
-    pend.filter((l) => !sugestoes.has(l.id) && !repetidas.has(l.id)).flatMap((l) => {
+    pend.filter((l) => !sugestoes.has(l.id) && !repetidas.has(l.id) && !antecipacoes.has(l.id)).flatMap((l) => {
       const n = naturezaSemTitulo(l.descricao, Number(l.valor), marcas);
       return n ? [[l.id, n] as const] : [];
     }),
@@ -165,6 +171,11 @@ async function PaginaConciliacao({ searchParams }: { searchParams: Promise<Filtr
               pendentes: pendentes.get(c.id) ?? 0,
             }))}
             atual={conta?.id ?? null}
+            parametros={Object.fromEntries(
+              Object.entries({ situacao: situacao === "pendente" ? undefined : situacao, mes: mes ?? undefined }).filter(
+                (x): x is [string, string] => !!x[1],
+              ),
+            )}
           />
         )}
         <Link href="/financeiro/conciliacao/importar#banco" className={estiloBotaoSecundario}>
@@ -315,7 +326,7 @@ async function PaginaConciliacao({ searchParams }: { searchParams: Promise<Filtr
           {resolvendo && conta && podeEditar && (
             <PainelResolver
               linha={resolvendo}
-              candidatos={amplos.filter((t) => t.tipo === (Number(resolvendo.valor) < 0 ? "pagar" : "receber"))}
+              candidatos={amplos}
               linkCriar={linkCriar(resolvendo)}
               voltar={base({})}
             />
@@ -337,6 +348,8 @@ async function PaginaConciliacao({ searchParams }: { searchParams: Promise<Filtr
               const repetida = l.situacao === "pendente" ? repetidas.get(l.id) : undefined;
               const s = sugestoes.get(l.id);
               const titulo = s ? porId.get(s.titulos[0]) : undefined;
+              const ant = l.situacao === "pendente" ? antecipacoes.get(l.id) : undefined;
+              const [antR, antP] = ant ? [porId.get(ant.titulos[0])!, porId.get(ant.titulos[1])!] : [];
               const valor = Number(l.valor);
               return (
                 <tr key={l.id} className={l.id === resolvendo?.id ? "bg-primaria-suave/50" : ""}>
@@ -359,6 +372,12 @@ async function PaginaConciliacao({ searchParams }: { searchParams: Promise<Filtr
                       >
                         Parece repetida: mesmo valor em {formatarData(repetida.data)} noutra importação{repetida.resolvida ? " (já resolvida)" : ""}
                       </span>
+                    ) : antR && antP ? (
+                      <span className="text-xs" title={ant!.motivo}>
+                        <Etiqueta cor="primaria">Antecipação</Etiqueta> {antR.pessoa ? `${antR.pessoa} · ` : ""}
+                        {antR.descricao} {formatarMoeda(antR.valor)} − {antP.pessoa ? `${antP.pessoa} · ` : ""}
+                        {antP.descricao} {formatarMoeda(antP.valor)}
+                      </span>
                     ) : titulo ? (
                       <span className="text-xs" title={s!.motivo}>
                         <Etiqueta cor="primaria">Sugestão</Etiqueta> {titulo.pessoa ? `${titulo.pessoa} · ` : ""}
@@ -380,6 +399,9 @@ async function PaginaConciliacao({ searchParams }: { searchParams: Promise<Filtr
                             {repetida && (
                               <FormAcao acao={marcarRepetida.bind(null, l.id)} rotulo="É repetida" enviando="..." discreto />
                             )}
+                            {antR && antP && (
+                              <FormAcao acao={conciliar.bind(null, l.id, [antP.id], [antR.id])} rotulo="Conciliar" enviando="..." discreto />
+                            )}
                             {titulo && (
                               <FormAcao
                                 acao={conciliar.bind(null, l.id, titulo.tipo === "pagar" ? [titulo.id] : [], titulo.tipo === "receber" ? [titulo.id] : [])}
@@ -391,7 +413,7 @@ async function PaginaConciliacao({ searchParams }: { searchParams: Promise<Filtr
                             {!titulo && natureza.get(l.id)?.tipo === "transferencia" && (
                               <FormAcao acao={marcarTransferencia.bind(null, l.id)} rotulo="É transferência" enviando="..." discreto />
                             )}
-                            {!titulo && !repetida && !["transferencia", "aplicacao"].includes(natureza.get(l.id)?.tipo ?? "") && (
+                            {!titulo && !repetida && !ant && !["transferencia", "aplicacao"].includes(natureza.get(l.id)?.tipo ?? "") && (
                               <LinkAcao href={linkCriar(l)}>Criar título</LinkAcao>
                             )}
                             <LinkAcao href={base({ linha: l.id })}>{titulo ? "Outro" : "Escolher"}</LinkAcao>

@@ -3,15 +3,24 @@
 import { useRouter } from "next/navigation";
 
 // Conta bancária da conciliação, na linha do título. Mostra quantas linhas
-// faltam conciliar em cada conta; ao escolher, troca o ?conta= do endereço.
-export function SeletorConta({ contas, atual }: { contas: { id: string; nome: string; pendentes: number }[]; atual: string | null }) {
+// faltam conciliar em cada conta; ao escolher, troca o ?conta= do endereço e
+// mantém os outros filtros (situação e mês).
+export function SeletorConta({
+  contas,
+  atual,
+  parametros = {},
+}: {
+  contas: { id: string; nome: string; pendentes: number }[];
+  atual: string | null;
+  parametros?: Record<string, string>;
+}) {
   const router = useRouter();
   return (
     <select
       aria-label="Conta bancária"
       title="Conta bancária"
       value={atual ?? ""}
-      onChange={(e) => router.push(`?${new URLSearchParams({ conta: e.target.value }).toString()}`)}
+      onChange={(e) => router.push(`?${new URLSearchParams({ ...parametros, conta: e.target.value }).toString()}`)}
       className="max-w-72 rounded-lg border border-borda bg-superficie px-2 py-1 text-sm outline-none focus:border-primaria"
     >
       {contas.map((c) => (

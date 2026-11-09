@@ -34,6 +34,9 @@ export function PainelResolver({
   const [pendente, iniciar] = useTransition();
   const valor = Math.abs(Number(linha.valor));
   const saida = Number(linha.valor) < 0;
+  // Título do lado da linha soma; o do outro lado desconta (ex.: juros da
+  // antecipação no crédito líquido da factoring).
+  const doLado = (t: TituloCandidato) => t.tipo === (saida ? "pagar" : "receber");
 
   const lista = useMemo(() => {
     const termos = semAcento(busca).split(/\s+/).filter(Boolean);
@@ -48,14 +51,16 @@ export function PainelResolver({
         const vb = Math.abs(b.valor - valor) < 0.01 ? 0 : 1;
         const da = Math.abs(Date.parse(a.data) - Date.parse(linha.data));
         const db = Math.abs(Date.parse(b.data) - Date.parse(linha.data));
-        return va - vb || da - db;
+        return Number(doLado(b)) - Number(doLado(a)) || va - vb || da - db;
       })
       .slice(0, 200);
   }, [candidatos, busca, valor, linha.data]);
 
   const escolhidos = candidatos.filter((t) => marcados.has(t.id));
+  const temDoLado = escolhidos.some(doLado);
   // Com um título só em aberto, a baixa usa o valor do extrato (juros/desconto).
-  const soma = escolhidos.length === 1 && !escolhidos[0].pago ? valor : escolhidos.reduce((s, t) => s + t.valor, 0);
+  const soma =
+    escolhidos.length === 1 && !escolhidos[0].pago && temDoLado ? valor : escolhidos.reduce((s, t) => s + (doLado(t) ? t.valor : -t.valor), 0);
   const diferenca = Math.round((soma - valor) * 100) / 100;
 
   function alternar(id: string) {
@@ -67,9 +72,10 @@ export function PainelResolver({
 
   function enviar() {
     setErro(null);
-    const ids = [...marcados];
+    const pagar = escolhidos.filter((t) => t.tipo === "pagar").map((t) => t.id);
+    const receber = escolhidos.filter((t) => t.tipo === "receber").map((t) => t.id);
     iniciar(async () => {
-      const r = await conciliar(linha.id, saida ? ids : [], saida ? [] : ids);
+      const r = await conciliar(linha.id, pagar, receber);
       if (r.erro) setErro(r.erro);
       else router.push(voltar);
     });
@@ -96,7 +102,7 @@ export function PainelResolver({
             <input
               value={busca}
               onChange={(e) => setBusca(e.target.value)}
-              placeholder={`Buscar ${saida ? "conta a pagar" : "conta a receber"} por nome, descrição, valor...`}
+              placeholder="Buscar título por nome, descrição, valor..."
               className={`${estiloCampo} max-w-md py-1.5`}
             />
             <span className="text-sm text-texto-suave">
@@ -106,7 +112,7 @@ export function PainelResolver({
                 <span className="text-alerta"> · baixa pelo valor do extrato (título de {formatarMoeda(escolhidos[0].valor)})</span>
               )}
             </span>
-            <button type="button" onClick={enviar} disabled={!marcados.size || pendente || (escolhidos.length > 1 && diferenca !== 0)} className={`${estiloBotao} py-1.5`}>
+            <button type="button" onClick={enviar} disabled={!temDoLado || pendente || (escolhidos.length > 1 && diferenca !== 0)} className={`${estiloBotao} py-1.5`}>
               {pendente ? "Conciliando..." : "Conciliar escolhidos"}
             </button>
           </div>
@@ -132,9 +138,12 @@ export function PainelResolver({
                     <td className="px-2 py-1.5">
                       {t.pessoa && <span className="font-medium">{t.pessoa} · </span>}
                       {t.descricao}
+                      {!doLado(t) && <span className="text-xs text-texto-suave"> · a {t.tipo}, desconta</span>}
                     </td>
-                    <td className={`whitespace-nowrap px-3 py-1.5 text-right tabular-nums ${Math.abs(t.valor - valor) < 0.01 ? "font-semibold" : ""}`}>
-                      {formatarMoeda(t.valor)}
+                    <td
+                      className={`whitespace-nowrap px-3 py-1.5 text-right tabular-nums ${doLado(t) ? "" : "text-perigo"} ${Math.abs(t.valor - valor) < 0.01 ? "font-semibold" : ""}`}
+                    >
+                      {formatarMoeda(doLado(t) ? t.valor : -t.valor)}
                     </td>
                   </tr>
                 ))}

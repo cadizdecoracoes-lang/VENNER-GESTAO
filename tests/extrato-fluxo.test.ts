@@ -10,6 +10,7 @@ import {
   lerTextoExtratoPdf,
   mapearColunasExtrato,
   possiveisRepetidas,
+  sugerirAntecipacao,
   sugerirConciliacao,
   valorCelula,
 } from "../src/lib/extrato.ts";
@@ -282,4 +283,19 @@ test("repetido com a data trocada entre duas importações", () => {
   assert.equal(possiveisRepetidas([l("a", "pdf", "2026-10-31", -56.6), l("b", "nov", "2026-11-01", -56.6)], imps).size, 0);
   // A cópia ignorada não conta.
   assert.equal(possiveisRepetidas([l("a", "pdf", "2026-10-23", -56.6), l("b", "ofx", "2026-10-24", -56.6, "ignorado")], imps).size, 0);
+});
+
+test("antecipação: crédito líquido = a receber menos juros a pagar", () => {
+  const linha = { id: "l", data: "2026-10-21", valor: 19826.9, descricao: "Pix recebido de SMART CAPITAL SECURITIZADORA" };
+  const r = { id: "r", tipo: "receber" as const, descricao: "Ref. a NF nº 442, AKL COMERCIAL", pessoa: "AKL COMERCIAL ELETRICA", valor: 21400.33, data: "2026-10-21", pago: true };
+  const p = { id: "p", tipo: "pagar" as const, descricao: "NF 442 AKL", pessoa: "ANTECIPA FÁCIL", valor: 1573.43, data: "2026-10-21", pago: true };
+  const outro = { id: "x", tipo: "pagar" as const, descricao: "Energia", pessoa: "ENEL", valor: 1573.43, data: "2026-10-21", pago: true };
+  const s = sugerirAntecipacao([linha], [r, outro, p]);
+  assert.deepEqual(s.get("l")?.titulos, ["r", "p"]);
+  assert.equal(s.get("l")?.certa, false);
+  // Conta a pagar sem nome em comum e sem cara de juros não serve.
+  assert.equal(sugerirAntecipacao([linha], [r, outro]).size, 0);
+  // Título já usado por outra sugestão fica de fora; saída não entra.
+  assert.equal(sugerirAntecipacao([linha], [r, p], new Set(["r"])).size, 0);
+  assert.equal(sugerirAntecipacao([{ ...linha, valor: -19826.9 }], [r, p]).size, 0);
 });
