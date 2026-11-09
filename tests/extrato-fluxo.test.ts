@@ -10,6 +10,7 @@ import {
   lerTextoExtratoPdf,
   mapearColunasExtrato,
   possiveisRepetidas,
+  saldoBancoNoDia,
   sugerirAntecipacao,
   sugerirConciliacao,
   valorCelula,
@@ -298,4 +299,22 @@ test("antecipação: crédito líquido = a receber menos juros a pagar", () => {
   // Título já usado por outra sugestão fica de fora; saída não entra.
   assert.equal(sugerirAntecipacao([linha], [r, p], new Set(["r"])).size, 0);
   assert.equal(sugerirAntecipacao([{ ...linha, valor: -19826.9 }], [r, p]).size, 0);
+});
+
+test("saldo do banco em cada dia a partir do saldo informado", () => {
+  const linhas = [
+    { data: "2026-10-01", valor: 100 },
+    { data: "2026-10-02", valor: -30 },
+    { data: "2026-10-02", valor: -20 },
+    { data: "2026-10-05", valor: 10 },
+  ];
+  // Saldo informado no fim de 02/10: 500.
+  const a = { data: "2026-10-02", saldo: 500 };
+  assert.equal(saldoBancoNoDia(a, linhas, "2026-10-02"), 500);
+  assert.equal(saldoBancoNoDia(a, linhas, "2026-10-01"), 550);
+  assert.equal(saldoBancoNoDia(a, linhas, "2026-10-03"), 500);
+  assert.equal(saldoBancoNoDia(a, linhas, "2026-10-05"), 510);
+  // Fora do período do extrato: sem saldo do banco.
+  assert.equal(saldoBancoNoDia(a, linhas, "2026-09-30"), null);
+  assert.equal(saldoBancoNoDia(a, linhas, "2026-10-06"), null);
 });

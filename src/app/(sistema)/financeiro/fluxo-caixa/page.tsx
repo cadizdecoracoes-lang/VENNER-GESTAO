@@ -5,10 +5,11 @@ import { CabecalhoTela, Indicador, SemAcesso, estiloBotaoSecundario } from "@/co
 import { carregarAcesso, pode } from "@/lib/acesso";
 import { hojeBrasil } from "@/lib/datas";
 import { carregarEmpresas, empresaSelecionada } from "@/lib/empresa";
-import { filtrarPorConta, montarFluxo, somarMeses, ultimoDiaMes, type CategoriaFluxo, type MovimentoFluxo, type SaldoConta } from "@/lib/fluxo-caixa";
+import { filtrarPorConta, linhasConferenciaBanco, montarFluxo, somarMeses, ultimoDiaMes, type CategoriaFluxo, type MovimentoFluxo, type SaldoConta } from "@/lib/fluxo-caixa";
 import { formatarData, formatarMoeda } from "@/lib/formato";
 import { supabaseConfigurado } from "@/lib/supabase/config";
 import { criarClienteNavegador } from "@/lib/supabase/client";
+import { carregarSaldoBanco } from "../conciliacao/dados";
 import { SeletorConta } from "./seletor-conta";
 import { TabelaFluxo } from "./tabela-fluxo";
 import { TelaCliente } from "@/components/tela-cliente";
@@ -92,6 +93,14 @@ async function PaginaFluxoCaixa({ searchParams }: { searchParams: Promise<{ modo
     dados = { ...dados, movimentos: atual.movimentos, anteriores: ant.movimentos, saldos: atual.saldos };
   }
   const fluxo = montarFluxo({ modo, de, ate, hoje, ...dados });
+  // Uma conta escolhida: no fim, o saldo do extrato do banco e a diferença.
+  if (conta) {
+    const saldoBanco = await carregarSaldoBanco(conta.conta_bancaria_id, de, ate).catch(() => null);
+    if (saldoBanco)
+      fluxo.linhas.push(
+        ...linhasConferenciaBanco(fluxo, saldoBanco, hoje, (dia) => `/financeiro/conciliacao?conta=${conta.conta_bancaria_id}&ate=${dia}`),
+      );
+  }
   const r = fluxo.resumo;
 
   const link = (p: Record<string, string>) => `?${new URLSearchParams(conta ? { ...p, conta: conta.conta_bancaria_id } : p).toString()}`;

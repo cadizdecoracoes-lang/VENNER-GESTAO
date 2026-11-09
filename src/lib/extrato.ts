@@ -393,6 +393,31 @@ export function sugerirAntecipacao(
 }
 
 // ---------------------------------------------------------------------------
+// Saldo do banco dia a dia
+// ---------------------------------------------------------------------------
+// O banco informa o saldo num ponto (fim do arquivo importado, ou o saldo de
+// uma linha). Dali, o saldo de cada dia é esse ponto mais (ou menos) as
+// linhas do extrato entre os dois dias. Linha ignorada (repetida) não conta.
+// Só há saldo do banco entre o primeiro e o último dia com extrato.
+export type AncoraSaldo = { data: string; saldo: number };
+export function saldoBancoNoDia(ancora: AncoraSaldo, linhas: { data: string; valor: number }[], dia: string): number | null {
+  if (!linhas.length) return dia === ancora.data ? ancora.saldo : null;
+  let primeira = ancora.data;
+  let ultima = ancora.data;
+  for (const l of linhas) {
+    if (l.data < primeira) primeira = l.data;
+    if (l.data > ultima) ultima = l.data;
+  }
+  if (dia < primeira || dia > ultima) return null;
+  let saldo = ancora.saldo;
+  for (const l of linhas) {
+    if (dia >= ancora.data ? l.data > ancora.data && l.data <= dia : l.data > dia && l.data <= ancora.data)
+      saldo += dia >= ancora.data ? Number(l.valor) : -Number(l.valor);
+  }
+  return Math.round(saldo * 100) / 100;
+}
+
+// ---------------------------------------------------------------------------
 // Lançamento repetido com a data trocada
 // ---------------------------------------------------------------------------
 // O banco já tira o repetido de mesma data e mesmo valor vindo de outra

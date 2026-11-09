@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { revalidatePath } from "@/lib/navegacao";
 import { useState, useTransition } from "react";
 import type { Fluxo, LinhaFluxo, Rastreio } from "@/lib/fluxo-caixa";
@@ -8,6 +9,9 @@ import { salvarPrevisao, titulosDaCelula, type TituloDaCelula } from "./actions"
 
 // Número inteiro com milhar, como no fluxo da Drogarema; zero vira "–".
 const fmt = (v: number | null | undefined) => (v === null || v === undefined ? "" : Math.round(v) === 0 ? "–" : Math.round(v).toLocaleString("pt-BR"));
+// Com centavos (diferença com o banco): zero vira "ok".
+const fmtCentavos = (v: number | null | undefined) =>
+  v === null || v === undefined ? "" : Math.abs(v) < 0.005 ? "ok" : v.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 const ESTILO_LINHA: Record<string, string> = {
   secao: "bg-primaria text-white text-[11px] font-bold uppercase tracking-wider",
@@ -161,6 +165,22 @@ export function TabelaFluxo({
                         </td>
                       );
                     const rastreia = l.rastreio && v;
+                    const destino = l.links?.[k];
+                    if (l.centavos)
+                      return (
+                        <td
+                          key={k}
+                          className={`whitespace-nowrap border-b border-borda/60 px-2 py-[3px] text-right ${classeColuna(k)} ${v !== null && Math.abs(v) >= 0.005 ? "font-semibold text-perigo" : "text-sucesso"}`}
+                        >
+                          {destino ? (
+                            <Link href={destino} className="underline decoration-dotted hover:decoration-solid" title="Ver na conciliação o que compõe a diferença">
+                              {fmtCentavos(v)}
+                            </Link>
+                          ) : (
+                            fmtCentavos(v)
+                          )}
+                        </td>
+                      );
                     return (
                       <td
                         key={k}
@@ -177,7 +197,7 @@ export function TabelaFluxo({
                     onClick={l.rastreio && l.total ? () => abrir(l, l.rastreio!, colunas[0].de, colunas[colunas.length - 1].ate, l.total ?? 0) : undefined}
                     className={`whitespace-nowrap border-b border-borda/60 bg-fundo px-2 py-[3px] text-right font-semibold ${l.total !== null && l.total < -0.5 ? "text-perigo" : ""} ${l.rastreio && l.total ? "cursor-zoom-in" : ""}`}
                   >
-                    {l.tipo === "secao" ? "" : fmt(l.total)}
+                    {l.tipo === "secao" ? "" : l.centavos ? fmtCentavos(l.total) : fmt(l.total)}
                   </td>
                   {comparar && (
                     <td className="whitespace-nowrap border-b border-borda/60 bg-fundo px-2 py-[3px] text-right text-texto-suave">

@@ -57,6 +57,10 @@ export type LinhaFluxo = {
   dica?: string;
   // Mesmo item no período anterior (mês anterior ou 12 meses anteriores), para comparar.
   anterior?: number | null;
+  // Endereço aberto ao clicar no valor da coluna (ex.: a diferença leva à conciliação).
+  links?: (string | null)[];
+  // Mostra os centavos (diferenças pequenas não podem virar "–").
+  centavos?: boolean;
 };
 
 export type Resumo = {
@@ -360,4 +364,41 @@ export function montarFluxo(e: {
       atrasadoPagar: arred2(atrasadoPagar),
     },
   };
+}
+
+// Conferência com o banco (fluxo de uma conta): saldo que o extrato mostra no
+// fim de cada dia e a diferença para o saldo do sistema. A diferença leva à
+// conciliação, que mostra de onde ela vem.
+export function linhasConferenciaBanco(
+  fluxo: Fluxo,
+  saldoBanco: (dia: string) => number | null,
+  hoje: string,
+  linkDiferenca: (dia: string) => string,
+): LinhaFluxo[] {
+  const sistema = fluxo.linhas.find((l) => l.tipo === "saldo");
+  if (!sistema) return [];
+  const banco = fluxo.colunas.map((c) => (c.ate <= hoje ? saldoBanco(c.ate) : null));
+  if (banco.every((v) => v === null)) return [];
+  const diferenca = banco.map((b, k) => (b === null || sistema.valores[k] === null ? null : arred2(b - sistema.valores[k]!)));
+  const ultimo = (v: (number | null)[]) => [...v].reverse().find((x) => x !== null) ?? null;
+  return [
+    {
+      chave: "banco|saldo",
+      tipo: "info",
+      rotulo: "Saldo no extrato do banco",
+      valores: banco,
+      total: ultimo(banco),
+      dica: "Saldo no fim do dia pelo extrato importado (saldo informado pelo banco ± as linhas do extrato). Vazio nos dias sem extrato.",
+    },
+    {
+      chave: "banco|diferenca",
+      tipo: "info",
+      rotulo: "Diferença (banco − sistema)",
+      valores: diferenca,
+      total: ultimo(diferenca),
+      centavos: true,
+      links: fluxo.colunas.map((c, k) => (diferenca[k] !== null && Math.abs(diferenca[k]!) >= 0.01 ? linkDiferenca(c.ate) : null)),
+      dica: "Clique numa diferença para ver na conciliação o que a compõe até aquele dia.",
+    },
+  ];
 }
