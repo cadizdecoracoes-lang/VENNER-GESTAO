@@ -1,7 +1,7 @@
 // Consultas da conciliação: linhas do extrato e títulos candidatos.
 import { somarDias } from "@/lib/datas";
 import { guardadoPor } from "@/lib/navegacao";
-import { saldoBancoNoDia, type AncoraSaldo, type LinhaRepeticao, type TituloCandidato } from "@/lib/extrato";
+import { saldoBancoNoDia, type AncoraSaldo, type LinhaDoDia, type LinhaRepeticao, type TituloCandidato, type TituloDoDia } from "@/lib/extrato";
 import { supabaseConfigurado } from "@/lib/supabase/config";
 import { criarClienteNavegador } from "@/lib/supabase/client";
 
@@ -65,7 +65,8 @@ const pendentesGuardados = guardadoPor(async (empresa: string): Promise<Map<stri
 });
 export const carregarPendentes = (empresa: string | null) => pendentesGuardados(empresa ?? "");
 
-export async function carregarLinhas(conta: string, situacao: string, mes: string | null, ate: string | null = null): Promise<LinhaConciliacao[]> {
+// Linhas do extrato da conta: pendentes (padrão), resolvidas ou todas, no período.
+export async function carregarLinhas(conta: string, situacao: string, de: string | null, ate: string | null): Promise<LinhaConciliacao[]> {
   if (!supabaseConfigurado) return [];
   const supabase = criarClienteNavegador();
   let q = supabase
@@ -79,9 +80,102 @@ export async function carregarLinhas(conta: string, situacao: string, mes: strin
     .limit(3000);
   if (situacao === "pendente") q = q.eq("situacao", "pendente");
   else if (situacao === "resolvido") q = q.neq("situacao", "pendente");
-  if (mes) q = q.gte("data", `${mes}-01`).lte("data", `${mes}-31`);
+  if (de) q = q.gte("data", de);
   if (ate) q = q.lte("data", ate);
   return ((await q).data ?? []) as unknown as LinhaConciliacao[];
+}
+
+// Pendentes da conta antes do período mostrado (para avisar que existem).
+export async function contarPendentesAntes(conta: string, de: string): Promise<number> {
+  if (!supabaseConfigurado) return 0;
+  const { count } = await criarClienteNavegador()
+    .from("extrato_lancamentos")
+    .select("id", { count: "exact", head: true })
+    .eq("conta_bancaria_id", conta)
+    .eq("situacao", "pendente")
+    .lt("data", de);
+  return count ?? 0;
+}
+
+// Tudo o que mexe no saldo da conta num dia, dos dois lados: linhas do extrato
+// (com os títulos ligados) e títulos baixados nesta conta (com as datas das
+// linhas ligadas). Base de diferencaDoDia.
+export async function carregarMovimentoDoDia(conta: string, dia: string): Promise<{ linhas: LinhaDoDia[]; titulos: TituloDoDia[] }> {
+  if (!supabaseConfigurado) return { linhas: [], titulos: [] };
+  const supabase = criarClienteNavegador();
+  const [l, p, r] = await Promise.all([
+    supabase
+      .from("extrato_lancamentos")
+      .select(
+        "id, data, descricao, valor, situacao, extrato_conciliacoes(contas_pagar(id, conta_bancaria_id, data_pagamento, valor_pago, situacao), contas_receber(id, conta_bancaria_id, data_recebimento, valor_recebido, situacao))",
+      )
+      .eq("conta_bancaria_id", conta)
+      .eq("data", dia)
+      .limit(3000),
+    supabase
+      .from("contas_pagar")
+      .select("id, descricao, parcela, valor_pago, fornecedores(nome, nome_fantasia), extrato_conciliacoes(extrato_lancamentos(data, conta_bancaria_id))")
+      .eq("conta_bancaria_id", conta)
+      .eq("situacao", "pago")
+      .eq("data_pagamento", dia)
+      .limit(3000),
+    supabase
+      .from("contas_receber")
+      .select("id, descricao, parcela, valor_recebido, clientes(nome, nome_fantasia), extrato_conciliacoes(extrato_lancamentos(data, conta_bancaria_id))")
+      .eq("conta_bancaria_id", conta)
+      .eq("situacao", "pago")
+      .eq("data_recebimento", dia)
+      .limit(3000),
+  ]);
+  const erro = l.error ?? p.error ?? r.error;
+  if (erro) throw new Error(erro.message);
+  type T = { id: string; conta_bancaria_id: string | null; situacao: string; valor_pago?: number; valor_recebido?: number; data_pagamento?: string; data_recebimento?: string };
+  type C = { contas_pagar: T | null; contas_receber: T | null };
+  const linhas: LinhaDoDia[] = ((l.data ?? []) as unknown as (Omit<LinhaDoDia, "titulos"> & { extrato_conciliacoes: C[] })[]).map((x) => ({
+    id: x.id,
+    data: x.data,
+    descricao: x.descricao,
+    valor: Number(x.valor),
+    situacao: x.situacao,
+    titulos: x.extrato_conciliacoes.flatMap((c) => {
+      const t = c.contas_pagar ?? c.contas_receber;
+      if (!t) return [];
+      const pagar = !!c.contas_pagar;
+      const pago = t.situacao === "pago";
+      return [
+        {
+          id: t.id,
+          tipo: pagar ? ("pagar" as const) : ("receber" as const),
+          conta: pago ? t.conta_bancaria_id : null,
+          data: pago ? ((pagar ? t.data_pagamento : t.data_recebimento) ?? null) : null,
+          valor: pagar ? -Number(t.valor_pago ?? 0) : Number(t.valor_recebido ?? 0),
+        },
+      ];
+    }),
+  }));
+  type B = Record<string, unknown> & { extrato_conciliacoes: { extrato_lancamentos: { data: string; conta_bancaria_id: string } | null }[] };
+  const datas = (t: B) =>
+    t.extrato_conciliacoes.flatMap((c) => (c.extrato_lancamentos && c.extrato_lancamentos.conta_bancaria_id === conta ? [c.extrato_lancamentos.data] : []));
+  const desc = (t: B) => `${t.descricao}${t.parcela ? ` (${t.parcela})` : ""}`;
+  const titulos: TituloDoDia[] = [
+    ...((p.data ?? []) as unknown as B[]).map((t) => ({
+      id: t.id as string,
+      tipo: "pagar" as const,
+      descricao: desc(t),
+      pessoa: nomePessoa(t.fornecedores as Pessoa),
+      valor: -Number(t.valor_pago),
+      linhas: datas(t),
+    })),
+    ...((r.data ?? []) as unknown as B[]).map((t) => ({
+      id: t.id as string,
+      tipo: "receber" as const,
+      descricao: desc(t),
+      pessoa: nomePessoa(t.clientes as Pessoa),
+      valor: Number(t.valor_recebido),
+      linhas: datas(t),
+    })),
+  ];
+  return { linhas, titulos };
 }
 
 const contasTinySemBanco = guardadoPor(async (empresa: string): Promise<string[]> => {
@@ -204,34 +298,6 @@ const conferenciaGuardada = guardadoPor(async (chave: string) => {
   };
 });
 
-export type IndicadorMes = { mes: string; linhas: number; resolvidas: number; entradas: number; saidas: number };
-
-// Movimento do extrato no mês escolhido (ou no atual) e no anterior, para comparar.
-export async function carregarIndicadores(conta: string, mes: string): Promise<[IndicadorMes, IndicadorMes]> {
-  const [a, m] = mes.split("-").map(Number);
-  const anterior = new Date(Date.UTC(a, m - 2, 1)).toISOString().slice(0, 7);
-  const vazio = (x: string): IndicadorMes => ({ mes: x, linhas: 0, resolvidas: 0, entradas: 0, saidas: 0 });
-  const r: [IndicadorMes, IndicadorMes] = [vazio(mes), vazio(anterior)];
-  if (!supabaseConfigurado) return r;
-  const supabase = criarClienteNavegador();
-  const { data } = await supabase
-    .from("extrato_lancamentos")
-    .select("data, valor, situacao")
-    .eq("conta_bancaria_id", conta)
-    .gte("data", `${anterior}-01`)
-    .lte("data", `${mes}-31`)
-    .limit(20000);
-  for (const l of data ?? []) {
-    const alvo = l.data.startsWith(mes) ? r[0] : r[1];
-    const v = Number(l.valor);
-    alvo.linhas++;
-    if (l.situacao !== "pendente") alvo.resolvidas++;
-    if (v > 0) alvo.entradas += v;
-    else alvo.saidas += -v;
-  }
-  return r;
-}
-
 export type ImportacaoExtrato = {
   id: string;
   arquivo: string | null;
@@ -321,43 +387,6 @@ export async function carregarSaldoBanco(contaId: string, de: string, ate: strin
     if (!data || data.length < 1000) break;
   }
   return (dia: string) => saldoBancoNoDia(ancora, linhas, dia);
-}
-
-export type TituloSemExtrato = { id: string; tipo: "pagar" | "receber"; data: string; descricao: string; pessoa: string | null; valor: number };
-
-// Títulos baixados nesta conta, do primeiro dia de extrato até `ate`, que
-// ainda não têm linha do extrato: entram no saldo do sistema e não no do banco.
-export async function carregarTitulosSemExtrato(contaId: string, de: string, ate: string): Promise<TituloSemExtrato[]> {
-  if (!supabaseConfigurado) return [];
-  const supabase = criarClienteNavegador();
-  const [p, r] = await Promise.all([
-    supabase
-      .from("contas_pagar")
-      .select("id, descricao, parcela, valor_pago, data_pagamento, fornecedores(nome, nome_fantasia), extrato_conciliacoes(id)")
-      .eq("conta_bancaria_id", contaId)
-      .eq("situacao", "pago")
-      .gte("data_pagamento", de)
-      .lte("data_pagamento", ate)
-      .limit(3000),
-    supabase
-      .from("contas_receber")
-      .select("id, descricao, parcela, valor_recebido, data_recebimento, clientes(nome, nome_fantasia), extrato_conciliacoes(id)")
-      .eq("conta_bancaria_id", contaId)
-      .eq("situacao", "pago")
-      .gte("data_recebimento", de)
-      .lte("data_recebimento", ate)
-      .limit(3000),
-  ]);
-  type Bruto = Record<string, unknown> & { extrato_conciliacoes?: unknown[] };
-  const desc = (t: Bruto) => `${t.descricao}${t.parcela ? ` (${t.parcela})` : ""}`;
-  const lista: TituloSemExtrato[] = [];
-  for (const t of (p.data ?? []) as unknown as Bruto[])
-    if (!t.extrato_conciliacoes?.length)
-      lista.push({ id: t.id as string, tipo: "pagar", data: t.data_pagamento as string, descricao: desc(t), pessoa: nomePessoa(t.fornecedores as Pessoa), valor: -Number(t.valor_pago) });
-  for (const t of (r.data ?? []) as unknown as Bruto[])
-    if (!t.extrato_conciliacoes?.length)
-      lista.push({ id: t.id as string, tipo: "receber", data: t.data_recebimento as string, descricao: desc(t), pessoa: nomePessoa(t.clientes as Pessoa), valor: Number(t.valor_recebido) });
-  return lista.sort((a, b) => a.data.localeCompare(b.data));
 }
 
 // Saldo do sistema no fim do dia (saldo inicial + recebidos − pagos + transferências).

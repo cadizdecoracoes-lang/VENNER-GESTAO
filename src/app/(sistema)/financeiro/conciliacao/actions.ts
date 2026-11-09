@@ -127,7 +127,7 @@ export async function excluirImportacao(importacao: string): Promise<Estado> {
 export async function conciliarCertas(contaId: string): Promise<number> {
   const conta = (await carregarContas(null)).find((c) => c.id === contaId);
   if (!conta) return 0;
-  const pend = await carregarLinhas(conta.id, "pendente", null);
+  const pend = await carregarLinhas(conta.id, "pendente", null, null);
   if (!pend.length) return 0;
   const candidatos = await carregarCandidatos(conta, pend[0].data, pend[pend.length - 1].data);
   const tipo = new Map(candidatos.map((t) => [t.id, t.tipo]));

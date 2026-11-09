@@ -5,6 +5,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
   acharCabecalhoExtrato,
+  diferencaDoDia,
   lerOfx,
   lerPlanilhaExtrato,
   lerTextoExtratoPdf,
@@ -16,7 +17,7 @@ import {
   valorCelula,
 } from "../src/lib/extrato.ts";
 import { feriado, pascoa, proximoDiaUtil } from "../src/lib/feriados.ts";
-import { dataNoFluxo, filtrarPorConta, montarColunas, montarFluxo, type MovimentoFluxo, type SaldoConta } from "../src/lib/fluxo-caixa.ts";
+import { dataNoFluxo, filtrarPorConta, linhasConferenciaBanco, montarColunas, montarFluxo, type Fluxo, type MovimentoFluxo, type SaldoConta } from "../src/lib/fluxo-caixa.ts";
 
 const OFX = `OFXHEADER:100
 DATA:OFXSGML
@@ -317,4 +318,65 @@ test("saldo do banco em cada dia a partir do saldo informado", () => {
   // Fora do período do extrato: sem saldo do banco.
   assert.equal(saldoBancoNoDia(a, linhas, "2026-09-30"), null);
   assert.equal(saldoBancoNoDia(a, linhas, "2026-10-06"), null);
+});
+
+test("diferença do dia: pendente, título sem extrato, conciliação com data trocada e valor diferente", () => {
+  const dia = "2026-10-15";
+  const r = diferencaDoDia(
+    dia,
+    "c1",
+    [
+      // Pix recebido que falta no sistema.
+      { id: "l1", data: dia, descricao: "PIX AKL", valor: 311, situacao: "pendente", titulos: [] },
+      // Conciliada com título baixado no mesmo dia e mesmo valor: não entra.
+      { id: "l2", data: dia, descricao: "BOLETO", valor: -50, situacao: "conciliado", titulos: [{ id: "t2", tipo: "pagar", conta: "c1", data: dia, valor: -50 }] },
+      // Conciliada com título baixado no dia 16.
+      { id: "l3", data: dia, descricao: "TED", valor: -20, situacao: "conciliado", titulos: [{ id: "t3", tipo: "pagar", conta: "c1", data: "2026-10-16", valor: -20 }] },
+      // Conciliada no dia, mas o título tem juros que o banco não cobrou.
+      { id: "l4", data: dia, descricao: "DARF", valor: -100, situacao: "conciliado", titulos: [{ id: "t4", tipo: "pagar", conta: "c1", data: dia, valor: -103 }] },
+      // Transferência e ignorada não mexem na diferença.
+      { id: "l5", data: dia, descricao: "TRANSF", valor: 500, situacao: "transferencia", titulos: [] },
+      { id: "l6", data: dia, descricao: "REPETIDA", valor: 311, situacao: "ignorado", titulos: [] },
+    ],
+    [
+      { id: "t2", tipo: "pagar", descricao: "Boleto", pessoa: null, valor: -50, linhas: [dia] },
+      { id: "t4", tipo: "pagar", descricao: "DARF", pessoa: null, valor: -103, linhas: [dia] },
+      // Recebido no sistema sem linha do extrato.
+      { id: "t5", tipo: "receber", descricao: "Venda", pessoa: "Cliente", valor: 176, linhas: [] },
+      // Pago no dia 15 com a linha do extrato no dia 14.
+      { id: "t6", tipo: "pagar", descricao: "Luz", pessoa: null, valor: -30, linhas: ["2026-10-14"] },
+    ],
+  );
+  const por = Object.fromEntries(r.itens.map((i) => [i.linhaId ?? i.tituloId, i]));
+  assert.equal(por.l1.tipo, "pendente");
+  assert.equal(por.l1.valor, 311);
+  assert.equal(por.l2, undefined);
+  assert.equal(por.l3.tipo, "linha_outro_dia");
+  assert.equal(por.l3.outraData, "2026-10-16");
+  assert.equal(por.l3.valor, -20);
+  assert.equal(por.l4.tipo, "valor_diferente");
+  assert.equal(por.l4.valor, 3);
+  assert.equal(por.t5.tipo, "titulo_sem_extrato");
+  assert.equal(por.t5.valor, -176);
+  assert.equal(por.t5.descricao, "Cliente · Venda");
+  assert.equal(por.t6.tipo, "titulo_outro_dia");
+  assert.equal(por.t6.outraData, "2026-10-14");
+  assert.equal(por.t6.valor, 30);
+  assert.equal(r.itens.length, 5);
+  // Banco andou 311 − 50 − 20 − 100 = 141; sistema 176 − 50 − 103 − 30 = −7: diferença do dia 148.
+  assert.equal(r.total, 148);
+});
+
+test("diferença do fluxo leva ao dia em que apareceu", () => {
+  const dias = ["2026-10-13", "2026-10-14", "2026-10-15", "2026-10-16"];
+  const fluxo = {
+    colunas: dias.map((d) => ({ id: d, titulo: d, de: d, ate: d, hoje: false, previsto: false, fds: false, feriado: null })),
+    linhas: [{ chave: "saldo", tipo: "saldo", rotulo: "Saldo", valores: [10, 10, 165.28, 165.28], total: null }],
+    resumo: {} as Fluxo["resumo"],
+    previsoes: {},
+  } as Fluxo;
+  const banco: Record<string, number> = { "2026-10-13": 10, "2026-10-14": 10, "2026-10-15": 320.93, "2026-10-16": 320.93 };
+  const [, dif] = linhasConferenciaBanco(fluxo, (d) => banco[d] ?? null, "2026-11-09", (de, ate) => `${de}|${ate}`);
+  assert.deepEqual(dif.valores, [0, 0, 155.65, 155.65]);
+  assert.deepEqual(dif.links, [null, null, "2026-10-15|2026-10-15", "2026-10-15|2026-10-15"]);
 });
