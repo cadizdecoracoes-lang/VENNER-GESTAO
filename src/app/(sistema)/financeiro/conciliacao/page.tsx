@@ -5,9 +5,9 @@ import Link from "next/link";
 import { FormAcao } from "@/components/form-acao";
 import { CabecalhoTela, Celula, Etiqueta, LinkAcao, SemAcesso, Tabela, estiloBotao, estiloBotaoSecundario } from "@/components/ui";
 import { carregarAcesso, pode } from "@/lib/acesso";
-import { hojeBrasil } from "@/lib/datas";
+import { hojeBrasil, somarDias } from "@/lib/datas";
 import { carregarEmpresas, empresaSelecionada } from "@/lib/empresa";
-import { marcasDoGrupo, naturezaSemTitulo, possiveisRepetidas, sugerirAntecipacao, sugerirConciliacao } from "@/lib/extrato";
+import { diferencaDoDia, marcasDoGrupo, naturezaSemTitulo, possiveisRepetidas, sugerirAntecipacao, sugerirConciliacao, type ItemDiferenca } from "@/lib/extrato";
 import { formatarData, formatarMoeda } from "@/lib/formato";
 import {
   conciliar,
@@ -24,31 +24,34 @@ import {
   carregarConferencia,
   carregarContas,
   carregarImportacoes,
-  carregarIndicadores,
   carregarLinhas,
+  carregarMovimentoDoDia,
   carregarPendentes,
   carregarSaldoBanco,
   carregarSaldoSistema,
-  carregarTitulosSemExtrato,
   carregarVizinhas,
+  contarPendentesAntes,
   nomePessoa,
   type LinhaConciliacao,
-  type TituloSemExtrato,
 } from "./dados";
 import { PainelResolver } from "./painel-resolver";
 import { SeletorConta } from "./seletor-conta";
-import { SeletorMes } from "./seletor-mes";
+import { SeletorPeriodo } from "./seletor-periodo";
 import { TelaCliente } from "@/components/tela-cliente";
 
 const TELA = "financeiro.conciliacao";
-const variacao = (atual: number, antes: number) => `${atual >= antes ? "+" : ""}${Math.round(((atual - antes) / antes) * 100)}%`;
-type Filtros = { conta?: string; situacao?: string; mes?: string; ate?: string; linha?: string; importadas?: string; repetidas?: string; automaticas?: string };
-
-const SITUACOES = [
-  { valor: "pendente", rotulo: "Pendentes" },
-  { valor: "resolvido", rotulo: "Conciliadas" },
-  { valor: "todos", rotulo: "Todas" },
-];
+type Filtros = {
+  conta?: string;
+  situacao?: string;
+  dia?: string;
+  de?: string;
+  ate?: string;
+  tudo?: string;
+  linha?: string;
+  importadas?: string;
+  repetidas?: string;
+  automaticas?: string;
+};
 
 function Ligacoes({ linha }: { linha: LinhaConciliacao }) {
   if (linha.situacao === "transferencia") return <Etiqueta>Transferência entre contas</Etiqueta>;
@@ -72,85 +75,100 @@ function Ligacoes({ linha }: { linha: LinhaConciliacao }) {
   );
 }
 
-// Diferença entre o saldo do banco e o do sistema num dia, explicada:
-// pendentes do extrato (estão no banco, faltam no sistema) e títulos baixados
-// nesta conta sem linha do extrato (estão no sistema, faltam no banco). O que
-// sobra já vinha de antes do primeiro extrato importado (saldo inicial da
-// conta, títulos antigos) ou de linha ignorada.
-function ComposicaoDiferenca({
+const ROTULO_ITEM: Record<ItemDiferenca["tipo"], string> = {
+  pendente: "No banco, falta no sistema",
+  linha_outro_dia: "Conciliada com título baixado em outro dia",
+  valor_diferente: "Conciliada com valor diferente do título",
+  titulo_sem_extrato: "Baixado no sistema, não está no extrato",
+  titulo_outro_dia: "Baixado neste dia, mas a linha do extrato é de outro dia",
+};
+
+// O que fez a diferença (banco − sistema) mudar no dia, item por item. A
+// diferença que já vinha do dia anterior é de outro dia (link para ele).
+function DiferencaDoDia({
   dia,
   banco,
   sistema,
-  pendentes,
-  qtdPendentes,
-  semExtrato,
-  primeiroExtrato,
+  bancoAntes,
+  sistemaAntes,
+  itens,
+  linkDia,
 }: {
   dia: string;
   banco: number | null;
   sistema: number | null;
-  pendentes: number;
-  qtdPendentes: number;
-  semExtrato: TituloSemExtrato[];
-  primeiroExtrato: string | null;
+  bancoAntes: number | null;
+  sistemaAntes: number | null;
+  itens: ItemDiferenca[];
+  linkDia: (d: string) => string;
 }) {
-  if (banco === null || sistema === null)
-    return (
-      <p className="text-xs text-texto-suave">
-        Sem saldo do banco em {formatarData(dia)}: o extrato importado não traz saldo ou não cobre esse dia.
-      </p>
-    );
-  const diferenca = banco - sistema;
-  const somaSem = semExtrato.reduce((t, x) => t + x.valor, 0);
-  const resto = Math.round((diferenca - pendentes + somaSem) * 100) / 100;
   const cor = (v: number) => (Math.abs(v) < 0.005 ? "text-sucesso" : "text-perigo");
+  const fmt = (v: number) => (Math.abs(v) < 0.005 ? "ok" : formatarMoeda(v));
+  const diferenca = banco !== null && sistema !== null ? Math.round((banco - sistema) * 100) / 100 : null;
+  const antes = bancoAntes !== null && sistemaAntes !== null ? Math.round((bancoAntes - sistemaAntes) * 100) / 100 : null;
+  const variacao = diferenca !== null && antes !== null ? Math.round((diferenca - antes) * 100) / 100 : null;
+  const somaItens = Math.round(itens.reduce((s, i) => s + i.valor, 0) * 100) / 100;
+  const resto = variacao !== null ? Math.round((variacao - somaItens) * 100) / 100 : 0;
   return (
-    <details className="rounded-lg bg-superficie px-3 py-1.5 text-xs" open={semExtrato.length > 0 && semExtrato.length <= 30}>
-      <summary className="cursor-pointer">
-        Em {formatarData(dia)}: banco <strong className="tabular-nums">{formatarMoeda(banco)}</strong> − sistema{" "}
-        <strong className="tabular-nums">{formatarMoeda(sistema)}</strong> = <strong className={`tabular-nums ${cor(diferenca)}`}>{formatarMoeda(diferenca)}</strong>
-        {Math.abs(diferenca) >= 0.005 && (
-          <span className="text-texto-suave">
-            {" "}
-            · = pendentes do extrato até o dia <strong className="tabular-nums text-texto">{formatarMoeda(pendentes)}</strong> ({qtdPendentes}, na lista abaixo)
-            {semExtrato.length > 0 && (
-              <>
-                {" "}
-                − títulos baixados nesta conta sem extrato <strong className="tabular-nums text-texto">{formatarMoeda(somaSem)}</strong> ({semExtrato.length})
-              </>
-            )}
-            {Math.abs(resto) >= 0.005 && (
-              <>
-                {" "}
-                + de antes do 1º extrato{primeiroExtrato ? ` (${formatarData(primeiroExtrato)})` : ""}{" "}
-                <strong className={`tabular-nums ${cor(resto)}`}>{formatarMoeda(resto)}</strong>
-              </>
-            )}
-          </span>
-        )}
-      </summary>
-      {semExtrato.length > 0 && (
-        <ul className="mt-1 divide-y divide-borda/70">
-          {semExtrato.map((t) => (
-            <li key={t.id} className="flex gap-3 py-1">
-              <span className="tabular-nums text-texto-suave">{formatarData(t.data)}</span>
-              <LinkAcao href={`/financeiro/${t.tipo}`}>{t.tipo === "pagar" ? "Pago" : "Recebido"}</LinkAcao>
-              <span className="flex-1 truncate">
-                {t.pessoa ? `${t.pessoa} · ` : ""}
-                {t.descricao}
+    <section className="rounded-lg border border-borda bg-superficie px-3 py-2 text-sm">
+      <p className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
+        <strong>{formatarData(dia)}</strong>
+        {diferenca === null ? (
+          <span className="text-xs text-texto-suave">O extrato importado não tem saldo do banco neste dia.</span>
+        ) : (
+          <>
+            <span>
+              Banco <strong className="tabular-nums">{formatarMoeda(banco!)}</strong>
+            </span>
+            <span>
+              Sistema <strong className="tabular-nums">{formatarMoeda(sistema!)}</strong>
+            </span>
+            <span>
+              Diferença <strong className={`tabular-nums ${cor(diferenca)}`}>{fmt(diferenca)}</strong>
+            </span>
+            {antes !== null && Math.abs(antes) >= 0.005 && (
+              <span className="text-xs text-texto-suave">
+                {formatarMoeda(antes)} já vinha de antes ·{" "}
+                <LinkAcao href={linkDia(somarDias(dia, -1))}>ver dia anterior</LinkAcao>
               </span>
-              <span className={`tabular-nums ${t.valor < 0 ? "text-perigo" : "text-sucesso"}`}>{formatarMoeda(t.valor)}</span>
-            </li>
-          ))}
-        </ul>
+            )}
+          </>
+        )}
+      </p>
+      {itens.length === 0 && Math.abs(resto) < 0.005 ? (
+        <p className="mt-1 text-xs text-texto-suave">Neste dia banco e sistema andaram juntos: nada a resolver aqui.</p>
+      ) : (
+        <>
+          <p className="mt-1.5 text-xs text-texto-suave">
+            O que mudou a diferença neste dia{variacao !== null ? <> (<strong className={`tabular-nums ${cor(variacao)}`}>{formatarMoeda(variacao)}</strong>)</> : ""}:
+          </p>
+          <ul className="divide-y divide-borda/70">
+            {itens.map((i) => (
+              <li key={`${i.linhaId ?? ""}${i.tituloId ?? ""}${i.tipo}`} className="flex items-center gap-3 py-1 text-xs">
+                <span className="w-72 shrink-0 text-texto-suave">{ROTULO_ITEM[i.tipo]}</span>
+                <span className="min-w-0 flex-1 truncate" title={i.descricao}>
+                  {i.descricao}
+                </span>
+                {i.outraData && (
+                  <LinkAcao href={linkDia(i.outraData)}>{i.tipo === "linha_outro_dia" ? "título" : "extrato"} em {formatarData(i.outraData)}</LinkAcao>
+                )}
+                {i.tituloId && !i.outraData && i.tituloTipo && (
+                  <LinkAcao href={`/financeiro/${i.tituloTipo}?ver=${i.tituloId}`}>ver título</LinkAcao>
+                )}
+                <span className={`w-28 shrink-0 text-right tabular-nums font-medium ${i.valor < 0 ? "text-perigo" : "text-sucesso"}`}>{formatarMoeda(i.valor)}</span>
+              </li>
+            ))}
+            {Math.abs(resto) >= 0.005 && (
+              <li className="flex items-center gap-3 py-1 text-xs" title="Saldo inicial da conta lançado nesta data ou linha do extrato marcada como ignorada.">
+                <span className="w-72 shrink-0 text-texto-suave">Saldo inicial da conta ou linha ignorada</span>
+                <span className="flex-1" />
+                <span className="w-28 shrink-0 text-right tabular-nums font-medium">{formatarMoeda(resto)}</span>
+              </li>
+            )}
+          </ul>
+        </>
       )}
-      {Math.abs(resto) >= 0.005 && (
-        <p className="mt-1 text-texto-suave">
-          “De antes do 1º extrato”: diferença que já existia antes do primeiro extrato importado (saldo inicial da conta em Contas bancárias, ou títulos
-          baixados antes dele) ou linha do extrato marcada como ignorada.
-        </p>
-      )}
-    </details>
+    </section>
   );
 }
 
@@ -159,40 +177,41 @@ async function PaginaConciliacao({ searchParams }: { searchParams: Promise<Filtr
   if (!pode(acesso, TELA, "ver")) return <SemAcesso codigo={TELA} />;
   const filtros = await searchParams;
   const podeEditar = pode(acesso, TELA, "editar");
+  const hoje = hojeBrasil();
 
   const [empresas, selecionada] = await Promise.all([carregarEmpresas(), empresaSelecionada()]);
   const [contas, pendentes] = await Promise.all([carregarContas(selecionada?.id ?? null), carregarPendentes(selecionada?.id ?? null)]);
   const nomeEmpresa = new Map(empresas.map((e) => [e.id, e.nome]));
   const conta =
     contas.find((c) => c.id === filtros.conta) ?? contas.find((c) => pendentes.has(c.id)) ?? contas[0] ?? null;
-  // ?ate=AAAA-MM-DD (vem da diferença do fluxo de caixa): pendentes até o dia
-  // e a composição da diferença entre o saldo do banco e o do sistema.
-  const ateDia = /^\d{4}-\d{2}-\d{2}$/.test(filtros.ate ?? "") ? filtros.ate! : null;
-  const situacao = ateDia ? "pendente" : SITUACOES.some((s) => s.valor === filtros.situacao) ? filtros.situacao! : "pendente";
-  const mes = ateDia ? null : /^\d{4}-\d{2}$/.test(filtros.mes ?? "") ? filtros.mes! : null;
-  // Tudo o que não depende um do outro vai junto (antes era uma consulta atrás
-  // da outra, e cada clique num filtro esperava todas).
-  const [linhas, conferencia, importacoes, [indMes, indAnterior]] = conta
+
+  // Período: um dia (?dia=, vem da diferença do fluxo de caixa), um período
+  // (?de=&ate=) ou tudo (?tudo=1). Sem nada, do 1º dia do mês passado até hoje:
+  // a tela abre no que é recente, não no extrato antigo.
+  const data = (v?: string) => (/^\d{4}-\d{2}-\d{2}$/.test(v ?? "") ? v! : null);
+  const diaEscolhido = data(filtros.dia) ?? (data(filtros.ate) && !filtros.de ? data(filtros.ate) : null);
+  const modo: "dia" | "periodo" | "tudo" = diaEscolhido ? "dia" : filtros.tudo ? "tudo" : "periodo";
+  const padraoDe = `${somarDias(`${hoje.slice(0, 8)}01`, -1).slice(0, 8)}01`;
+  const periodoDe = data(filtros.de) ?? padraoDe;
+  const periodoAte = data(filtros.ate) ?? hoje;
+  const [de, ate] = modo === "dia" ? [diaEscolhido!, diaEscolhido!] : modo === "periodo" ? [periodoDe, periodoAte] : [null, null];
+  // O padrão é o que falta conciliar; as conciliadas ficam como consulta.
+  const situacao = filtros.situacao === "resolvido" ? "resolvido" : "pendente";
+
+  const [linhas, conferencia, importacoes, pendAntes, movimento, saldoBancoFn, sistemaDia, sistemaAntes] = conta
     ? await Promise.all([
-        carregarLinhas(conta.id, situacao, mes, ateDia),
+        carregarLinhas(conta.id, situacao, de, ate),
         carregarConferencia(conta),
         carregarImportacoes(conta.id),
-        carregarIndicadores(conta.id, mes ?? hojeBrasil().slice(0, 7)),
+        modo === "periodo" && situacao === "pendente" ? contarPendentesAntes(conta.id, periodoDe) : Promise.resolve(0),
+        modo === "dia" ? carregarMovimentoDoDia(conta.id, diaEscolhido!) : Promise.resolve(null),
+        modo === "dia" ? carregarSaldoBanco(conta.id, somarDias(diaEscolhido!, -1), diaEscolhido!) : Promise.resolve(null),
+        modo === "dia" ? carregarSaldoSistema(conta, diaEscolhido!) : Promise.resolve(null),
+        modo === "dia" ? carregarSaldoSistema(conta, somarDias(diaEscolhido!, -1)) : Promise.resolve(null),
       ])
-    : [[], null, [], [null, null]];
+    : [[], null, [], 0, null, null, null, null];
   const pend = linhas.filter((l) => l.situacao === "pendente");
-  // Composição da diferença no dia: banco − sistema = pendentes do extrato −
-  // títulos baixados aqui sem extrato + o que já vinha de antes do 1º extrato.
-  const primeiroExtrato = importacoes.map((i) => i.periodo_de).filter((d): d is string => !!d).sort()[0] ?? null;
-  const [saldoBancoFn, saldoSistema, semExtrato] =
-    ateDia && conta
-      ? await Promise.all([
-          carregarSaldoBanco(conta.id, ateDia, ateDia),
-          carregarSaldoSistema(conta, ateDia),
-          primeiroExtrato ? carregarTitulosSemExtrato(conta.id, primeiroExtrato, ateDia) : Promise.resolve([]),
-        ])
-      : [null, null, []];
-  const saldoBancoDia = saldoBancoFn ? saldoBancoFn(ateDia!) : null;
+  const doDia = movimento && conta ? diferencaDoDia(diaEscolhido!, conta.id, movimento.linhas, movimento.titulos) : null;
   const podeExcluir = pode(acesso, TELA, "excluir");
 
   // Títulos candidatos (mesmo valor e data próxima), as linhas vizinhas (para
@@ -221,21 +240,22 @@ async function PaginaConciliacao({ searchParams }: { searchParams: Promise<Filtr
     new Set([...sugestoes.values()].flatMap((x) => x.titulos)),
   );
 
+  // Endereço com os filtros atuais (conta, situação e período) mais `extra`.
+  const filtroPeriodo: Record<string, string | undefined> =
+    modo === "dia" ? { dia: diaEscolhido! } : modo === "tudo" ? { tudo: "1" } : filtros.de || filtros.ate ? { de: periodoDe, ate: periodoAte } : {};
   const base = (extra: Record<string, string | undefined>) => {
     const p = new URLSearchParams();
-    const tudo = { conta: conta?.id, situacao: situacao === "pendente" ? undefined : situacao, mes: mes ?? undefined, ate: ateDia ?? undefined, ...extra };
+    const tudo = { conta: conta?.id, situacao: situacao === "pendente" ? undefined : situacao, ...filtroPeriodo, ...extra };
     for (const [k, v] of Object.entries(tudo)) if (v) p.set(k, v);
     return `?${p.toString()}`;
   };
-  const pilula = (ativo: boolean) =>
-    `rounded-full px-2.5 py-0.5 text-sm transition-colors ${ativo ? "bg-primaria-suave font-medium text-primaria" : "text-texto-suave hover:bg-superficie hover:text-texto"}`;
+  const linkDia = (d: string) => `?${new URLSearchParams({ ...(conta ? { conta: conta.id } : {}), dia: d }).toString()}`;
   const somaPend = pend.reduce((s, l) => s + Number(l.valor), 0);
   const pares = [...sugestoes.entries()].map(([linha, s]) => ({
     linha,
     tipo: porId.get(s.titulos[0])?.tipo,
     titulos: s.titulos,
   }));
-  const hoje = hojeBrasil();
   // Linha sem título: transferência do grupo, tarifa, rendimento ou cobrança.
   const marcas = marcasDoGrupo(empresas.map((e) => e.nome));
   const natureza = new Map(
@@ -259,6 +279,7 @@ async function PaginaConciliacao({ searchParams }: { searchParams: Promise<Filtr
     });
     return `${destino}?${p.toString()}`;
   };
+  const totalPendConta = conta ? (pendentes.get(conta.id) ?? 0) : 0;
 
   return (
     <div className="space-y-3">
@@ -273,7 +294,7 @@ async function PaginaConciliacao({ searchParams }: { searchParams: Promise<Filtr
             }))}
             atual={conta?.id ?? null}
             parametros={Object.fromEntries(
-              Object.entries({ situacao: situacao === "pendente" ? undefined : situacao, mes: mes ?? undefined }).filter(
+              Object.entries({ situacao: situacao === "pendente" ? undefined : situacao, ...filtroPeriodo }).filter(
                 (x): x is [string, string] => !!x[1],
               ),
             )}
@@ -304,26 +325,53 @@ async function PaginaConciliacao({ searchParams }: { searchParams: Promise<Filtr
         </p>
       ) : (
         <>
-          {/* Filtros numa linha (situação e mês) e as ações em lote à direita. */}
-          <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-sm">
-            <span className="flex items-center gap-1">
-              {SITUACOES.map((s) => (
-                <Link key={s.valor} href={base({ situacao: s.valor === "pendente" ? undefined : s.valor, ate: undefined })} className={pilula(s.valor === situacao && !ateDia)}>
-                  {s.rotulo}
-                </Link>
-              ))}
-            </span>
-            {ateDia && (
-              <Link href={base({ ate: undefined })} className={pilula(true)} title="Pendentes até este dia (veio da diferença do fluxo de caixa). Clique para tirar.">
-                Até {formatarData(ateDia)} ✕
-              </Link>
-            )}
-            <SeletorMes
-              mes={mes}
+          {/* Filtros numa linha: período e o que mostrar; ações em lote à direita. */}
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
+            <SeletorPeriodo
+              modo={modo}
+              dia={diaEscolhido ?? hoje}
+              de={periodoDe}
+              ate={periodoAte}
               parametros={Object.fromEntries(
                 Object.entries({ conta: conta?.id, situacao: situacao === "pendente" ? undefined : situacao }).filter((x): x is [string, string] => !!x[1]),
               )}
             />
+            <span className="text-xs text-texto-suave">
+              {situacao === "pendente" ? (
+                <>
+                  <strong className="text-texto">{pend.length}</strong> a conciliar
+                  {pend.length > 0 && <span className="tabular-nums"> ({formatarMoeda(somaPend)})</span>}
+                  {modo !== "tudo" && totalPendConta > pend.length && (
+                    <>
+                      {" "}de {totalPendConta} na conta
+                      {pendAntes > 0 && (
+                        <>
+                          {" "}· {pendAntes} antes de {formatarData(periodoDe)} <LinkAcao href={base({ tudo: "1", dia: undefined, de: undefined, ate: undefined })}>ver tudo</LinkAcao>
+                        </>
+                      )}
+                    </>
+                  )}
+                  {" · "}
+                  <LinkAcao href={base({ situacao: "resolvido" })}>ver as já conciliadas</LinkAcao>
+                </>
+              ) : (
+                <>
+                  <strong className="text-texto">{linhas.length}</strong> já conciliada(s) ou resolvida(s) no período ·{" "}
+                  <LinkAcao href={base({ situacao: undefined })}>voltar para o que falta conciliar</LinkAcao>
+                </>
+              )}
+            </span>
+            {conferencia && conferencia.banco !== null && conferencia.sistema !== null && (
+              <span
+                className="text-xs text-texto-suave"
+                title={`Último extrato: ${conferencia.arquivo ?? "leitura do banco"}, importado em ${formatarData(conferencia.importadoEm)}. Sistema = saldo inicial da conta + recebidos − pagos + transferências até a mesma data.`}
+              >
+                Fim do último extrato ({formatarData(conferencia.ate)}): diferença{" "}
+                <strong className={`tabular-nums ${Math.abs(conferencia.banco - conferencia.sistema) > 0.009 ? "text-perigo" : "text-sucesso"}`}>
+                  {Math.abs(conferencia.banco - conferencia.sistema) > 0.009 ? formatarMoeda(conferencia.banco - conferencia.sistema) : "ok"}
+                </strong>
+              </span>
+            )}
             <span className="ml-auto flex flex-wrap items-center gap-2">
             {podeEditar && listaRepetidas.length > 1 && (
               <FormAcao
@@ -331,7 +379,7 @@ async function PaginaConciliacao({ searchParams }: { searchParams: Promise<Filtr
                 rotulo={`Tirar ${listaRepetidas.length} repetidas`}
                 enviando="Marcando..."
                 secundario
-                confirmar={`Marcar ${listaRepetidas.length} linha(s) como repetidas de outra importação? Elas saem da lista de pendentes (dá para desfazer em "Todas").`}
+                confirmar={`Marcar ${listaRepetidas.length} linha(s) como repetidas de outra importação? Elas saem da lista de pendentes (dá para desfazer em "ver as já conciliadas").`}
               >
                 <input type="hidden" name="linhas" value={JSON.stringify(listaRepetidas)} />
               </FormAcao>
@@ -355,59 +403,15 @@ async function PaginaConciliacao({ searchParams }: { searchParams: Promise<Filtr
             </span>
           </div>
 
-          {/* Resumo em texto pequeno: pendentes, saldo do banco x sistema e o mês. */}
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-texto-suave">
-            <span>
-              Pendentes na conta: <strong className="tabular-nums text-texto">{conta ? (pendentes.get(conta.id) ?? 0) : 0}</strong>
-              {situacao === "pendente" && pend.length > 0 && <span className="tabular-nums"> ({formatarMoeda(somaPend)} neste filtro)</span>}
-            </span>
-            {conferencia && (
-              <span
-                title={`Último extrato: ${conferencia.arquivo ?? "leitura do banco"}, importado em ${formatarData(conferencia.importadoEm)}. Sistema = saldo inicial da conta + recebidos − pagos + transferências até a mesma data.`}
-              >
-                Saldo em {formatarData(conferencia.ate)}: banco{" "}
-                <strong className="tabular-nums text-texto">{conferencia.banco === null ? "—" : formatarMoeda(conferencia.banco)}</strong> · sistema{" "}
-                <strong className="tabular-nums text-texto">{conferencia.sistema === null ? "—" : formatarMoeda(conferencia.sistema)}</strong>
-                {conferencia.banco !== null && conferencia.sistema !== null && (
-                  <>
-                    {" "}· diferença{" "}
-                    <strong className={`tabular-nums ${Math.abs(conferencia.banco - conferencia.sistema) > 0.009 ? "text-perigo" : "text-sucesso"}`}>
-                      {formatarMoeda(conferencia.banco - conferencia.sistema)}
-                    </strong>
-                  </>
-                )}
-              </span>
-            )}
-            {indMes && indAnterior && (
-              <span
-                title={[
-                  `Linhas do extrato desta conta em ${indMes.mes.slice(5)}/${indMes.mes.slice(0, 4)}, pela data do lançamento.`,
-                  indAnterior.linhas > 0
-                    ? `Mês anterior: ${indAnterior.linhas} linha(s), ${Math.round((indAnterior.resolvidas / indAnterior.linhas) * 100)}% conciliadas.`
-                    : "",
-                  indAnterior.entradas > 0 ? `Entradas ${variacao(indMes.entradas, indAnterior.entradas)} vs ${formatarMoeda(indAnterior.entradas)} no mês anterior.` : "",
-                  indAnterior.saidas > 0 ? `Saídas ${variacao(indMes.saidas, indAnterior.saidas)} vs ${formatarMoeda(indAnterior.saidas)} no mês anterior.` : "",
-                ]
-                  .filter(Boolean)
-                  .join(" ")}
-              >
-                {indMes.mes.slice(5)}/{indMes.mes.slice(0, 4)}: <strong className="text-texto">{indMes.linhas}</strong> linha(s),{" "}
-                <strong className="text-texto">{indMes.linhas ? Math.round((indMes.resolvidas / indMes.linhas) * 100) : 0}%</strong> conciliadas · entradas{" "}
-                <strong className="tabular-nums text-sucesso">{formatarMoeda(indMes.entradas)}</strong> · saídas{" "}
-                <strong className="tabular-nums text-perigo">{formatarMoeda(indMes.saidas)}</strong>
-              </span>
-            )}
-          </div>
-
-          {ateDia && (
-            <ComposicaoDiferenca
-              dia={ateDia}
-              banco={saldoBancoDia}
-              sistema={saldoSistema}
-              pendentes={pend.reduce((t, l) => t + Number(l.valor), 0)}
-              qtdPendentes={pend.length}
-              semExtrato={semExtrato}
-              primeiroExtrato={primeiroExtrato}
+          {modo === "dia" && doDia && (
+            <DiferencaDoDia
+              dia={diaEscolhido!}
+              banco={saldoBancoFn ? saldoBancoFn(diaEscolhido!) : null}
+              sistema={sistemaDia}
+              bancoAntes={saldoBancoFn ? saldoBancoFn(somarDias(diaEscolhido!, -1)) : null}
+              sistemaAntes={sistemaAntes}
+              itens={doDia.itens}
+              linkDia={linkDia}
             />
           )}
 
@@ -454,12 +458,12 @@ async function PaginaConciliacao({ searchParams }: { searchParams: Promise<Filtr
             colunas={["Data", "Lançamento do extrato", "Valor", "Saldo", "Conciliação", ""]}
             vazio={
               situacao === "pendente"
-                ? !pendentes.get(conta?.id ?? "")
-                  ? "Nada pendente nesta conta. Importe o extrato mais recente para continuar."
-                  : mes
-                    ? `Nada pendente em ${mes.slice(5)}/${mes.slice(0, 4)}. Há ${pendentes.get(conta?.id ?? "")} pendente(s) em outros meses: clique em “ver todos os meses”.`
-                    : "Nada pendente."
-                : "Nenhum lançamento neste filtro."
+                ? !totalPendConta
+                  ? "Nada a conciliar nesta conta. Importe o extrato mais recente para continuar."
+                  : modo === "dia"
+                    ? "Nada a conciliar neste dia."
+                    : "Nada a conciliar neste período."
+                : "Nada conciliado neste período."
             }
           >
             {linhas.map((l) => {
@@ -472,9 +476,11 @@ async function PaginaConciliacao({ searchParams }: { searchParams: Promise<Filtr
               return (
                 <tr key={l.id} className={l.id === resolvendo?.id ? "bg-primaria-suave/50" : ""}>
                   <Celula className="whitespace-nowrap tabular-nums">{formatarData(l.data)}</Celula>
-                  <Celula>
-                    <span className="font-medium">{l.descricao}</span>
-                    {l.documento && <span className="text-xs text-texto-suave"> · doc {l.documento}</span>}
+                  <Celula className="max-w-md">
+                    <span className="block truncate" title={`${l.descricao}${l.documento ? ` · doc ${l.documento}` : ""}`}>
+                      <span className="font-medium">{l.descricao}</span>
+                      {l.documento && <span className="text-xs text-texto-suave"> · doc {l.documento}</span>}
+                    </span>
                   </Celula>
                   <Celula className={`whitespace-nowrap text-right tabular-nums font-medium ${valor < 0 ? "text-perigo" : "text-sucesso"}`}>
                     {formatarMoeda(valor)}

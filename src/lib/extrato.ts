@@ -418,6 +418,78 @@ export function saldoBancoNoDia(ancora: AncoraSaldo, linhas: { data: string; val
 }
 
 // ---------------------------------------------------------------------------
+// O que mudou a diferença (banco − sistema) num dia
+// ---------------------------------------------------------------------------
+// No dia, o banco anda pelas linhas do extrato (menos as ignoradas) e o
+// sistema pelos títulos baixados nesta conta naquele dia (mais as linhas
+// marcadas como transferência, que entram dos dois lados). A diferença do dia
+// é a soma destes itens:
+// - linha pendente: está no banco e falta no sistema;
+// - linha conciliada cujo título foi baixado noutro dia (ou noutra conta), ou
+//   com valor diferente do título;
+// - título baixado no dia sem linha do extrato no mesmo dia: está no sistema e
+//   falta no banco (ou a linha é de outro dia).
+export type TituloDaLinha = { id: string; tipo: "pagar" | "receber"; conta: string | null; data: string | null; valor: number };
+export type LinhaDoDia = {
+  id: string;
+  data: string;
+  descricao: string;
+  valor: number;
+  situacao: string;
+  titulos: TituloDaLinha[];
+};
+// Valor com sinal (pagar negativo); `linhas` = datas das linhas do extrato ligadas a ele.
+export type TituloDoDia = { id: string; tipo: "pagar" | "receber"; descricao: string; pessoa: string | null; valor: number; linhas: string[] };
+export type ItemDiferenca = {
+  tipo: "pendente" | "linha_outro_dia" | "valor_diferente" | "titulo_sem_extrato" | "titulo_outro_dia";
+  descricao: string;
+  valor: number;
+  // Data do outro lado (título baixado em / linha do extrato em), quando houver.
+  outraData: string | null;
+  linhaId: string | null;
+  tituloId: string | null;
+  tituloTipo: "pagar" | "receber" | null;
+};
+
+export function diferencaDoDia(dia: string, conta: string, linhas: LinhaDoDia[], titulos: TituloDoDia[]): { itens: ItemDiferenca[]; total: number } {
+  const itens: ItemDiferenca[] = [];
+  for (const l of linhas) {
+    if (l.data !== dia || l.situacao === "ignorado" || l.situacao === "transferencia") continue;
+    const valor = Number(l.valor);
+    const base = { descricao: l.descricao, linhaId: l.id, tituloId: null, tituloTipo: null };
+    if (l.situacao === "pendente") {
+      itens.push({ tipo: "pendente", valor: arred2(valor), outraData: null, ...base });
+      continue;
+    }
+    const noDia = l.titulos.filter((t) => t.conta === conta && t.data === dia);
+    const sobra = arred2(valor - noDia.reduce((s, t) => s + t.valor, 0));
+    if (Math.abs(sobra) < 0.005) continue;
+    const fora = l.titulos.find((t) => !(t.conta === conta && t.data === dia));
+    itens.push({
+      tipo: noDia.length ? "valor_diferente" : "linha_outro_dia",
+      valor: sobra,
+      outraData: fora?.data ?? null,
+      ...base,
+      tituloId: fora?.id ?? noDia[0]?.id ?? null,
+      tituloTipo: fora?.tipo ?? noDia[0]?.tipo ?? null,
+    });
+  }
+  for (const t of titulos) {
+    if (t.linhas.includes(dia)) continue;
+    itens.push({
+      tipo: t.linhas.length ? "titulo_outro_dia" : "titulo_sem_extrato",
+      descricao: `${t.pessoa ? `${t.pessoa} · ` : ""}${t.descricao}`,
+      valor: arred2(-t.valor),
+      outraData: t.linhas[0] ?? null,
+      linhaId: null,
+      tituloId: t.id,
+      tituloTipo: t.tipo,
+    });
+  }
+  return { itens, total: arred2(itens.reduce((s, i) => s + i.valor, 0)) };
+}
+
+// ---------------------------------------------------------------------------
 // Lançamento repetido com a data trocada
 // ---------------------------------------------------------------------------
 // O banco já tira o repetido de mesma data e mesmo valor vindo de outra

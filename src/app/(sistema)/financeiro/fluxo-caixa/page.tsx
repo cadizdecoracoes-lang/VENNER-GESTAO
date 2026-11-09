@@ -98,7 +98,10 @@ async function PaginaFluxoCaixa({ searchParams }: { searchParams: Promise<{ modo
     const saldoBanco = await carregarSaldoBanco(conta.conta_bancaria_id, de, ate).catch(() => null);
     if (saldoBanco)
       fluxo.linhas.push(
-        ...linhasConferenciaBanco(fluxo, saldoBanco, hoje, (dia) => `/financeiro/conciliacao?conta=${conta.conta_bancaria_id}&ate=${dia}`),
+        ...linhasConferenciaBanco(fluxo, saldoBanco, hoje, (d, a) =>
+          d === a
+            ? `/financeiro/conciliacao?conta=${conta.conta_bancaria_id}&dia=${d}`
+            : `/financeiro/conciliacao?conta=${conta.conta_bancaria_id}&de=${d}&ate=${a}`),
       );
   }
   const r = fluxo.resumo;

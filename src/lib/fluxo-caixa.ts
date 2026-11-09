@@ -384,7 +384,8 @@ export function linhasConferenciaBanco(
   fluxo: Fluxo,
   saldoBanco: (dia: string) => number | null,
   hoje: string,
-  linkDiferenca: (dia: string) => string,
+  // Endereço da conciliação: um dia (fluxo diário) ou o período da coluna (12 meses).
+  linkDiferenca: (de: string, ate: string) => string,
 ): LinhaFluxo[] {
   const sistema = fluxo.linhas.find((l) => l.tipo === "saldo");
   if (!sistema) return [];
@@ -408,8 +409,16 @@ export function linhasConferenciaBanco(
       valores: diferenca,
       total: ultimo(diferenca),
       centavos: true,
-      links: fluxo.colunas.map((c, k) => (diferenca[k] !== null && Math.abs(diferenca[k]!) >= 0.01 ? linkDiferenca(c.ate) : null)),
-      dica: "Clique numa diferença para ver na conciliação o que a compõe até aquele dia.",
+      links: fluxo.colunas.map((c, k) => {
+        if (diferenca[k] === null || Math.abs(diferenca[k]!) < 0.01) return null;
+        if (c.de !== c.ate) return linkDiferenca(c.de, c.ate);
+        // Diário: leva ao dia em que a diferença apareceu ou mudou (nos dias
+        // seguintes ela só se repete).
+        let j = k;
+        while (j > 0 && diferenca[j - 1] !== null && Math.abs(diferenca[j - 1]! - diferenca[k]!) < 0.005) j--;
+        return linkDiferenca(fluxo.colunas[j].ate, fluxo.colunas[j].ate);
+      }),
+      dica: "Clique numa diferença para abrir a conciliação no dia em que ela apareceu, com o que a compõe.",
     },
   ];
 }
