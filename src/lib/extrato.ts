@@ -597,9 +597,9 @@ export function naturezaSemTitulo(descricao: string, valor: number, marcas: stri
   const palavrasLinha = new Set(d.split(/[^a-z0-9]+/));
   const doGrupo = marcas.find((m) => palavrasLinha.has(m));
   if (doGrupo && /(pix|transf|ted|doc|des:|rem:)/.test(d))
-    return { tipo: "transferencia", dica: `Transferência entre empresas do grupo (${doGrupo.toUpperCase()}): não tem título a pagar` };
+    return { tipo: "transferencia", dica: `Transferência entre contas do grupo (${doGrupo.toUpperCase()}): “Lançar transferência” cria o título já baixado` };
   if (ehAplicacaoAutomatica(descricao) || /(aplic|resg)\.? ?(invest|aut)/.test(d))
-    return { tipo: "aplicacao", dica: "Aplicação/resgate automático do banco: não tem título" };
+    return { tipo: "aplicacao", dica: "Aplicação/resgate automático do banco: “Lançar transferência” cria o título já baixado" };
   if (/(rentab|rendimento|rend pago|remuneracao)/.test(d)) return { tipo: "rendimento", dica: "Rendimento da aplicação: criar título no contas a receber" };
   if (valor < 0 && /(tarifa|tar\b|encargos|juros|iof|cesta|mensalidade|manutencao conta|seguro conta)/.test(d))
     return { tipo: "tarifa", dica: "Tarifa ou juros do banco: criar título no contas a pagar" };

@@ -56,7 +56,7 @@ type Filtros = {
 };
 
 function Ligacoes({ linha }: { linha: LinhaConciliacao }) {
-  if (linha.situacao === "transferencia") return <Etiqueta>Transferência entre contas</Etiqueta>;
+  if (linha.situacao === "transferencia") return <Etiqueta cor="alerta">Transferência sem título</Etiqueta>;
   if (linha.situacao === "ignorado")
     return (
       <span className="text-xs text-texto-suave">
@@ -323,6 +323,8 @@ async function PaginaConciliacao({ searchParams }: { searchParams: Promise<Filtr
   );
   const listaRepetidas = pend.filter((l) => repetidas.has(l.id)).map((l) => l.id);
   const transferencias = [...natureza].filter(([, n]) => n.tipo === "transferencia").map(([id]) => id);
+  // Marcadas como transferência antes da regra de 09/11/2026 (sem título).
+  const antigas = linhas.filter((l) => l.situacao === "transferencia").map((l) => l.id);
   // Atalho para criar o título que falta, já preenchido; depois de salvar volta para a linha.
   const linkCriar = (l: LinhaConciliacao) => {
     const destino = Number(l.valor) < 0 ? "/financeiro/pagar" : "/financeiro/receber";
@@ -444,12 +446,23 @@ async function PaginaConciliacao({ searchParams }: { searchParams: Promise<Filtr
             {podeEditar && transferencias.length > 1 && (
               <FormAcao
                 acao={marcarTransferencias}
-                rotulo={`Marcar ${transferencias.length} transferências do grupo`}
-                enviando="Marcando..."
+                rotulo={`Lançar ${transferencias.length} transferências`}
+                enviando="Lançando..."
                 secundario
-                confirmar={`Marcar ${transferencias.length} linha(s) como transferência entre empresas do grupo? Elas saem da lista de pendentes.`}
+                confirmar={`Lançar ${transferencias.length} linha(s) como transferência entre contas? Cada uma vira um título já baixado (saída no contas a pagar, entrada no contas a receber) e fica conciliada.`}
               >
                 <input type="hidden" name="linhas" value={JSON.stringify(transferencias)} />
+              </FormAcao>
+            )}
+            {podeEditar && antigas.length > 0 && (
+              <FormAcao
+                acao={marcarTransferencias}
+                rotulo={`Lançar ${antigas.length} transferências antigas como título`}
+                enviando="Lançando..."
+                secundario
+                confirmar={`${antigas.length} linha(s) foram marcadas como transferência sem título. Lançar cada uma como título já baixado (saída no contas a pagar, entrada no contas a receber)?`}
+              >
+                <input type="hidden" name="linhas" value={JSON.stringify(antigas)} />
               </FormAcao>
             )}
             {podeEditar && pares.length > 1 && (
@@ -593,14 +606,22 @@ async function PaginaConciliacao({ searchParams }: { searchParams: Promise<Filtr
                                 discreto
                               />
                             )}
-                            {!titulo && natureza.get(l.id)?.tipo === "transferencia" && (
-                              <FormAcao acao={marcarTransferencia.bind(null, l.id)} rotulo="É transferência" enviando="..." discreto />
+                            {!titulo && ["transferencia", "aplicacao"].includes(natureza.get(l.id)?.tipo ?? "") && (
+                              <FormAcao acao={marcarTransferencia.bind(null, l.id)} rotulo="Lançar transferência" enviando="..." discreto />
                             )}
                             {!titulo && !repetida && !ant && !["transferencia", "aplicacao"].includes(natureza.get(l.id)?.tipo ?? "") && (
                               <LinkAcao href={linkCriar(l)}>Criar título</LinkAcao>
                             )}
                             <LinkAcao href={base({ linha: l.id })}>{titulo ? "Outro" : "Escolher"}</LinkAcao>
                           </>
+                        ) : l.situacao === "transferencia" ? (
+                          <FormAcao
+                            acao={marcarTransferencia.bind(null, l.id)}
+                            rotulo="Lançar como título"
+                            enviando="..."
+                            discreto
+                            confirmar="Marcada como transferência antes da regra nova. Lançar como título já baixado (saída no contas a pagar, entrada no contas a receber)?"
+                          />
                         ) : (
                           <FormAcao
                             acao={desfazer.bind(null, l.id)}

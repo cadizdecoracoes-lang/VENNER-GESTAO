@@ -58,8 +58,13 @@ select pg_temp.esperar(
   (select bool_and(coalesce(p.situacao::text, r.situacao::text) = 'aberto'
      and coalesce(p.data_pagamento, r.data_recebimento) is null)
    from baixados b left join contas_pagar p on p.id = b.id left join contas_receber r on r.id = b.id
-   where b.efeito = 'baixou'),
+   where b.efeito = 'baixou' and coalesce(p.observacao, r.observacao, '') not like 'Transferência lançada pela conciliação%'),
   'títulos baixados pela conciliação voltam a ficar em aberto');
+-- O título da transferência (teste 98) só existia pela linha: é cancelado.
+select pg_temp.esperar(
+  (select bool_and(p.situacao = 'cancelado') from baixados b join contas_pagar p on p.id = b.id
+   where p.observacao like 'Transferência lançada pela conciliação%'),
+  'título da transferência é cancelado junto com a importação');
 select pg_temp.esperar_erro(
   $$select excluir_importacao_extrato(current_setting('teste.importacao')::uuid)$$,
   'não encontrada', 'excluir de novo avisa que não existe');
