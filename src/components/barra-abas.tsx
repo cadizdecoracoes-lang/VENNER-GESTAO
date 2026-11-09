@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { X } from "lucide-react";
+import { ultimoEndereco } from "@/lib/ultimo-endereco";
 import { useAbas } from "./abas";
 
 export function BarraAbas() {
@@ -18,7 +19,7 @@ export function BarraAbas() {
               eAtiva ? "border-borda bg-fundo font-medium text-texto" : "border-transparent text-texto-suave hover:bg-fundo/60"
             }`}
           >
-            <Link href={aba.href} className="min-w-0 max-w-44 truncate" title={aba.titulo}>
+            <Link href={eAtiva ? aba.href : ultimoEndereco(aba.href)} className="min-w-0 max-w-44 truncate" title={aba.titulo}>
               {aba.titulo}
             </Link>
             <button
