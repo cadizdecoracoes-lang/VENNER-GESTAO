@@ -7,9 +7,18 @@ import { CabecalhoTela, Celula, Etiqueta, LinkAcao, SemAcesso, Tabela, estiloBot
 import { carregarAcesso, pode } from "@/lib/acesso";
 import { hojeBrasil } from "@/lib/datas";
 import { carregarEmpresas, empresaSelecionada } from "@/lib/empresa";
-import { marcasDoGrupo, naturezaSemTitulo, sugerirConciliacao, type TituloCandidato } from "@/lib/extrato";
+import { marcasDoGrupo, naturezaSemTitulo, possiveisRepetidas, sugerirAntecipacao, sugerirConciliacao } from "@/lib/extrato";
 import { formatarData, formatarMoeda } from "@/lib/formato";
-import { conciliar, conciliarSugestoes, desfazer, excluirImportacao, marcarTransferencia, marcarTransferencias } from "./actions";
+import {
+  conciliar,
+  conciliarSugestoes,
+  desfazer,
+  excluirImportacao,
+  marcarRepetida,
+  marcarRepetidas,
+  marcarTransferencia,
+  marcarTransferencias,
+} from "./actions";
 import {
   carregarCandidatos,
   carregarConferencia,
@@ -18,6 +27,7 @@ import {
   carregarIndicadores,
   carregarLinhas,
   carregarPendentes,
+  carregarVizinhas,
   nomePessoa,
   type LinhaConciliacao,
 } from "./dados";
@@ -71,24 +81,44 @@ async function PaginaConciliacao({ searchParams }: { searchParams: Promise<Filtr
     contas.find((c) => c.id === filtros.conta) ?? contas.find((c) => pendentes.has(c.id)) ?? contas[0] ?? null;
   const situacao = SITUACOES.some((s) => s.valor === filtros.situacao) ? filtros.situacao! : "pendente";
   const mes = /^\d{4}-\d{2}$/.test(filtros.mes ?? "") ? filtros.mes! : null;
-  const linhas = conta ? await carregarLinhas(conta.id, situacao, mes) : [];
+  // Tudo o que não depende um do outro vai junto (antes era uma consulta atrás
+  // da outra, e cada clique num filtro esperava todas).
+  const [linhas, conferencia, importacoes, [indMes, indAnterior]] = conta
+    ? await Promise.all([
+        carregarLinhas(conta.id, situacao, mes),
+        carregarConferencia(conta),
+        carregarImportacoes(conta.id),
+        carregarIndicadores(conta.id, mes ?? hojeBrasil().slice(0, 7)),
+      ])
+    : [[], null, [], [null, null]];
   const pend = linhas.filter((l) => l.situacao === "pendente");
-
-  // Sugestões para as pendentes (mesmo valor e data próxima).
-  let candidatos: TituloCandidato[] = [];
-  if (conta && pend.length) {
-    candidatos = await carregarCandidatos(conta, pend[0].data, pend[pend.length - 1].data);
-  }
-  const sugestoes = sugerirConciliacao(pend, candidatos);
-  const porId = new Map(candidatos.map((t) => [t.id, t]));
-  const conferencia = conta ? await carregarConferencia(conta) : null;
   const podeExcluir = pode(acesso, TELA, "excluir");
-  const importacoes = conta ? await carregarImportacoes(conta.id) : [];
-  const [indMes, indAnterior] = conta ? await carregarIndicadores(conta.id, mes ?? hojeBrasil().slice(0, 7)) : [null, null];
 
-  // Painel de resolver uma linha: candidatos mais amplos (30 dias).
+  // Títulos candidatos (mesmo valor e data próxima), as linhas vizinhas (para
+  // achar repetidas) e, no painel de resolver uma linha, candidatos mais amplos.
   const resolvendo = filtros.linha ? pend.find((l) => l.id === filtros.linha) : undefined;
-  const amplos = resolvendo && conta && podeEditar ? await carregarCandidatos(conta, resolvendo.data, resolvendo.data, 45, 30) : [];
+  const [candidatos, vizinhas, amplos] =
+    conta && pend.length
+      ? await Promise.all([
+          carregarCandidatos(conta, pend[0].data, pend[pend.length - 1].data),
+          carregarVizinhas(conta.id, pend[0].data, pend[pend.length - 1].data),
+          resolvendo && podeEditar ? carregarCandidatos(conta, resolvendo.data, resolvendo.data, 45, 30) : Promise.resolve([]),
+        ])
+      : [[], [], []];
+  // Mesmo lançamento trazido por outra importação com a data trocada: a tela
+  // aponta antes de sugerir título (conciliar as duas cópias baixaria em dobro).
+  const repetidas = possiveisRepetidas(vizinhas, importacoes);
+  const sugestoes = sugerirConciliacao(
+    pend.filter((l) => !repetidas.has(l.id)),
+    candidatos,
+  );
+  const porId = new Map(candidatos.map((t) => [t.id, t]));
+  // Entrada sem título de mesmo valor: pode ser antecipação (a receber − juros a pagar).
+  const antecipacoes = sugerirAntecipacao(
+    pend.filter((l) => !repetidas.has(l.id) && !sugestoes.has(l.id)),
+    candidatos,
+    new Set([...sugestoes.values()].flatMap((x) => x.titulos)),
+  );
 
   const base = (extra: Record<string, string | undefined>) => {
     const p = new URLSearchParams();
@@ -108,11 +138,12 @@ async function PaginaConciliacao({ searchParams }: { searchParams: Promise<Filtr
   // Linha sem título: transferência do grupo, tarifa, rendimento ou cobrança.
   const marcas = marcasDoGrupo(empresas.map((e) => e.nome));
   const natureza = new Map(
-    pend.filter((l) => !sugestoes.has(l.id)).flatMap((l) => {
+    pend.filter((l) => !sugestoes.has(l.id) && !repetidas.has(l.id) && !antecipacoes.has(l.id)).flatMap((l) => {
       const n = naturezaSemTitulo(l.descricao, Number(l.valor), marcas);
       return n ? [[l.id, n] as const] : [];
     }),
   );
+  const listaRepetidas = pend.filter((l) => repetidas.has(l.id)).map((l) => l.id);
   const transferencias = [...natureza].filter(([, n]) => n.tipo === "transferencia").map(([id]) => id);
   // Atalho para criar o título que falta, já preenchido; depois de salvar volta para a linha.
   const linkCriar = (l: LinhaConciliacao) => {
@@ -140,6 +171,11 @@ async function PaginaConciliacao({ searchParams }: { searchParams: Promise<Filtr
               pendentes: pendentes.get(c.id) ?? 0,
             }))}
             atual={conta?.id ?? null}
+            parametros={Object.fromEntries(
+              Object.entries({ situacao: situacao === "pendente" ? undefined : situacao, mes: mes ?? undefined }).filter(
+                (x): x is [string, string] => !!x[1],
+              ),
+            )}
           />
         )}
         <Link href="/financeiro/conciliacao/importar#banco" className={estiloBotaoSecundario}>
@@ -183,6 +219,17 @@ async function PaginaConciliacao({ searchParams }: { searchParams: Promise<Filtr
               )}
             />
             <span className="ml-auto flex flex-wrap items-center gap-2">
+            {podeEditar && listaRepetidas.length > 1 && (
+              <FormAcao
+                acao={marcarRepetidas}
+                rotulo={`Tirar ${listaRepetidas.length} repetidas`}
+                enviando="Marcando..."
+                secundario
+                confirmar={`Marcar ${listaRepetidas.length} linha(s) como repetidas de outra importação? Elas saem da lista de pendentes (dá para desfazer em "Todas").`}
+              >
+                <input type="hidden" name="linhas" value={JSON.stringify(listaRepetidas)} />
+              </FormAcao>
+            )}
             {podeEditar && transferencias.length > 1 && (
               <FormAcao
                 acao={marcarTransferencias}
@@ -279,7 +326,7 @@ async function PaginaConciliacao({ searchParams }: { searchParams: Promise<Filtr
           {resolvendo && conta && podeEditar && (
             <PainelResolver
               linha={resolvendo}
-              candidatos={amplos.filter((t) => t.tipo === (Number(resolvendo.valor) < 0 ? "pagar" : "receber"))}
+              candidatos={amplos}
               linkCriar={linkCriar(resolvendo)}
               voltar={base({})}
             />
@@ -298,8 +345,11 @@ async function PaginaConciliacao({ searchParams }: { searchParams: Promise<Filtr
             }
           >
             {linhas.map((l) => {
+              const repetida = l.situacao === "pendente" ? repetidas.get(l.id) : undefined;
               const s = sugestoes.get(l.id);
               const titulo = s ? porId.get(s.titulos[0]) : undefined;
+              const ant = l.situacao === "pendente" ? antecipacoes.get(l.id) : undefined;
+              const [antR, antP] = ant ? [porId.get(ant.titulos[0])!, porId.get(ant.titulos[1])!] : [];
               const valor = Number(l.valor);
               return (
                 <tr key={l.id} className={l.id === resolvendo?.id ? "bg-primaria-suave/50" : ""}>
@@ -315,6 +365,19 @@ async function PaginaConciliacao({ searchParams }: { searchParams: Promise<Filtr
                   <Celula>
                     {l.situacao !== "pendente" ? (
                       <Ligacoes linha={l} />
+                    ) : repetida ? (
+                      <span
+                        className="text-xs text-alerta"
+                        title="Outra importação desta conta tem o mesmo valor num dia vizinho e não tem este dia: costuma ser o mesmo lançamento com a data trocada (data da operação x data do lançamento). Confira antes de marcar."
+                      >
+                        Parece repetida: mesmo valor em {formatarData(repetida.data)} noutra importação{repetida.resolvida ? " (já resolvida)" : ""}
+                      </span>
+                    ) : antR && antP ? (
+                      <span className="text-xs" title={ant!.motivo}>
+                        <Etiqueta cor="primaria">Antecipação</Etiqueta> {antR.pessoa ? `${antR.pessoa} · ` : ""}
+                        {antR.descricao} {formatarMoeda(antR.valor)} − {antP.pessoa ? `${antP.pessoa} · ` : ""}
+                        {antP.descricao} {formatarMoeda(antP.valor)}
+                      </span>
                     ) : titulo ? (
                       <span className="text-xs" title={s!.motivo}>
                         <Etiqueta cor="primaria">Sugestão</Etiqueta> {titulo.pessoa ? `${titulo.pessoa} · ` : ""}
@@ -333,6 +396,12 @@ async function PaginaConciliacao({ searchParams }: { searchParams: Promise<Filtr
                       <div className="flex items-center justify-end gap-3">
                         {l.situacao === "pendente" ? (
                           <>
+                            {repetida && (
+                              <FormAcao acao={marcarRepetida.bind(null, l.id)} rotulo="É repetida" enviando="..." discreto />
+                            )}
+                            {antR && antP && (
+                              <FormAcao acao={conciliar.bind(null, l.id, [antP.id], [antR.id])} rotulo="Conciliar" enviando="..." discreto />
+                            )}
                             {titulo && (
                               <FormAcao
                                 acao={conciliar.bind(null, l.id, titulo.tipo === "pagar" ? [titulo.id] : [], titulo.tipo === "receber" ? [titulo.id] : [])}
@@ -344,7 +413,7 @@ async function PaginaConciliacao({ searchParams }: { searchParams: Promise<Filtr
                             {!titulo && natureza.get(l.id)?.tipo === "transferencia" && (
                               <FormAcao acao={marcarTransferencia.bind(null, l.id)} rotulo="É transferência" enviando="..." discreto />
                             )}
-                            {!titulo && !["transferencia", "aplicacao"].includes(natureza.get(l.id)?.tipo ?? "") && (
+                            {!titulo && !repetida && !ant && !["transferencia", "aplicacao"].includes(natureza.get(l.id)?.tipo ?? "") && (
                               <LinkAcao href={linkCriar(l)}>Criar título</LinkAcao>
                             )}
                             <LinkAcao href={base({ linha: l.id })}>{titulo ? "Outro" : "Escolher"}</LinkAcao>

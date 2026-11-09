@@ -37,14 +37,35 @@ export function guardado<T>(consulta: () => Promise<T>): () => Promise<T> {
   return chamar;
 }
 
+// Mesma ideia, separada por chave (ex.: o id da conta) e por pouco tempo:
+// trocar de filtro na tela não busca de novo o que não depende do filtro, e o
+// que outra pessoa (ou o robô do Tiny) mudou aparece em até `segundos`.
+const porChave = new Map<string, { p: Promise<unknown>; ate: number }>();
+let proximoGrupo = 0;
+export function guardadoPor<T>(consulta: (chave: string) => Promise<T>, segundos = 120): (chave: string) => Promise<T> {
+  const grupo = `${proximoGrupo++}:`;
+  return (chave: string) => {
+    const k = grupo + chave;
+    const agora = Date.now();
+    const achado = porChave.get(k);
+    if (achado && achado.ate > agora) return achado.p as Promise<T>;
+    const p = consulta(chave);
+    porChave.set(k, { p, ate: agora + segundos * 1000 });
+    p.catch(() => porChave.delete(k));
+    return p;
+  };
+}
+
 export function revalidatePath(..._ignorados: string[]) {
   void _ignorados;
   guardados.clear();
+  porChave.clear();
   ouvintes.forEach((o) => o());
 }
 
 export function redirect(url: string): never {
   guardados.clear();
+  porChave.clear();
   if (navegar) navegar(url);
   else window.location.assign(`${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}${url}`);
   return undefined as never;

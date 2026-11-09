@@ -23,7 +23,7 @@ import { formatarData, formatarMoeda } from "@/lib/formato";
 import { TIPOS_CONTA_BANCARIA, type TipoContaBancaria } from "@/lib/rotulos";
 import { supabaseConfigurado } from "@/lib/supabase/config";
 import { criarClienteNavegador } from "@/lib/supabase/client";
-import { salvarConta } from "./actions";
+import { juntarContas, salvarConta } from "./actions";
 import { TelaCliente } from "@/components/tela-cliente";
 
 const TELA = "financeiro.contas_bancarias";
@@ -40,7 +40,9 @@ type Conta = {
   saldo_inicial: number;
   data_saldo_inicial: string;
   ativa: boolean;
+  tiny_id: number | null;
 };
+type Uso = { titulos: number; extrato: number; importacoes: number };
 type Filtros = { editar?: string; novo?: string };
 
 async function carregar(empresa: string | null): Promise<Conta[]> {
@@ -48,11 +50,24 @@ async function carregar(empresa: string | null): Promise<Conta[]> {
   const supabase = criarClienteNavegador();
   let consulta = supabase
     .from("contas_bancarias")
-    .select("id, empresa_id, nome, tipo, banco_codigo, banco_nome, agencia, conta, saldo_inicial, data_saldo_inicial, ativa")
+    .select("id, empresa_id, nome, tipo, banco_codigo, banco_nome, agencia, conta, saldo_inicial, data_saldo_inicial, ativa, tiny_id")
     .order("nome");
   if (empresa) consulta = consulta.eq("empresa_id", empresa);
   const { data } = await consulta;
   return (data ?? []) as Conta[];
+}
+
+// Quanto cada conta já tem (títulos pagos/recebidos nela e extrato): mostra
+// qual é a conta "de verdade" quando a mesma conta aparece duas vezes.
+async function carregarUso(empresa: string | null): Promise<Map<string, Uso>> {
+  if (!supabaseConfigurado) return new Map();
+  const { data } = await criarClienteNavegador().rpc("uso_contas_bancarias", { empresa });
+  return new Map(((data ?? []) as ({ conta_bancaria_id: string } & Uso)[]).map((u) => [u.conta_bancaria_id, u]));
+}
+
+function textoUso(u: Uso | undefined) {
+  if (!u || (!u.titulos && !u.extrato)) return "sem movimento";
+  return [u.titulos && `${u.titulos} título(s)`, u.extrato && `${u.extrato} linha(s) de extrato`].filter(Boolean).join(", ");
 }
 
 async function PaginaContasBancarias({ searchParams }: { searchParams: Promise<Filtros> }) {
@@ -61,7 +76,7 @@ async function PaginaContasBancarias({ searchParams }: { searchParams: Promise<F
 
   const filtros = await searchParams;
   const [empresas, selecionada] = await Promise.all([carregarEmpresas(), empresaSelecionada()]);
-  const contas = await carregar(selecionada?.id ?? null);
+  const [contas, uso] = await Promise.all([carregar(selecionada?.id ?? null), carregarUso(selecionada?.id ?? null)]);
   // No consolidado, um bloco por empresa (na ordem do seletor) com subtotal.
   const blocos = (selecionada ? [selecionada] : empresas)
     .map((e) => ({ empresa: e, contas: contas.filter((c) => c.empresa_id === e.id) }))
@@ -70,6 +85,8 @@ async function PaginaContasBancarias({ searchParams }: { searchParams: Promise<F
   const emEdicao = filtros.editar ? contas.find((c) => c.id === filtros.editar) : undefined;
   const mostrarForm = (filtros.novo && pode(acesso, TELA, "criar")) || (emEdicao && pode(acesso, TELA, "editar"));
   const hoje = new Date().toISOString().slice(0, 10);
+  // Contas da mesma empresa que podem receber os lançamentos da conta em edição.
+  const destinos = emEdicao ? contas.filter((c) => c.empresa_id === emEdicao.empresa_id && c.id !== emEdicao.id) : [];
 
   return (
     <div className="space-y-3">
@@ -150,6 +167,34 @@ async function PaginaContasBancarias({ searchParams }: { searchParams: Promise<F
               </Link>
             </div>
           </FormAcao>
+          {emEdicao && pode(acesso, TELA, "excluir") && destinos.length > 0 && (
+            <details className="mt-3 border-t border-borda pt-2 text-sm">
+              <summary className="cursor-pointer text-texto-suave hover:text-texto">
+                Conta repetida? Juntar com outra conta ({textoUso(uso.get(emEdicao.id))})
+              </summary>
+              <FormAcao
+                acao={juntarContas.bind(null, emEdicao.id)}
+                rotulo="Juntar e apagar esta conta"
+                enviando="Juntando..."
+                secundario
+                className="mt-2 flex flex-wrap items-end gap-3"
+                confirmar={`Passar tudo de "${emEdicao.nome}" (${textoUso(uso.get(emEdicao.id))}) para a conta escolhida e apagar "${emEdicao.nome}"? Vale o saldo inicial da conta escolhida. Não dá para desfazer.`}
+              >
+                <Campo rotulo="Passar títulos e extrato para">
+                  <select name="destino" required defaultValue="" className={estiloCampo}>
+                    <option value="" disabled>
+                      Escolha a conta certa...
+                    </option>
+                    {destinos.map((d) => (
+                      <option key={d.id} value={d.id}>
+                        {d.nome} ({textoUso(uso.get(d.id))})
+                      </option>
+                    ))}
+                  </select>
+                </Campo>
+              </FormAcao>
+            </details>
+          )}
         </Cartao>
       )}
 
@@ -181,7 +226,11 @@ async function PaginaContasBancarias({ searchParams }: { searchParams: Promise<F
                     <tr key={c.id} data-tags={`${c.tipo} ${c.ativa ? "ativo" : "inativo"}`} className={c.ativa ? "" : "text-texto-suave"}>
                       <Celula>
                         <span className="font-medium">{c.nome}</span>
-                        <span className="text-xs text-texto-suave"> · {TIPOS_CONTA_BANCARIA[c.tipo]}</span> {!c.ativa && <Etiqueta>Inativa</Etiqueta>}
+                        <span className="text-xs text-texto-suave">
+                          {" "}· {TIPOS_CONTA_BANCARIA[c.tipo]}
+                          {c.tiny_id ? " · veio do Tiny" : ""} · {textoUso(uso.get(c.id))}
+                        </span>{" "}
+                        {!c.ativa && <Etiqueta>Inativa</Etiqueta>}
                       </Celula>
                       <Celula>{[c.banco_codigo, c.banco_nome].filter(Boolean).join(" · ") || "—"}</Celula>
                       <Celula className="tabular-nums">{[c.agencia, c.conta].filter(Boolean).join(" / ") || "—"}</Celula>

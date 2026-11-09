@@ -81,6 +81,36 @@ export async function ignorar(lancamento: string, _: Estado, form: FormData): Pr
   return chamar("marcar_lancamento", { lancamento, situacao: "ignorado", observacao: motivo });
 }
 
+// Mesmo lançamento que outra importação trouxe com a data trocada (a tela
+// aponta; a pessoa confirma). Motivo próprio: a regra automática de repetidos
+// (mesma data) não mexe nestas.
+export const MOTIVO_REPETIDA_DATA = "Repetido de outra importação (data diferente)";
+export async function marcarRepetida(lancamento: string): Promise<Estado> {
+  return chamar("marcar_lancamento", { lancamento, situacao: "ignorado", observacao: MOTIVO_REPETIDA_DATA });
+}
+
+export async function marcarRepetidas(_: Estado, form: FormData): Promise<Estado> {
+  let ids: string[];
+  try {
+    ids = JSON.parse(String(form.get("linhas") ?? "[]"));
+  } catch {
+    return { erro: "Linhas inválidas. Recarregue a tela." };
+  }
+  if (!supabaseConfigurado) return SEM_BANCO;
+  const supabase = criarClienteNavegador();
+  let feitas = 0;
+  for (const id of ids) {
+    const { error } = await supabase.rpc("marcar_lancamento", { lancamento: id, situacao: "ignorado", observacao: MOTIVO_REPETIDA_DATA });
+    if (error) {
+      revalidatePath(CAMINHO);
+      return { erro: `${feitas} marcada(s). Parou numa linha: ${mensagemErro(error)}` };
+    }
+    feitas++;
+  }
+  revalidatePath(CAMINHO);
+  return { ok: Date.now() };
+}
+
 export async function desfazer(lancamento: string): Promise<Estado> {
   return chamar("desfazer_conciliacao", { lancamento });
 }

@@ -1,6 +1,7 @@
 // Consultas da conciliação: linhas do extrato e títulos candidatos.
 import { somarDias } from "@/lib/datas";
-import type { TituloCandidato } from "@/lib/extrato";
+import { guardadoPor } from "@/lib/navegacao";
+import type { LinhaRepeticao, TituloCandidato } from "@/lib/extrato";
 import { supabaseConfigurado } from "@/lib/supabase/config";
 import { criarClienteNavegador } from "@/lib/supabase/client";
 
@@ -22,29 +23,47 @@ export type LinhaConciliacao = {
   saldo: number | null;
   situacao: "pendente" | "conciliado" | "transferencia" | "ignorado";
   observacao: string | null;
+  importacao_id: string | null;
   extrato_conciliacoes: Ligacao[];
 };
 
 export const nomePessoa = (p: Pessoa) => (p ? p.nome_fantasia || p.nome : null);
 
-export async function carregarContas(empresa: string | null): Promise<ContaConciliacao[]> {
+// Contas, pendentes, conferência de saldo e importações não dependem do
+// filtro (situação, mês, linha): ficam guardadas até a próxima gravação (ou 2
+// minutos) e clicar num filtro só busca as linhas de novo.
+const contasGuardadas = guardadoPor(async (empresa: string): Promise<ContaConciliacao[]> => {
   if (!supabaseConfigurado) return [];
   const supabase = criarClienteNavegador();
   let q = supabase.from("contas_bancarias").select("id, empresa_id, nome, banco_nome, tipo").eq("ativa", true).order("nome");
   if (empresa) q = q.eq("empresa_id", empresa);
   return ((await q).data ?? []) as ContaConciliacao[];
-}
+});
+export const carregarContas = (empresa: string | null) => contasGuardadas(empresa ?? "");
 
-// Quantidade e soma das linhas pendentes por conta (para as abas das contas).
-export async function carregarPendentes(empresa: string | null): Promise<Map<string, number>> {
+// Quantidade de linhas pendentes por conta (para o seletor de contas): uma
+// contagem por conta, sem trazer as linhas.
+const pendentesGuardados = guardadoPor(async (empresa: string): Promise<Map<string, number>> => {
   const mapa = new Map<string, number>();
   if (!supabaseConfigurado) return mapa;
   const supabase = criarClienteNavegador();
-  let q = supabase.from("extrato_lancamentos").select("conta_bancaria_id").eq("situacao", "pendente").limit(20000);
-  if (empresa) q = q.eq("empresa_id", empresa);
-  for (const l of (await q).data ?? []) mapa.set(l.conta_bancaria_id, (mapa.get(l.conta_bancaria_id) ?? 0) + 1);
+  const contas = await carregarContas(empresa || null);
+  const contagens = await Promise.all(
+    contas.map((c) =>
+      supabase
+        .from("extrato_lancamentos")
+        .select("id", { count: "exact", head: true })
+        .eq("conta_bancaria_id", c.id)
+        .eq("situacao", "pendente"),
+    ),
+  );
+  contas.forEach((c, i) => {
+    const n = contagens[i].count ?? 0;
+    if (n > 0) mapa.set(c.id, n);
+  });
   return mapa;
-}
+});
+export const carregarPendentes = (empresa: string | null) => pendentesGuardados(empresa ?? "");
 
 export async function carregarLinhas(conta: string, situacao: string, mes: string | null): Promise<LinhaConciliacao[]> {
   if (!supabaseConfigurado) return [];
@@ -52,7 +71,7 @@ export async function carregarLinhas(conta: string, situacao: string, mes: strin
   let q = supabase
     .from("extrato_lancamentos")
     .select(
-      "id, data, descricao, documento, valor, saldo, situacao, observacao, extrato_conciliacoes(valor, efeito, contas_pagar(descricao, parcela, fornecedores(nome, nome_fantasia)), contas_receber(descricao, parcela, clientes(nome, nome_fantasia)))",
+      "id, data, descricao, documento, valor, saldo, situacao, observacao, importacao_id, extrato_conciliacoes(valor, efeito, contas_pagar(descricao, parcela, fornecedores(nome, nome_fantasia)), contas_receber(descricao, parcela, clientes(nome, nome_fantasia)))",
     )
     .eq("conta_bancaria_id", conta)
     .order("data")
@@ -62,6 +81,29 @@ export async function carregarLinhas(conta: string, situacao: string, mes: strin
   else if (situacao === "resolvido") q = q.neq("situacao", "pendente");
   if (mes) q = q.gte("data", `${mes}-01`).lte("data", `${mes}-31`);
   return ((await q).data ?? []) as unknown as LinhaConciliacao[];
+}
+
+const contasTinySemBanco = guardadoPor(async (empresa: string): Promise<string[]> => {
+  const { data } = await criarClienteNavegador()
+    .from("contas_bancarias")
+    .select("id")
+    .eq("empresa_id", empresa)
+    .eq("nome", "Tiny · conta não informada");
+  return (data ?? []).map((c) => c.id as string);
+});
+
+// Todas as linhas da conta perto das datas (qualquer situação), para achar o
+// mesmo lançamento que outra importação trouxe com a data trocada.
+export async function carregarVizinhas(conta: string, de: string, ate: string): Promise<LinhaRepeticao[]> {
+  if (!supabaseConfigurado) return [];
+  const { data } = await criarClienteNavegador()
+    .from("extrato_lancamentos")
+    .select("id, data, valor, importacao_id, situacao")
+    .eq("conta_bancaria_id", conta)
+    .gte("data", somarDias(de, -3))
+    .lte("data", somarDias(ate, 3))
+    .limit(20000);
+  return ((data ?? []) as LinhaRepeticao[]).map((l) => ({ ...l, valor: Number(l.valor) }));
 }
 
 // Títulos que podem casar com as linhas: em aberto do CNPJ (pelo vencimento)
@@ -76,12 +118,7 @@ export async function carregarCandidatos(
   if (!supabaseConfigurado) return [];
   const supabase = criarClienteNavegador();
   // Pagos pelo Tiny sem a conta da baixa também servem (passam para esta conta ao conciliar).
-  const { data: semConta } = await supabase
-    .from("contas_bancarias")
-    .select("id")
-    .eq("empresa_id", conta.empresa_id)
-    .eq("nome", "Tiny · conta não informada");
-  const tinySemConta = (semConta ?? []).map((c) => c.id as string);
+  const tinySemConta = await contasTinySemBanco(conta.empresa_id);
   const contas = [conta.id, ...tinySemConta];
   const folga = tinySemConta.length ? Math.max(folgaPago, folgaAberto) : folgaPago;
   const [pa, pp, ra, rp] = await Promise.all([
@@ -135,7 +172,12 @@ export async function carregarCandidatos(
 }
 
 // Saldo que o banco informou no último extrato e o do sistema no mesmo dia.
-export async function carregarConferencia(conta: ContaConciliacao) {
+export function carregarConferencia(conta: ContaConciliacao) {
+  return conferenciaGuardada(`${conta.id}|${conta.empresa_id}`);
+}
+const conferenciaGuardada = guardadoPor(async (chave: string) => {
+  const [id, empresa] = chave.split("|");
+  const conta = { id, empresa_id: empresa };
   if (!supabaseConfigurado) return null;
   const supabase = criarClienteNavegador();
   const { data: imp } = await supabase
@@ -159,7 +201,7 @@ export async function carregarConferencia(conta: ContaConciliacao) {
     importadoEm: imp.criado_em as string,
     arquivo: imp.arquivo as string | null,
   };
-}
+});
 
 export type IndicadorMes = { mes: string; linhas: number; resolvidas: number; entradas: number; saidas: number };
 
@@ -202,16 +244,22 @@ export type ImportacaoExtrato = {
 
 // Importações da conta, da mais nova para a mais velha, com quantas linhas já
 // foram resolvidas (conciliadas, transferência ou ignoradas).
-export async function carregarImportacoes(contaId: string): Promise<ImportacaoExtrato[]> {
+// Só a contagem vem do banco (antes vinham todas as linhas de todas as
+// importações só para contar, o que pesava a tela a cada clique).
+export const carregarImportacoes = guardadoPor(async (contaId: string): Promise<ImportacaoExtrato[]> => {
   if (!supabaseConfigurado) return [];
   const supabase = criarClienteNavegador();
   const { data } = await supabase
     .from("extrato_importacoes")
-    .select("id, arquivo, origem, periodo_de, periodo_ate, importadas, criado_em, extrato_lancamentos(situacao)")
+    .select("id, arquivo, origem, periodo_de, periodo_ate, importadas, criado_em")
     .eq("conta_bancaria_id", contaId)
     .order("criado_em", { ascending: false })
     .limit(200);
-  return ((data ?? []) as (Omit<ImportacaoExtrato, "conciliadas"> & { extrato_lancamentos: { situacao: string }[] })[]).map(
-    ({ extrato_lancamentos, ...i }) => ({ ...i, conciliadas: extrato_lancamentos.filter((l) => l.situacao !== "pendente").length }),
+  const lista = (data ?? []) as Omit<ImportacaoExtrato, "conciliadas">[];
+  const contagens = await Promise.all(
+    lista.map((i) =>
+      supabase.from("extrato_lancamentos").select("id", { count: "exact", head: true }).eq("importacao_id", i.id).neq("situacao", "pendente"),
+    ),
   );
-}
+  return lista.map((i, n) => ({ ...i, conciliadas: contagens[n].count ?? 0 }));
+});
