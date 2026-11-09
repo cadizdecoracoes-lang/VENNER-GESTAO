@@ -334,20 +334,22 @@ test("diferença do dia: pendente, título sem extrato, conciliação com data t
       { id: "l3", data: dia, descricao: "TED", valor: -20, situacao: "conciliado", titulos: [{ id: "t3", tipo: "pagar", conta: "c1", data: "2026-10-16", valor: -20 }] },
       // Conciliada no dia, mas o título tem juros que o banco não cobrou.
       { id: "l4", data: dia, descricao: "DARF", valor: -100, situacao: "conciliado", titulos: [{ id: "t4", tipo: "pagar", conta: "c1", data: dia, valor: -103 }] },
+      // Conciliada com título recebido no mesmo dia, mas noutra conta.
+      { id: "l7", data: dia, descricao: "PIX FWC", valor: 175.65, situacao: "conciliado", titulos: [{ id: "t7", tipo: "receber", conta: "c2", contaNome: "Itaú", data: dia, valor: 175.65 }] },
       // Transferência e ignorada não mexem na diferença.
       { id: "l5", data: dia, descricao: "TRANSF", valor: 500, situacao: "transferencia", titulos: [] },
       { id: "l6", data: dia, descricao: "REPETIDA", valor: 311, situacao: "ignorado", titulos: [] },
     ],
     [
-      { id: "t2", tipo: "pagar", descricao: "Boleto", pessoa: null, valor: -50, linhas: [dia] },
-      { id: "t4", tipo: "pagar", descricao: "DARF", pessoa: null, valor: -103, linhas: [dia] },
+      { id: "t2", tipo: "pagar", descricao: "Boleto", pessoa: null, valor: -50, linhas: [{ id: "lx", data: dia }] },
+      { id: "t4", tipo: "pagar", descricao: "DARF", pessoa: null, valor: -103, linhas: [{ id: "lx", data: dia }] },
       // Recebido no sistema sem linha do extrato.
       { id: "t5", tipo: "receber", descricao: "Venda", pessoa: "Cliente", valor: 176, linhas: [] },
       // Pago no dia 15 com a linha do extrato no dia 14.
-      { id: "t6", tipo: "pagar", descricao: "Luz", pessoa: null, valor: -30, linhas: ["2026-10-14"] },
+      { id: "t6", tipo: "pagar", descricao: "Luz", pessoa: null, valor: -30, linhas: [{ id: "l14", data: "2026-10-14" }] },
     ],
   );
-  const por = Object.fromEntries(r.itens.map((i) => [i.linhaId ?? i.tituloId, i]));
+  const por = Object.fromEntries(r.itens.map((i) => [i.tipo.startsWith("titulo") ? i.tituloId : i.linhaId, i]));
   assert.equal(por.l1.tipo, "pendente");
   assert.equal(por.l1.valor, 311);
   assert.equal(por.l2, undefined);
@@ -362,9 +364,13 @@ test("diferença do dia: pendente, título sem extrato, conciliação com data t
   assert.equal(por.t6.tipo, "titulo_outro_dia");
   assert.equal(por.t6.outraData, "2026-10-14");
   assert.equal(por.t6.valor, 30);
-  assert.equal(r.itens.length, 5);
-  // Banco andou 311 − 50 − 20 − 100 = 141; sistema 176 − 50 − 103 − 30 = −7: diferença do dia 148.
-  assert.equal(r.total, 148);
+  assert.equal(por.t6.linhaId, "l14");
+  assert.equal(por.l7.tipo, "linha_outra_conta");
+  assert.equal(por.l7.outraConta, "Itaú");
+  assert.equal(por.l7.outraData, null);
+  assert.equal(r.itens.length, 6);
+  // Banco andou 311 − 50 − 20 − 100 + 175,65 = 316,65; sistema 176 − 50 − 103 − 30 = −7: diferença do dia 323,65.
+  assert.equal(r.total, 323.65);
 });
 
 test("diferença do fluxo leva ao dia em que apareceu", () => {

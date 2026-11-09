@@ -429,7 +429,15 @@ export function saldoBancoNoDia(ancora: AncoraSaldo, linhas: { data: string; val
 //   com valor diferente do título;
 // - título baixado no dia sem linha do extrato no mesmo dia: está no sistema e
 //   falta no banco (ou a linha é de outro dia).
-export type TituloDaLinha = { id: string; tipo: "pagar" | "receber"; conta: string | null; data: string | null; valor: number };
+// `conta` e `data` ficam nulos quando o título não está baixado.
+export type TituloDaLinha = {
+  id: string;
+  tipo: "pagar" | "receber";
+  conta: string | null;
+  contaNome?: string | null;
+  data: string | null;
+  valor: number;
+};
 export type LinhaDoDia = {
   id: string;
   data: string;
@@ -438,17 +446,29 @@ export type LinhaDoDia = {
   situacao: string;
   titulos: TituloDaLinha[];
 };
-// Valor com sinal (pagar negativo); `linhas` = datas das linhas do extrato ligadas a ele.
-export type TituloDoDia = { id: string; tipo: "pagar" | "receber"; descricao: string; pessoa: string | null; valor: number; linhas: string[] };
+// Valor com sinal (pagar negativo); `linhas` = linhas do extrato desta conta ligadas a ele.
+export type TituloDoDia = {
+  id: string;
+  tipo: "pagar" | "receber";
+  descricao: string;
+  pessoa: string | null;
+  valor: number;
+  linhas: { id: string; data: string }[];
+};
 export type ItemDiferenca = {
-  tipo: "pendente" | "linha_outro_dia" | "valor_diferente" | "titulo_sem_extrato" | "titulo_outro_dia";
+  tipo: "pendente" | "linha_outro_dia" | "linha_outra_conta" | "valor_diferente" | "titulo_sem_extrato" | "titulo_outro_dia";
   descricao: string;
   valor: number;
   // Data do outro lado (título baixado em / linha do extrato em), quando houver.
   outraData: string | null;
+  // Conta onde o título foi baixado (linha_outra_conta); null = título não baixado.
+  outraConta: string | null;
+  // Linha do extrato envolvida (deste dia ou, em titulo_outro_dia, a do outro dia).
   linhaId: string | null;
   tituloId: string | null;
   tituloTipo: "pagar" | "receber" | null;
+  // Data da baixa do título (para abrir o título na tela dele).
+  tituloData: string | null;
 };
 
 export function diferencaDoDia(dia: string, conta: string, linhas: LinhaDoDia[], titulos: TituloDoDia[]): { itens: ItemDiferenca[]; total: number } {
@@ -456,7 +476,7 @@ export function diferencaDoDia(dia: string, conta: string, linhas: LinhaDoDia[],
   for (const l of linhas) {
     if (l.data !== dia || l.situacao === "ignorado" || l.situacao === "transferencia") continue;
     const valor = Number(l.valor);
-    const base = { descricao: l.descricao, linhaId: l.id, tituloId: null, tituloTipo: null };
+    const base = { descricao: l.descricao, linhaId: l.id, outraConta: null, tituloId: null, tituloTipo: null, tituloData: null };
     if (l.situacao === "pendente") {
       itens.push({ tipo: "pendente", valor: arred2(valor), outraData: null, ...base });
       continue;
@@ -465,25 +485,32 @@ export function diferencaDoDia(dia: string, conta: string, linhas: LinhaDoDia[],
     const sobra = arred2(valor - noDia.reduce((s, t) => s + t.valor, 0));
     if (Math.abs(sobra) < 0.005) continue;
     const fora = l.titulos.find((t) => !(t.conta === conta && t.data === dia));
+    const tipo: ItemDiferenca["tipo"] = noDia.length ? "valor_diferente" : fora && fora.conta !== conta ? "linha_outra_conta" : "linha_outro_dia";
+    const t = fora ?? noDia[0];
     itens.push({
-      tipo: noDia.length ? "valor_diferente" : "linha_outro_dia",
-      valor: sobra,
-      outraData: fora?.data ?? null,
       ...base,
-      tituloId: fora?.id ?? noDia[0]?.id ?? null,
-      tituloTipo: fora?.tipo ?? noDia[0]?.tipo ?? null,
+      tipo,
+      valor: sobra,
+      outraData: tipo === "linha_outro_dia" ? (fora?.data ?? null) : null,
+      outraConta: tipo === "linha_outra_conta" ? (fora?.contaNome ?? null) : null,
+      tituloId: t?.id ?? null,
+      tituloTipo: t?.tipo ?? null,
+      tituloData: t?.data ?? null,
     });
   }
   for (const t of titulos) {
-    if (t.linhas.includes(dia)) continue;
+    if (t.linhas.some((x) => x.data === dia)) continue;
+    const outra = t.linhas[0];
     itens.push({
-      tipo: t.linhas.length ? "titulo_outro_dia" : "titulo_sem_extrato",
+      tipo: outra ? "titulo_outro_dia" : "titulo_sem_extrato",
       descricao: `${t.pessoa ? `${t.pessoa} · ` : ""}${t.descricao}`,
       valor: arred2(-t.valor),
-      outraData: t.linhas[0] ?? null,
-      linhaId: null,
+      outraData: outra?.data ?? null,
+      outraConta: null,
+      linhaId: outra?.id ?? null,
       tituloId: t.id,
       tituloTipo: t.tipo,
+      tituloData: dia,
     });
   }
   return { itens, total: arred2(itens.reduce((s, i) => s + i.valor, 0)) };

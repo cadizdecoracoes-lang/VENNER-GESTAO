@@ -107,21 +107,21 @@ export async function carregarMovimentoDoDia(conta: string, dia: string): Promis
     supabase
       .from("extrato_lancamentos")
       .select(
-        "id, data, descricao, valor, situacao, extrato_conciliacoes(contas_pagar(id, conta_bancaria_id, data_pagamento, valor_pago, situacao), contas_receber(id, conta_bancaria_id, data_recebimento, valor_recebido, situacao))",
+        "id, data, descricao, valor, situacao, extrato_conciliacoes(contas_pagar(id, conta_bancaria_id, data_pagamento, valor_pago, situacao, contas_bancarias(nome)), contas_receber(id, conta_bancaria_id, data_recebimento, valor_recebido, situacao, contas_bancarias(nome)))",
       )
       .eq("conta_bancaria_id", conta)
       .eq("data", dia)
       .limit(3000),
     supabase
       .from("contas_pagar")
-      .select("id, descricao, parcela, valor_pago, fornecedores(nome, nome_fantasia), extrato_conciliacoes(extrato_lancamentos(data, conta_bancaria_id))")
+      .select("id, descricao, parcela, valor_pago, fornecedores(nome, nome_fantasia), extrato_conciliacoes(extrato_lancamentos(id, data, conta_bancaria_id))")
       .eq("conta_bancaria_id", conta)
       .eq("situacao", "pago")
       .eq("data_pagamento", dia)
       .limit(3000),
     supabase
       .from("contas_receber")
-      .select("id, descricao, parcela, valor_recebido, clientes(nome, nome_fantasia), extrato_conciliacoes(extrato_lancamentos(data, conta_bancaria_id))")
+      .select("id, descricao, parcela, valor_recebido, clientes(nome, nome_fantasia), extrato_conciliacoes(extrato_lancamentos(id, data, conta_bancaria_id))")
       .eq("conta_bancaria_id", conta)
       .eq("situacao", "pago")
       .eq("data_recebimento", dia)
@@ -129,7 +129,7 @@ export async function carregarMovimentoDoDia(conta: string, dia: string): Promis
   ]);
   const erro = l.error ?? p.error ?? r.error;
   if (erro) throw new Error(erro.message);
-  type T = { id: string; conta_bancaria_id: string | null; situacao: string; valor_pago?: number; valor_recebido?: number; data_pagamento?: string; data_recebimento?: string };
+  type T = { id: string; conta_bancaria_id: string | null; contas_bancarias: { nome: string } | null; situacao: string; valor_pago?: number; valor_recebido?: number; data_pagamento?: string; data_recebimento?: string };
   type C = { contas_pagar: T | null; contas_receber: T | null };
   const linhas: LinhaDoDia[] = ((l.data ?? []) as unknown as (Omit<LinhaDoDia, "titulos"> & { extrato_conciliacoes: C[] })[]).map((x) => ({
     id: x.id,
@@ -147,15 +147,16 @@ export async function carregarMovimentoDoDia(conta: string, dia: string): Promis
           id: t.id,
           tipo: pagar ? ("pagar" as const) : ("receber" as const),
           conta: pago ? t.conta_bancaria_id : null,
+          contaNome: pago ? (t.contas_bancarias?.nome ?? null) : null,
           data: pago ? ((pagar ? t.data_pagamento : t.data_recebimento) ?? null) : null,
           valor: pagar ? -Number(t.valor_pago ?? 0) : Number(t.valor_recebido ?? 0),
         },
       ];
     }),
   }));
-  type B = Record<string, unknown> & { extrato_conciliacoes: { extrato_lancamentos: { data: string; conta_bancaria_id: string } | null }[] };
+  type B = Record<string, unknown> & { extrato_conciliacoes: { extrato_lancamentos: { id: string; data: string; conta_bancaria_id: string } | null }[] };
   const datas = (t: B) =>
-    t.extrato_conciliacoes.flatMap((c) => (c.extrato_lancamentos && c.extrato_lancamentos.conta_bancaria_id === conta ? [c.extrato_lancamentos.data] : []));
+    t.extrato_conciliacoes.flatMap((c) => (c.extrato_lancamentos && c.extrato_lancamentos.conta_bancaria_id === conta ? [{ id: c.extrato_lancamentos.id, data: c.extrato_lancamentos.data }] : []));
   const desc = (t: B) => `${t.descricao}${t.parcela ? ` (${t.parcela})` : ""}`;
   const titulos: TituloDoDia[] = [
     ...((p.data ?? []) as unknown as B[]).map((t) => ({
