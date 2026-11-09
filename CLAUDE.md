@@ -40,6 +40,7 @@ O GitHub (`.github/workflows/ci.yml`) roda tudo isso em cada pacote. Rode `typec
 - Nunca edite uma migração que já está na `main` (já foi aplicada em produção). Crie uma nova.
 - Toda tabela nova: `enable row level security` e políticas usando `tem_permissao('<codigo.tela>', 'ver'|'criar'|'editar'|...)` e `pode_ver_empresa(empresa_id)`, na mesma migração.
 - O Supabase da Venner não dá GRANT automático ao papel `authenticated`: conceda explicitamente o que as telas precisam. Dados sensíveis (chaves de integração) ficam em tabelas sem acesso direto, lidas só por funções `security definer` que conferem o perfil.
+- Telas ao vivo: toda tabela nova que as telas leem entra no Realtime na mesma migração (`alter publication supabase_realtime add table public.<tabela>;`). É isso que faz as telas abertas se atualizarem sozinhas (`src/components/ao-vivo.tsx`); o teste `99k_telas_ao_vivo.sql` falha se faltar.
 - Cada migração nova ganha um arquivo de teste em `supabase/tests/`, no estilo dos existentes (`pg_temp.esperar` / `pg_temp.esperar_erro`, trocando de usuário com `set request.jwt.claim.sub`).
 - O CI usa Postgres 17; `npm run test:banco` usa o Postgres instalado na máquina.
 

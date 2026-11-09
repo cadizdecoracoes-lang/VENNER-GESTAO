@@ -4,6 +4,7 @@ import { Clock, LogOut } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { AbasProvider } from "@/components/abas";
+import { AoVivo } from "@/components/ao-vivo";
 import { BarraAbas } from "@/components/barra-abas";
 import { MenuLateral } from "@/components/menu-lateral";
 import { SaidaPorInatividade } from "@/components/saida-inatividade";
@@ -49,6 +50,7 @@ export default function LayoutSistema({ children }: { children: React.ReactNode 
           <header className="flex h-10 shrink-0 items-stretch gap-3 border-b border-borda/70 bg-superficie pl-3 pr-4">
             <BarraAbas />
             <div className="flex shrink-0 items-center gap-3">
+              {supabaseConfigurado && email && <AoVivo />}
               <SeletorEmpresa empresas={empresas} valor={selecionada?.id ?? null} />
               {email ? (
                 <form action={sair} className="flex items-center gap-1 text-xs text-texto-suave">
