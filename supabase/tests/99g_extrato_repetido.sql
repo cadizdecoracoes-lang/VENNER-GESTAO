@@ -41,7 +41,7 @@ select pg_temp.esperar(
 -- Conciliada uma cópia, a outra não volta para a lista.
 select desfazer_conciliacao(id) from extrato_lancamentos
 where importacao_id = (current_setting('teste.ofx')::jsonb ->> 'importacao')::uuid and valor = 175.65;
-select marcar_lancamento(id, 'transferencia', 'teste') from extrato_lancamentos
+select lancar_transferencia(id) from extrato_lancamentos
 where importacao_id = (current_setting('teste.ofx')::jsonb ->> 'importacao')::uuid and valor = 175.65;
 select marcar_repetidos_extrato(current_setting('teste.conta')::uuid);
 select pg_temp.esperar(

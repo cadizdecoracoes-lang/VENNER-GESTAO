@@ -71,8 +71,10 @@ export async function conciliarSugestoes(_: Estado, form: FormData): Promise<Est
   return { ok: Date.now() };
 }
 
+// Transferência entre contas vira título já baixado nesta conta (saída no
+// contas a pagar, entrada no contas a receber) e conciliado com a linha.
 export async function marcarTransferencia(lancamento: string): Promise<Estado> {
-  return chamar("marcar_lancamento", { lancamento, situacao: "transferencia", observacao: null });
+  return chamar("lancar_transferencia", { lancamento });
 }
 
 export async function ignorar(lancamento: string, _: Estado, form: FormData): Promise<Estado> {
@@ -153,7 +155,7 @@ export async function marcarTransferencias(_: Estado, form: FormData): Promise<E
   let feitas = 0;
   for (const id of ids) {
     const r = await marcarTransferencia(id);
-    if (r.erro) return { erro: `${feitas} marcada(s). Parou numa linha: ${r.erro}` };
+    if (r.erro) return { erro: `${feitas} lançada(s). Parou numa linha: ${r.erro}` };
     feitas++;
   }
   return { ok: Date.now() };

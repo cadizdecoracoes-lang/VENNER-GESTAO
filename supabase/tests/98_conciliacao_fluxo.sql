@@ -113,7 +113,8 @@ select pg_temp.esperar(
 
 -- Recebimento e transferência.
 select conciliar_lancamento(pg_temp.linha('TED RECEBIDA'), '{}', array[(select id from contas_receber where descricao = 'CONC venda 1')]);
-select marcar_lancamento(pg_temp.linha('TRANSF CONTA INTER'), 'transferencia');
+-- Transferência vira título (20261109000040): saída no contas a pagar, já baixada.
+select lancar_transferencia(pg_temp.linha('TRANSF CONTA INTER'));
 select pg_temp.esperar_erro(
   $$select marcar_lancamento((select id from extrato_lancamentos where descricao = 'TARIFA PIX' and situacao = 'pendente'), 'ignorado')$$,
   'motivo', 'ignorar exige o motivo');
@@ -139,8 +140,8 @@ select pg_temp.esperar(
   (select string_agg(tipo || ':' || natureza || ':' || valor, ',' order by tipo, natureza, valor)
    from fluxo_caixa('2026-10-01', '2026-10-31', current_setting('teste.industria')::uuid) f
    where f.data between '2026-10-05' and '2026-10-08' and natureza <> 'atrasado')
-    = 'entrada:realizado:500.00,saida:realizado:1.50,saida:realizado:305.10,saida:transferencia:200.00',
-  'fluxo mostra o realizado pela data do pagamento e a transferência');
+    = 'entrada:realizado:500.00,saida:realizado:1.50,saida:realizado:200.00,saida:realizado:305.10',
+  'fluxo mostra o realizado pela data do pagamento, transferência como título pago');
 select pg_temp.esperar(
   (select count(*) from fluxo_caixa('2099-01-01', '2099-01-31') where natureza = 'previsto' and valor = 2000) = 1,
   'título em aberto entra como previsto no vencimento');

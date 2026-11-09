@@ -32,7 +32,8 @@ select id, 'Itaú movimento', '341', '0001', '12345-6', 1000 from empresas where
 insert into contas_bancarias (empresa_id, nome, banco_codigo, agencia, conta)
 select id, 'Inter', '077', '0001', '999-1' from empresas where cnpj = '22222222000122';
 select pg_temp.esperar((select count(*) from contas_bancarias) = 2, 'diretoria vê as contas de todos os CNPJs');
-select pg_temp.esperar((select count(*) from plano_contas) = 23, 'plano de contas inicial carregado');
+-- 23 do plano inicial + 2 de "Transferência entre contas" (20261109000040).
+select pg_temp.esperar((select count(*) from plano_contas) = 25, 'plano de contas inicial carregado');
 reset role;
 
 -- Financeiro só enxerga e cadastra contas do CNPJ liberado.
@@ -71,7 +72,7 @@ reset role;
 update usuarios set perfil_id = (select id from perfis where nome = 'Contabilidade') where email = 'financeiro@teste';
 set role authenticated;
 set request.jwt.claim.sub = '00000000-0000-0000-0000-00000000000e';
-select pg_temp.esperar((select count(*) from plano_contas) = 24, 'contabilidade consulta o plano de contas');
+select pg_temp.esperar((select count(*) from plano_contas) = 26, 'contabilidade consulta o plano de contas');
 -- Desde o pacote 17 a contabilidade enxerga as contas do CNPJ liberado para consultar a conciliação.
 select pg_temp.esperar((select count(*) from contas_bancarias) = 1, 'contabilidade vê só as contas do CNPJ liberado');
 select pg_temp.esperar_erro(
