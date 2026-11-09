@@ -138,8 +138,8 @@ function DiferencaDoDia({
   // Abre o título na tela dele, já filtrada no dia da baixa.
   const linkTitulo = (i: ItemDiferenca) =>
     i.tituloTipo === "pagar"
-      ? `/financeiro/pagar?${new URLSearchParams({ de: i.tituloData ?? dia, ate: i.tituloData ?? dia, por: "data_pagamento", ver: i.tituloId! })}`
-      : `/financeiro/receber?${new URLSearchParams({ de: i.tituloData ?? dia, ate: i.tituloData ?? dia, por: "data_recebimento" })}`;
+      ? `/financeiro/pagar?${new URLSearchParams({ de: i.tituloData ?? dia, ate: i.tituloData ?? dia, por: "data_pagamento", situacao: "", ver: i.tituloId! })}`
+      : `/financeiro/receber?${new URLSearchParams({ de: i.tituloData ?? dia, ate: i.tituloData ?? dia, por: "data_recebimento", situacao: "" })}`;
   return (
     <section className="rounded-lg border border-borda bg-superficie px-3 py-2 text-sm">
       <p className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
