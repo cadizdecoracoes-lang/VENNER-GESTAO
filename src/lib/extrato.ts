@@ -343,6 +343,62 @@ export function sugerirConciliacao(linhas: { id: string; data: string; valor: nu
 }
 
 // ---------------------------------------------------------------------------
+// Lançamento repetido com a data trocada
+// ---------------------------------------------------------------------------
+// O banco já tira o repetido de mesma data e mesmo valor vindo de outra
+// importação (marcar_repetidos_extrato). Sobra o caso do mesmo Pix que um
+// arquivo traz num dia e o outro no dia seguinte (data da operação x data do
+// lançamento, ou PDF lido por OCR). A tela só aponta; quem decide é a pessoa.
+export type LinhaRepeticao = { id: string; data: string; valor: number; importacao_id: string | null; situacao: string };
+export type ImportacaoRepeticao = { id: string; periodo_de: string | null; periodo_ate: string | null; criado_em: string };
+export type Repeticao = { de: string; data: string; resolvida: boolean };
+
+// Linha pendente X (importação A, dia d, valor v) é possível repetição de Y
+// (importação B, dia d', mesmo valor, até `folga` dias de distância) quando:
+// - B cobre o dia d mas não tem nenhuma linha de valor v em d, e
+// - A não tem nenhuma linha de valor v em d'
+// (é a marca da data trocada: cada arquivo tem a sua cópia num dia diferente).
+// Y não pode estar ignorada. Entre duas pendentes, aponta a da importação mais
+// nova. Cada Y serve a uma X só.
+export function possiveisRepetidas(linhas: LinhaRepeticao[], importacoes: ImportacaoRepeticao[], folga = 2): Map<string, Repeticao> {
+  const imp = new Map(importacoes.map((i) => [i.id, i]));
+  const chave = (importacao: string | null, data: string, valor: number) => `${importacao ?? "-"}|${data}|${Math.round(valor * 100)}`;
+  const existe = new Set(linhas.map((l) => chave(l.importacao_id, l.data, Number(l.valor))));
+  const porValor = new Map<number, LinhaRepeticao[]>();
+  for (const l of linhas) {
+    if (l.situacao === "ignorado") continue;
+    const v = Math.round(Number(l.valor) * 100);
+    porValor.set(v, [...(porValor.get(v) ?? []), l]);
+  }
+  const usados = new Set<string>();
+  const resultado = new Map<string, Repeticao>();
+  const ordenadas = linhas.filter((l) => l.situacao === "pendente").sort((a, b) => a.data.localeCompare(b.data) || a.id.localeCompare(b.id));
+  for (const x of ordenadas) {
+    if (usados.has(x.id)) continue;
+    const ix = x.importacao_id ? imp.get(x.importacao_id) : undefined;
+    let melhor: { y: LinhaRepeticao; dias: number } | null = null;
+    for (const y of porValor.get(Math.round(Number(x.valor) * 100)) ?? []) {
+      if (y.id === x.id || usados.has(y.id) || y.importacao_id === x.importacao_id || y.data === x.data) continue;
+      const dias = Math.abs(diasEntre(x.data, y.data));
+      if (dias > folga) continue;
+      const iy = y.importacao_id ? imp.get(y.importacao_id) : undefined;
+      if (!iy?.periodo_de || !iy.periodo_ate || x.data < iy.periodo_de || x.data > iy.periodo_ate) continue;
+      if (existe.has(chave(y.importacao_id, x.data, Number(x.valor)))) continue;
+      if (existe.has(chave(x.importacao_id, y.data, Number(x.valor)))) continue;
+      // Duas pendentes: fica a da importação mais antiga, aponta a da mais nova.
+      if (y.situacao === "pendente" && (ix?.criado_em ?? "") < iy.criado_em) continue;
+      if (!melhor || dias < melhor.dias) melhor = { y, dias };
+    }
+    if (melhor) {
+      usados.add(melhor.y.id);
+      usados.add(x.id);
+      resultado.set(x.id, { de: melhor.y.id, data: melhor.y.data, resolvida: melhor.y.situacao !== "pendente" });
+    }
+  }
+  return resultado;
+}
+
+// ---------------------------------------------------------------------------
 // Linha sem título: o que ela provavelmente é, para a tela explicar e sugerir
 // o caminho (transferência, criar título de tarifa, contas a receber).
 // ---------------------------------------------------------------------------

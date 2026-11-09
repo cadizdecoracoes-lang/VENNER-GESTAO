@@ -9,6 +9,7 @@ import {
   lerPlanilhaExtrato,
   lerTextoExtratoPdf,
   mapearColunasExtrato,
+  possiveisRepetidas,
   sugerirConciliacao,
   valorCelula,
 } from "../src/lib/extrato.ts";
@@ -253,4 +254,32 @@ test("fluxo: filtro por conta bancária", () => {
   assert.deepEqual(uma.movimentos.map((m) => m.natureza), ["realizado", "transferencia", "previsto", "manual"]);
   // Conta que a pessoa não enxerga: nada.
   assert.equal(filtrarPorConta(movimentos, [saldo("itau", "e1")], "outra").movimentos.length, 0);
+});
+
+test("repetido com a data trocada entre duas importações", () => {
+  const imps = [
+    { id: "pdf", periodo_de: "2026-10-01", periodo_ate: "2026-10-31", criado_em: "2026-11-01T10:00:00Z" },
+    { id: "ofx", periodo_de: "2026-10-01", periodo_ate: "2026-10-31", criado_em: "2026-11-02T10:00:00Z" },
+    { id: "nov", periodo_de: "2026-11-01", periodo_ate: "2026-11-30", criado_em: "2026-12-01T10:00:00Z" },
+  ];
+  const l = (id: string, importacao_id: string, data: string, valor: number, situacao = "pendente") => ({ id, importacao_id, data, valor, situacao });
+  // Mesmo Pix: 23/10 no PDF e 24/10 no OFX. Aponta a do OFX (mais novo).
+  let r = possiveisRepetidas([l("a", "pdf", "2026-10-23", -56.6), l("b", "ofx", "2026-10-24", -56.6)], imps);
+  assert.deepEqual([...r], [["b", { de: "a", data: "2026-10-23", resolvida: false }]]);
+  // A cópia já conciliada fica; a pendente é apontada, mesmo sendo da importação mais antiga.
+  r = possiveisRepetidas([l("a", "pdf", "2026-10-23", -56.6), l("b", "ofx", "2026-10-24", -56.6, "conciliado")], imps);
+  assert.deepEqual([...r.keys()], ["a"]);
+  // Dois pagamentos iguais em dias seguidos, presentes nos dois arquivos: não é repetição.
+  r = possiveisRepetidas(
+    [l("a", "pdf", "2026-10-23", -56.6), l("b", "pdf", "2026-10-24", -56.6), l("c", "ofx", "2026-10-23", -56.6, "ignorado"), l("d", "ofx", "2026-10-24", -56.6, "ignorado")],
+    imps,
+  );
+  assert.equal(r.size, 0);
+  // Mesma importação, valor diferente, longe demais ou outra importação que não cobre o dia: nada.
+  assert.equal(possiveisRepetidas([l("a", "pdf", "2026-10-23", -56.6), l("b", "pdf", "2026-10-24", -56.6)], imps).size, 0);
+  assert.equal(possiveisRepetidas([l("a", "pdf", "2026-10-23", -56.6), l("b", "ofx", "2026-10-24", -56.7)], imps).size, 0);
+  assert.equal(possiveisRepetidas([l("a", "pdf", "2026-10-20", -56.6), l("b", "ofx", "2026-10-24", -56.6)], imps).size, 0);
+  assert.equal(possiveisRepetidas([l("a", "pdf", "2026-10-31", -56.6), l("b", "nov", "2026-11-01", -56.6)], imps).size, 0);
+  // A cópia ignorada não conta.
+  assert.equal(possiveisRepetidas([l("a", "pdf", "2026-10-23", -56.6), l("b", "ofx", "2026-10-24", -56.6, "ignorado")], imps).size, 0);
 });

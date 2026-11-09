@@ -51,3 +51,15 @@ export async function salvarConta(id: string | null, _: Estado, form: FormData):
   revalidatePath(CAMINHO);
   redirect(CAMINHO);
 }
+
+// Mesma conta cadastrada duas vezes: passa títulos e extrato da conta errada
+// para a escolhida e apaga a errada (função juntar_contas_bancarias no banco).
+export async function juntarContas(origem: string, _: Estado, form: FormData): Promise<Estado> {
+  if (!supabaseConfigurado) return SEM_BANCO;
+  const destino = String(form.get("destino") ?? "");
+  if (!destino) return { erro: "Escolha a conta que fica." };
+  const { error } = await criarClienteNavegador().rpc("juntar_contas_bancarias", { origem, destino });
+  if (error) return { erro: mensagemErro(error) };
+  revalidatePath(CAMINHO);
+  redirect(CAMINHO);
+}
