@@ -5,10 +5,11 @@ import { CabecalhoTela, Indicador, SemAcesso, estiloBotaoSecundario } from "@/co
 import { carregarAcesso, pode } from "@/lib/acesso";
 import { hojeBrasil } from "@/lib/datas";
 import { carregarEmpresas, empresaSelecionada } from "@/lib/empresa";
-import { filtrarPorConta, montarFluxo, somarMeses, ultimoDiaMes, type CategoriaFluxo, type MovimentoFluxo, type SaldoConta } from "@/lib/fluxo-caixa";
+import { filtrarPorConta, linhasConferenciaBanco, montarFluxo, somarMeses, ultimoDiaMes, type CategoriaFluxo, type MovimentoFluxo, type SaldoConta } from "@/lib/fluxo-caixa";
 import { formatarData, formatarMoeda } from "@/lib/formato";
 import { supabaseConfigurado } from "@/lib/supabase/config";
 import { criarClienteNavegador } from "@/lib/supabase/client";
+import { carregarSaldoBanco } from "../conciliacao/dados";
 import { SeletorConta } from "./seletor-conta";
 import { TabelaFluxo } from "./tabela-fluxo";
 import { TelaCliente } from "@/components/tela-cliente";
@@ -92,7 +93,20 @@ async function PaginaFluxoCaixa({ searchParams }: { searchParams: Promise<{ modo
     dados = { ...dados, movimentos: atual.movimentos, anteriores: ant.movimentos, saldos: atual.saldos };
   }
   const fluxo = montarFluxo({ modo, de, ate, hoje, ...dados });
+  // Uma conta escolhida: no fim, o saldo do extrato do banco e a diferença.
+  if (conta) {
+    const saldoBanco = await carregarSaldoBanco(conta.conta_bancaria_id, de, ate).catch(() => null);
+    if (saldoBanco)
+      fluxo.linhas.push(
+        ...linhasConferenciaBanco(fluxo, saldoBanco, hoje, (dia) => `/financeiro/conciliacao?conta=${conta.conta_bancaria_id}&ate=${dia}`),
+      );
+  }
   const r = fluxo.resumo;
+  // Títulos sem categoria no período: o fluxo é montado pelas categorias, então avisa.
+  const semCat = (tipo: string) => fluxo.linhas.find((l) => l.chave === `g:${tipo}:sem`)?.total ?? 0;
+  const semCatSaida = semCat("saida");
+  const semCatEntrada = semCat("entrada");
+  const temSemCat = Math.abs(semCatSaida) >= 0.01 || Math.abs(semCatEntrada) >= 0.01;
 
   const link = (p: Record<string, string>) => `?${new URLSearchParams(conta ? { ...p, conta: conta.conta_bancaria_id } : p).toString()}`;
   const periodo: Record<string, string> = modo === "dia" ? { mes: mes.slice(0, 7) } : { modo: "mes", inicio: inicio.slice(0, 7) };
@@ -151,7 +165,7 @@ async function PaginaFluxoCaixa({ searchParams }: { searchParams: Promise<{ modo
       </CabecalhoTela>
 
       {/* Resumo: cartões compactos numa faixa só. */}
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-6">
+      <div className={`grid grid-cols-2 gap-2 sm:grid-cols-3 ${temSemCat ? "xl:grid-cols-7" : "xl:grid-cols-6"}`}>
         <Indicador
           rotulo="Saldo hoje"
           valor={r.saldoHoje === null ? "—" : formatarMoeda(r.saldoHoje)}
@@ -193,6 +207,15 @@ async function PaginaFluxoCaixa({ searchParams }: { searchParams: Promise<{ modo
           href="/financeiro/conciliacao"
           fonte="Linhas do extrato ainda sem título: o realizado pode estar incompleto"
         />
+        {temSemCat && (
+          <Indicador
+            rotulo="⚠ Sem categoria"
+            valor={formatarMoeda(Math.abs(semCatSaida))}
+            detalhe={Math.abs(semCatEntrada) >= 0.01 ? `+${formatarMoeda(Math.abs(semCatEntrada))} a receber` : undefined}
+            cor="text-alerta"
+            fonte="Títulos sem categoria financeira no período: entram no saldo, mas fora dos grupos. Estão na linha “⚠ Sem categoria” da tabela; clique num valor dela para ver quais são."
+          />
+        )}
       </div>
 
       {conta && !comPrevisto && (

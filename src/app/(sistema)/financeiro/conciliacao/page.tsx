@@ -27,9 +27,13 @@ import {
   carregarIndicadores,
   carregarLinhas,
   carregarPendentes,
+  carregarSaldoBanco,
+  carregarSaldoSistema,
+  carregarTitulosSemExtrato,
   carregarVizinhas,
   nomePessoa,
   type LinhaConciliacao,
+  type TituloSemExtrato,
 } from "./dados";
 import { PainelResolver } from "./painel-resolver";
 import { SeletorConta } from "./seletor-conta";
@@ -38,7 +42,7 @@ import { TelaCliente } from "@/components/tela-cliente";
 
 const TELA = "financeiro.conciliacao";
 const variacao = (atual: number, antes: number) => `${atual >= antes ? "+" : ""}${Math.round(((atual - antes) / antes) * 100)}%`;
-type Filtros = { conta?: string; situacao?: string; mes?: string; linha?: string; importadas?: string; repetidas?: string; automaticas?: string };
+type Filtros = { conta?: string; situacao?: string; mes?: string; ate?: string; linha?: string; importadas?: string; repetidas?: string; automaticas?: string };
 
 const SITUACOES = [
   { valor: "pendente", rotulo: "Pendentes" },
@@ -68,6 +72,88 @@ function Ligacoes({ linha }: { linha: LinhaConciliacao }) {
   );
 }
 
+// Diferença entre o saldo do banco e o do sistema num dia, explicada:
+// pendentes do extrato (estão no banco, faltam no sistema) e títulos baixados
+// nesta conta sem linha do extrato (estão no sistema, faltam no banco). O que
+// sobra já vinha de antes do primeiro extrato importado (saldo inicial da
+// conta, títulos antigos) ou de linha ignorada.
+function ComposicaoDiferenca({
+  dia,
+  banco,
+  sistema,
+  pendentes,
+  qtdPendentes,
+  semExtrato,
+  primeiroExtrato,
+}: {
+  dia: string;
+  banco: number | null;
+  sistema: number | null;
+  pendentes: number;
+  qtdPendentes: number;
+  semExtrato: TituloSemExtrato[];
+  primeiroExtrato: string | null;
+}) {
+  if (banco === null || sistema === null)
+    return (
+      <p className="text-xs text-texto-suave">
+        Sem saldo do banco em {formatarData(dia)}: o extrato importado não traz saldo ou não cobre esse dia.
+      </p>
+    );
+  const diferenca = banco - sistema;
+  const somaSem = semExtrato.reduce((t, x) => t + x.valor, 0);
+  const resto = Math.round((diferenca - pendentes + somaSem) * 100) / 100;
+  const cor = (v: number) => (Math.abs(v) < 0.005 ? "text-sucesso" : "text-perigo");
+  return (
+    <details className="rounded-lg bg-superficie px-3 py-1.5 text-xs" open={semExtrato.length > 0 && semExtrato.length <= 30}>
+      <summary className="cursor-pointer">
+        Em {formatarData(dia)}: banco <strong className="tabular-nums">{formatarMoeda(banco)}</strong> − sistema{" "}
+        <strong className="tabular-nums">{formatarMoeda(sistema)}</strong> = <strong className={`tabular-nums ${cor(diferenca)}`}>{formatarMoeda(diferenca)}</strong>
+        {Math.abs(diferenca) >= 0.005 && (
+          <span className="text-texto-suave">
+            {" "}
+            · = pendentes do extrato até o dia <strong className="tabular-nums text-texto">{formatarMoeda(pendentes)}</strong> ({qtdPendentes}, na lista abaixo)
+            {semExtrato.length > 0 && (
+              <>
+                {" "}
+                − títulos baixados nesta conta sem extrato <strong className="tabular-nums text-texto">{formatarMoeda(somaSem)}</strong> ({semExtrato.length})
+              </>
+            )}
+            {Math.abs(resto) >= 0.005 && (
+              <>
+                {" "}
+                + de antes do 1º extrato{primeiroExtrato ? ` (${formatarData(primeiroExtrato)})` : ""}{" "}
+                <strong className={`tabular-nums ${cor(resto)}`}>{formatarMoeda(resto)}</strong>
+              </>
+            )}
+          </span>
+        )}
+      </summary>
+      {semExtrato.length > 0 && (
+        <ul className="mt-1 divide-y divide-borda/70">
+          {semExtrato.map((t) => (
+            <li key={t.id} className="flex gap-3 py-1">
+              <span className="tabular-nums text-texto-suave">{formatarData(t.data)}</span>
+              <LinkAcao href={`/financeiro/${t.tipo}`}>{t.tipo === "pagar" ? "Pago" : "Recebido"}</LinkAcao>
+              <span className="flex-1 truncate">
+                {t.pessoa ? `${t.pessoa} · ` : ""}
+                {t.descricao}
+              </span>
+              <span className={`tabular-nums ${t.valor < 0 ? "text-perigo" : "text-sucesso"}`}>{formatarMoeda(t.valor)}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+      {Math.abs(resto) >= 0.005 && (
+        <p className="mt-1 text-texto-suave">
+          “De antes do 1º extrato”: diferença que já existia antes do primeiro extrato importado (saldo inicial da conta em Contas bancárias, ou títulos
+          baixados antes dele) ou linha do extrato marcada como ignorada.
+        </p>
+      )}
+    </details>
+  );
+}
+
 async function PaginaConciliacao({ searchParams }: { searchParams: Promise<Filtros> }) {
   const acesso = await carregarAcesso();
   if (!pode(acesso, TELA, "ver")) return <SemAcesso codigo={TELA} />;
@@ -79,19 +165,34 @@ async function PaginaConciliacao({ searchParams }: { searchParams: Promise<Filtr
   const nomeEmpresa = new Map(empresas.map((e) => [e.id, e.nome]));
   const conta =
     contas.find((c) => c.id === filtros.conta) ?? contas.find((c) => pendentes.has(c.id)) ?? contas[0] ?? null;
-  const situacao = SITUACOES.some((s) => s.valor === filtros.situacao) ? filtros.situacao! : "pendente";
-  const mes = /^\d{4}-\d{2}$/.test(filtros.mes ?? "") ? filtros.mes! : null;
+  // ?ate=AAAA-MM-DD (vem da diferença do fluxo de caixa): pendentes até o dia
+  // e a composição da diferença entre o saldo do banco e o do sistema.
+  const ateDia = /^\d{4}-\d{2}-\d{2}$/.test(filtros.ate ?? "") ? filtros.ate! : null;
+  const situacao = ateDia ? "pendente" : SITUACOES.some((s) => s.valor === filtros.situacao) ? filtros.situacao! : "pendente";
+  const mes = ateDia ? null : /^\d{4}-\d{2}$/.test(filtros.mes ?? "") ? filtros.mes! : null;
   // Tudo o que não depende um do outro vai junto (antes era uma consulta atrás
   // da outra, e cada clique num filtro esperava todas).
   const [linhas, conferencia, importacoes, [indMes, indAnterior]] = conta
     ? await Promise.all([
-        carregarLinhas(conta.id, situacao, mes),
+        carregarLinhas(conta.id, situacao, mes, ateDia),
         carregarConferencia(conta),
         carregarImportacoes(conta.id),
         carregarIndicadores(conta.id, mes ?? hojeBrasil().slice(0, 7)),
       ])
     : [[], null, [], [null, null]];
   const pend = linhas.filter((l) => l.situacao === "pendente");
+  // Composição da diferença no dia: banco − sistema = pendentes do extrato −
+  // títulos baixados aqui sem extrato + o que já vinha de antes do 1º extrato.
+  const primeiroExtrato = importacoes.map((i) => i.periodo_de).filter((d): d is string => !!d).sort()[0] ?? null;
+  const [saldoBancoFn, saldoSistema, semExtrato] =
+    ateDia && conta
+      ? await Promise.all([
+          carregarSaldoBanco(conta.id, ateDia, ateDia),
+          carregarSaldoSistema(conta, ateDia),
+          primeiroExtrato ? carregarTitulosSemExtrato(conta.id, primeiroExtrato, ateDia) : Promise.resolve([]),
+        ])
+      : [null, null, []];
+  const saldoBancoDia = saldoBancoFn ? saldoBancoFn(ateDia!) : null;
   const podeExcluir = pode(acesso, TELA, "excluir");
 
   // Títulos candidatos (mesmo valor e data próxima), as linhas vizinhas (para
@@ -122,7 +223,7 @@ async function PaginaConciliacao({ searchParams }: { searchParams: Promise<Filtr
 
   const base = (extra: Record<string, string | undefined>) => {
     const p = new URLSearchParams();
-    const tudo = { conta: conta?.id, situacao: situacao === "pendente" ? undefined : situacao, mes: mes ?? undefined, ...extra };
+    const tudo = { conta: conta?.id, situacao: situacao === "pendente" ? undefined : situacao, mes: mes ?? undefined, ate: ateDia ?? undefined, ...extra };
     for (const [k, v] of Object.entries(tudo)) if (v) p.set(k, v);
     return `?${p.toString()}`;
   };
@@ -207,11 +308,16 @@ async function PaginaConciliacao({ searchParams }: { searchParams: Promise<Filtr
           <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-sm">
             <span className="flex items-center gap-1">
               {SITUACOES.map((s) => (
-                <Link key={s.valor} href={base({ situacao: s.valor === "pendente" ? undefined : s.valor })} className={pilula(s.valor === situacao)}>
+                <Link key={s.valor} href={base({ situacao: s.valor === "pendente" ? undefined : s.valor, ate: undefined })} className={pilula(s.valor === situacao && !ateDia)}>
                   {s.rotulo}
                 </Link>
               ))}
             </span>
+            {ateDia && (
+              <Link href={base({ ate: undefined })} className={pilula(true)} title="Pendentes até este dia (veio da diferença do fluxo de caixa). Clique para tirar.">
+                Até {formatarData(ateDia)} ✕
+              </Link>
+            )}
             <SeletorMes
               mes={mes}
               parametros={Object.fromEntries(
@@ -292,6 +398,18 @@ async function PaginaConciliacao({ searchParams }: { searchParams: Promise<Filtr
               </span>
             )}
           </div>
+
+          {ateDia && (
+            <ComposicaoDiferenca
+              dia={ateDia}
+              banco={saldoBancoDia}
+              sistema={saldoSistema}
+              pendentes={pend.reduce((t, l) => t + Number(l.valor), 0)}
+              qtdPendentes={pend.length}
+              semExtrato={semExtrato}
+              primeiroExtrato={primeiroExtrato}
+            />
+          )}
 
           {/* Arquivos importados nesta conta, recolhidos numa linha. */}
           {importacoes.length > 0 && (
