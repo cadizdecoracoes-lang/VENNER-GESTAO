@@ -501,7 +501,7 @@ async function PaginaContasPagar({ searchParams }: { searchParams: Promise<Filtr
                     )}
                   </Celula>
                   <Celula>
-                    <span className="flex min-w-0 max-w-[min(19rem,17vw)] items-baseline gap-1.5">
+                    <span className="flex min-w-0 max-w-[min(17rem,14vw)] items-baseline gap-1.5">
                       <span className="truncate font-medium" title={t.descricao}>
                         {t.descricao}
                       </span>
@@ -522,7 +522,7 @@ async function PaginaContasPagar({ searchParams }: { searchParams: Promise<Filtr
                     </span>
                   </Celula>
                   <Celula className="text-texto-suave">
-                    <span className="block max-w-[min(9rem,8vw)] truncate" title={t.plano_contas ? `${t.plano_contas.codigo} · ${t.plano_contas.nome}` : undefined}>
+                    <span className="block max-w-[min(15rem,14vw)] truncate" title={t.plano_contas ? `${t.plano_contas.codigo} · ${t.plano_contas.nome}` : undefined}>
                       {t.plano_contas ? (
                         `${t.plano_contas.codigo} · ${t.plano_contas.nome}`
                       ) : t.situacao === "cancelado" ? (
