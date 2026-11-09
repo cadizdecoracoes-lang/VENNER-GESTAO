@@ -1,6 +1,7 @@
 "use client";
 
 import { CalendarDays, Columns3, Search, X } from "lucide-react";
+import { usePathname, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { hojeBrasil } from "@/lib/datas";
 import {
@@ -43,7 +44,36 @@ export type OpcaoSituacao = {
   // De onde vem o número; aparece ao passar o mouse.
   dica?: string;
 };
-export type GrupoSituacao = { rotulo: string; opcoes: OpcaoSituacao[] };
+export type GrupoSituacao = {
+  rotulo: string;
+  opcoes: OpcaoSituacao[];
+  // Com isto, valor e quantidade de cada situação são refeitos a partir das
+  // linhas que passam na busca e nas colunas (cada <tr> traz data-soma="123.45"):
+  // a faixa vira a composição do que está na tela.
+  formatar?: (valor: number) => string;
+};
+
+// Parâmetros do endereço que abrem janelas (pagar, editar...): não mudam o filtro guardado.
+const PARAMETROS_DE_JANELA = new Set(["novo", "pagar", "editar", "ver", "lote", "volta"]);
+type Guardado = { texto: string; escolhas: Record<string, string>; porColuna: Record<string, string[]>; periodoLocal: PeriodoLocal | null };
+
+function chaveGuardada(caminho: string, busca: string): string {
+  const q = new URLSearchParams(busca);
+  for (const k of [...q.keys()]) if (PARAMETROS_DE_JANELA.has(k)) q.delete(k);
+  q.sort();
+  return `venner.filtro:${caminho}?${q.toString()}`;
+}
+
+// O filtro de cada tela fica guardado enquanto o navegador está aberto: ao
+// voltar pela aba, a lista aparece filtrada do mesmo jeito.
+function lerGuardado(chave: string): Guardado | null {
+  try {
+    const v = JSON.parse(sessionStorage.getItem(chave) ?? "null");
+    return v && typeof v === "object" ? (v as Guardado) : null;
+  } catch {
+    return null;
+  }
+}
 
 const COR_SITUACAO = { perigo: "text-perigo", sucesso: "text-sucesso", alerta: "text-alerta" };
 
@@ -110,10 +140,23 @@ export function Filtro({
   const area = useRef<HTMLDivElement>(null);
   const campo = useRef<HTMLInputElement>(null);
   const barra = useRef<HTMLDivElement>(null);
-  const [texto, setTexto] = useState("");
-  const [escolhas, setEscolhas] = useState<Record<string, string>>(iniciais);
-  const [porColuna, setPorColuna] = useState<Record<string, string[]>>({});
-  const [periodoLocal, setPeriodoLocal] = useState<PeriodoLocal | null>(null);
+  const caminho = usePathname();
+  const busca = useSearchParams();
+  const chave = chaveGuardada(caminho, busca.toString());
+  const [guardado] = useState(() => (typeof window === "undefined" ? null : lerGuardado(chave)));
+  const [texto, setTexto] = useState(guardado?.texto ?? "");
+  const [escolhas, setEscolhas] = useState<Record<string, string>>(guardado?.escolhas ?? iniciais);
+  const [porColuna, setPorColuna] = useState<Record<string, string[]>>(guardado?.porColuna ?? {});
+  const [periodoLocal, setPeriodoLocal] = useState<PeriodoLocal | null>(guardado?.periodoLocal ?? null);
+  const [somas, setSomas] = useState<{ porSituacao: Record<string, { valor: number; quantidade: number }>; tela: number } | null>(null);
+
+  useEffect(() => {
+    try {
+      sessionStorage.setItem(chave, JSON.stringify({ texto, escolhas, porColuna, periodoLocal } satisfies Guardado));
+    } catch {
+      // Sem armazenamento (janela privada): o filtro só não é lembrado.
+    }
+  }, [chave, texto, escolhas, porColuna, periodoLocal]);
   const [colunas, setColunas] = useState<ColunaFiltro[]>([]);
   const [contagem, setContagem] = useState<{ visiveis: number; total: number } | null>(null);
   // Qual balão está aberto: sugestões da busca, colunas ou período.
@@ -127,7 +170,12 @@ export function Filtro({
     setColunas(juntarColunas(tabelas.map((t) => montarColunas(t.rotulos, t.linhas.map((l) => l.celulas)))));
 
     const termos = normalizar(texto).split(" ").filter(Boolean);
-    const exigidas = Object.values(escolhas).filter(Boolean);
+    const exigidas = Object.entries(escolhas)
+      .filter(([, v]) => v)
+      .map(([grupo, v]) => ({ grupo, v }));
+    const rotuloSituacao = situacoes?.formatar ? situacoes.rotulo : null;
+    const porSituacao: Record<string, { valor: number; quantidade: number }> = {};
+    let somaTela = 0;
     const filtrosColuna = Object.entries(porColuna)
       .filter(([, valores]) => valores.length > 0)
       .map(([rotulo, valores]) => ({ rotulo, valores: new Set(valores.map(normalizar)) }));
@@ -139,7 +187,7 @@ export function Filtro({
         total++;
         const tudo = tr.textContent ?? "";
         const tags = (tr.dataset.tags ?? "").split(" ");
-        let passa = termos.every((t) => contem(tudo, t)) && exigidas.every((e) => tags.includes(e));
+        let passa = termos.every((t) => contem(tudo, t)) && exigidas.every((e) => e.grupo === rotuloSituacao || tags.includes(e.v));
         for (const f of filtrosColuna) {
           if (!passa) break;
           const i = indice(f.rotulo);
@@ -150,6 +198,19 @@ export function Filtro({
           const data = i >= 0 ? dataDaCelula(celulas[i] ?? "") : null;
           passa = data !== null && data >= periodoLocal.de && data <= periodoLocal.ate;
         }
+        // Composição por situação: conta a linha em cada situação dela, antes do filtro de situação.
+        if (passa && rotuloSituacao && situacoes) {
+          const soma = Number(tr.dataset.soma ?? 0) || 0;
+          for (const o of situacoes.opcoes) {
+            if (o.valor && !tags.includes(o.valor)) continue;
+            const atual = (porSituacao[o.valor] ??= { valor: 0, quantidade: 0 });
+            atual.valor += soma;
+            atual.quantidade++;
+          }
+          const escolhida = escolhas[rotuloSituacao];
+          passa = !escolhida || tags.includes(escolhida);
+          if (passa) somaTela += soma;
+        }
         tr.hidden = !passa;
         if (passa) visiveis++;
       }
@@ -159,6 +220,8 @@ export function Filtro({
       bloco.hidden = !bloco.querySelector("tbody tr:not([data-vazio]):not([hidden])");
     }
     setContagem({ visiveis, total });
+    setSomas(rotuloSituacao ? { porSituacao, tela: somaTela } : null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [texto, escolhas, porColuna, periodoLocal, children]);
 
   // Atalho de teclado: "/" vai para o filtro.
@@ -224,8 +287,12 @@ export function Filtro({
           aria-label={situacoes.rotulo}
           className="flex overflow-x-auto rounded-xl bg-superficie shadow-[0_1px_3px_rgba(16,24,40,0.06)] [scrollbar-width:thin]"
         >
-          {situacoes.opcoes.map((o) => {
-            const ativo = situacaoAtual === o.valor;
+          {situacoes.opcoes.map((original) => {
+            const ativo = situacaoAtual === original.valor;
+            const calculado = somas && situacoes.formatar ? (somas.porSituacao[original.valor] ?? { valor: 0, quantidade: 0 }) : null;
+            const o = calculado
+              ? { ...original, total: situacoes.formatar!(calculado.valor), quantidade: calculado.quantidade }
+              : original;
             return (
               <button
                 key={o.valor || "todas"}
@@ -393,6 +460,14 @@ export function Filtro({
         </div>
       )}
       <div ref={area}>{children}</div>
+      {somas && situacoes?.formatar && contagem && contagem.visiveis > 0 && (
+        <p className="flex flex-wrap justify-end gap-x-2 px-1 text-xs text-texto-suave">
+          <span>
+            Total na tela ({contagem.visiveis} {contagem.visiveis === 1 ? "lançamento" : "lançamentos"}):{" "}
+            <span className="font-semibold tabular-nums text-texto">{situacoes.formatar(somas.tela)}</span>
+          </span>
+        </p>
+      )}
       {filtrando && contagem?.visiveis === 0 && contagem.total > 0 && (
         <p className="py-6 text-center text-sm text-texto-suave">
           Nada encontrado com esse filtro.{" "}

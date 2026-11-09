@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { ultimoEndereco } from "@/lib/ultimo-endereco";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { ChevronDown, PanelLeftClose, PanelLeftOpen } from "lucide-react";
@@ -76,7 +77,7 @@ export function MenuLateral({ telas }: { telas: string[] | null }) {
               {!recolhido && aberto && (
                 <div className="mt-1 space-y-0.5 pl-6">
                   {grupo.telas.map((t) => (
-                    <Link key={t.codigo} href={t.href} className={item(pathname === t.href)}>
+                    <Link key={t.codigo} href={pathname === t.href ? t.href : ultimoEndereco(t.href)} className={item(pathname === t.href)}>
                       {t.titulo}
                     </Link>
                   ))}

@@ -108,7 +108,7 @@ export function Tabela({
   vazio,
   embutida = false,
 }: {
-  colunas: string[];
+  colunas: React.ReactNode[];
   children: React.ReactNode;
   vazio?: string;
   embutida?: boolean;

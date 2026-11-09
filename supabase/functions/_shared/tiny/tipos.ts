@@ -115,6 +115,8 @@ export type EstadoLeitura = {
   pedidos?: Cursor;
   produtos?: Cursor;
   pagar?: { fase: "abertos" | "ano"; offset: number; inicio?: string };
+  // Volta pelas contas a receber em aberto (pega as que não mudam há tempo).
+  receber_abertos?: { offset: number };
 };
 
 // Títulos pagos ou cancelados antes disso não entram (histórico de 2026).

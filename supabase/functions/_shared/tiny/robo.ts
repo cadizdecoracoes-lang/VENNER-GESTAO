@@ -107,6 +107,7 @@ export async function lerTiny(
     await listar("Contas a receber", () =>
       varrer(tiny, lote, "receber", "/contas-receber", "dataAtualizacao", (estado.receber ??= { desde: "2025-12-01 00:00:00", offset: 0 }), agora, 2),
     );
+    await listar("Contas a receber em aberto", () => varrerAbertos(tiny, lote, "receber", "/contas-receber", (estado.receber_abertos ??= { offset: 0 }), 1));
     await listar("Pedidos", () =>
       varrer(tiny, lote, "pedido", "/pedidos", "dataAtualizacao", (estado.pedidos ??= { desde: "2025-01-01 00:00:00", offset: 0 }), agora, 2),
     );
@@ -177,6 +178,27 @@ async function varrer(
       break;
     }
     cursor.offset += POR_PAGINA;
+  }
+  return usadas;
+}
+
+// Volta pelos títulos em aberto, uma página por leitura: o filtro por
+// alteração não traz o que está parado desde antes do início da leitura.
+async function varrerAbertos(api: ApiTiny, lote: Lote, tipo: "receber" | "pagar", caminho: string, c: { offset: number }, maximo: number): Promise<number> {
+  let usadas = 0;
+  while (usadas < maximo) {
+    const r = await api.ler<Pagina>(caminho, { situacao: "aberto", orderBy: "asc", limit: POR_PAGINA, offset: c.offset });
+    usadas++;
+    const itens = r?.itens ?? [];
+    for (const i of itens) {
+      const id = Number((i as { id?: unknown }).id);
+      if (id) lote.listados.push({ tipo, id, assinatura: assinatura(tipo, i) });
+    }
+    if (itens.length < POR_PAGINA) {
+      c.offset = 0;
+      break;
+    }
+    c.offset += POR_PAGINA;
   }
   return usadas;
 }

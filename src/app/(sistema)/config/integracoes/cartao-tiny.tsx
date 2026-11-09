@@ -57,8 +57,8 @@ export function CartaoTiny({
     >
       <div className="space-y-3 text-sm">
         <p className="text-texto-suave">
-          A cada 5 minutos o sistema lê do Tiny os pedidos de venda, as contas a receber, os produtos e, até a data escolhida, as contas a
-          pagar (carga inicial). A ligação só lê: não altera nada no Tiny.
+          A cada 5 minutos o sistema lê do Tiny os pedidos de venda, as contas a receber, os produtos e as contas a pagar. O que muda no
+          Tiny vem para cá, sem desfazer o que foi mudado aqui. A ligação só lê: não altera nada no Tiny.
         </p>
 
         {contas.map((c) => (
@@ -103,7 +103,7 @@ export function CartaoTiny({
                     className="flex items-end gap-2"
                   >
                     <label className="text-xs text-texto-suave">
-                      Ler contas a pagar até (vazio = não ler)
+                      Parar de ler contas a pagar em (vazio = ler sempre)
                       <input name="ate" type="date" defaultValue={c.ler_pagar_ate ?? ""} className={estiloCampo} />
                     </label>
                   </FormAcao>
