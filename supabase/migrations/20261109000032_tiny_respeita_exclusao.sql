@@ -27,6 +27,8 @@ create policy ver on public.tiny_excluidos for select to authenticated
          and public.pode_ver_empresa(empresa_id));
 revoke all on public.tiny_excluidos from public, anon, authenticated;
 grant select on public.tiny_excluidos to authenticated;
+-- Telas abertas são avisadas (regra das telas ao vivo).
+alter publication supabase_realtime add table public.tiny_excluidos;
 
 -- Quem grava é o gatilho, ao apagar um título que veio do Tiny.
 create function public.guardar_excluido_tiny()
