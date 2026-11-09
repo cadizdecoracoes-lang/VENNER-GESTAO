@@ -47,6 +47,8 @@ type Filtros = {
   de?: string;
   ate?: string;
   tudo?: string;
+  // Item da diferença do dia a destacar (veio de "ir para" de outro dia).
+  destaque?: string;
   linha?: string;
   importadas?: string;
   repetidas?: string;
@@ -75,12 +77,32 @@ function Ligacoes({ linha }: { linha: LinhaConciliacao }) {
   );
 }
 
-const ROTULO_ITEM: Record<ItemDiferenca["tipo"], string> = {
-  pendente: "No banco, falta no sistema",
-  linha_outro_dia: "Conciliada com título baixado em outro dia",
-  valor_diferente: "Conciliada com valor diferente do título",
-  titulo_sem_extrato: "Baixado no sistema, não está no extrato",
-  titulo_outro_dia: "Baixado neste dia, mas a linha do extrato é de outro dia",
+// O que é cada item e o que fazer com ele (vira dica ao passar o mouse).
+const ROTULO_ITEM: Record<ItemDiferenca["tipo"], { rotulo: (i: ItemDiferenca) => string; dica: string }> = {
+  pendente: {
+    rotulo: () => "Está no banco e falta no sistema",
+    dica: "Linha do extrato sem título. Resolva na lista abaixo: conciliar, criar o título ou escolher outro.",
+  },
+  linha_outro_dia: {
+    rotulo: (i) => `Conciliada com título baixado em ${i.outraData ? formatarData(i.outraData) : "outro dia"}`,
+    dica: "A linha deste dia foi ligada a um título baixado noutra data: o banco tem o valor neste dia e o sistema no outro. Se o título é de outro mês, desfaça e concilie com o título certo; se é o mesmo lançamento, acerte a data da baixa no título.",
+  },
+  linha_outra_conta: {
+    rotulo: (i) => (i.outraConta ? `Conciliada com título baixado em outra conta (${i.outraConta})` : "Conciliada com título que não está baixado"),
+    dica: "A linha deste dia foi ligada a um título baixado noutra conta bancária: o banco tem o valor aqui e o sistema na outra conta. Desfaça e concilie de novo (a baixa passa para esta conta), ou corrija a conta no título.",
+  },
+  valor_diferente: {
+    rotulo: () => "Conciliada com valor diferente do título",
+    dica: "O título baixado tem valor diferente da linha do banco (juros, multa ou desconto lançados a mais ou a menos). Confira o valor pago no título.",
+  },
+  titulo_sem_extrato: {
+    rotulo: () => "Baixado no sistema, não está no extrato",
+    dica: "O sistema tem esta baixa nesta conta e neste dia, mas o banco não. Confira se a conta ou a data da baixa estão certas, ou se falta importar o extrato.",
+  },
+  titulo_outro_dia: {
+    rotulo: (i) => `Baixado neste dia, mas a linha do extrato é de ${i.outraData ? formatarData(i.outraData) : "outro dia"}`,
+    dica: "Este título foi ligado a uma linha do extrato de outra data. Se a linha é de outro mês, desfaça e concilie com a linha certa deste dia.",
+  },
 };
 
 // O que fez a diferença (banco − sistema) mudar no dia, item por item. A
@@ -93,6 +115,8 @@ function DiferencaDoDia({
   sistemaAntes,
   itens,
   linkDia,
+  destaque,
+  podeEditar,
 }: {
   dia: string;
   banco: number | null;
@@ -100,7 +124,9 @@ function DiferencaDoDia({
   bancoAntes: number | null;
   sistemaAntes: number | null;
   itens: ItemDiferenca[];
-  linkDia: (d: string) => string;
+  linkDia: (d: string, destaque?: string) => string;
+  destaque: string | null;
+  podeEditar: boolean;
 }) {
   const cor = (v: number) => (Math.abs(v) < 0.005 ? "text-sucesso" : "text-perigo");
   const fmt = (v: number) => (Math.abs(v) < 0.005 ? "ok" : formatarMoeda(v));
@@ -109,6 +135,11 @@ function DiferencaDoDia({
   const variacao = diferenca !== null && antes !== null ? Math.round((diferenca - antes) * 100) / 100 : null;
   const somaItens = Math.round(itens.reduce((s, i) => s + i.valor, 0) * 100) / 100;
   const resto = variacao !== null ? Math.round((variacao - somaItens) * 100) / 100 : 0;
+  // Abre o título na tela dele, já filtrada no dia da baixa.
+  const linkTitulo = (i: ItemDiferenca) =>
+    i.tituloTipo === "pagar"
+      ? `/financeiro/pagar?${new URLSearchParams({ de: i.tituloData ?? dia, ate: i.tituloData ?? dia, por: "data_pagamento", ver: i.tituloId! })}`
+      : `/financeiro/receber?${new URLSearchParams({ de: i.tituloData ?? dia, ate: i.tituloData ?? dia, por: "data_recebimento" })}`;
   return (
     <section className="rounded-lg border border-borda bg-superficie px-3 py-2 text-sm">
       <p className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
@@ -128,8 +159,7 @@ function DiferencaDoDia({
             </span>
             {antes !== null && Math.abs(antes) >= 0.005 && (
               <span className="text-xs text-texto-suave">
-                {formatarMoeda(antes)} já vinha de antes ·{" "}
-                <LinkAcao href={linkDia(somarDias(dia, -1))}>ver dia anterior</LinkAcao>
+                {formatarMoeda(antes)} já vinha de antes · <LinkAcao href={linkDia(somarDias(dia, -1))}>ver dia anterior</LinkAcao>
               </span>
             )}
           </>
@@ -140,29 +170,55 @@ function DiferencaDoDia({
       ) : (
         <>
           <p className="mt-1.5 text-xs text-texto-suave">
-            O que mudou a diferença neste dia{variacao !== null ? <> (<strong className={`tabular-nums ${cor(variacao)}`}>{formatarMoeda(variacao)}</strong>)</> : ""}:
+            O que mudou a diferença neste dia
+            {variacao !== null ? (
+              <>
+                {" "}
+                (<strong className={`tabular-nums ${cor(variacao)}`}>{formatarMoeda(variacao)}</strong>)
+              </>
+            ) : (
+              ""
+            )}
+            . Passe o mouse no item para ver o que fazer.
           </p>
           <ul className="divide-y divide-borda/70">
-            {itens.map((i) => (
-              <li key={`${i.linhaId ?? ""}${i.tituloId ?? ""}${i.tipo}`} className="flex items-center gap-3 py-1 text-xs">
-                <span className="w-72 shrink-0 text-texto-suave">{ROTULO_ITEM[i.tipo]}</span>
-                <span className="min-w-0 flex-1 truncate" title={i.descricao}>
-                  {i.descricao}
-                </span>
-                {i.outraData && (
-                  <LinkAcao href={linkDia(i.outraData)}>{i.tipo === "linha_outro_dia" ? "título" : "extrato"} em {formatarData(i.outraData)}</LinkAcao>
-                )}
-                {i.tituloId && !i.outraData && i.tituloTipo && (
-                  <LinkAcao href={`/financeiro/${i.tituloTipo}?ver=${i.tituloId}`}>ver título</LinkAcao>
-                )}
-                <span className={`w-28 shrink-0 text-right tabular-nums font-medium ${i.valor < 0 ? "text-perigo" : "text-sucesso"}`}>{formatarMoeda(i.valor)}</span>
-              </li>
-            ))}
+            {itens.map((i) => {
+              const r = ROTULO_ITEM[i.tipo];
+              const marcado = !!destaque && (destaque === i.linhaId || destaque === i.tituloId);
+              return (
+                <li
+                  key={`${i.tipo}${i.linhaId ?? ""}${i.tituloId ?? ""}`}
+                  title={r.dica}
+                  className={`flex items-center gap-3 py-1 text-xs ${marcado ? "rounded bg-alerta/15 font-medium" : ""}`}
+                >
+                  <span className="w-80 shrink-0 truncate text-texto-suave">{r.rotulo(i)}</span>
+                  <span className="min-w-0 flex-1 truncate">{i.descricao}</span>
+                  <span className="flex shrink-0 items-center gap-3">
+                    {i.outraData && (
+                      <LinkAcao href={linkDia(i.outraData, i.tipo === "titulo_outro_dia" ? (i.linhaId ?? undefined) : (i.tituloId ?? undefined))}>
+                        ir para {formatarData(i.outraData)}
+                      </LinkAcao>
+                    )}
+                    {i.tituloId && <LinkAcao href={linkTitulo(i)}>ver título</LinkAcao>}
+                    {podeEditar && i.linhaId && i.tipo !== "pendente" && i.tipo !== "titulo_sem_extrato" && (
+                      <FormAcao
+                        acao={desfazer.bind(null, i.linhaId)}
+                        rotulo="Desfazer conciliação"
+                        enviando="..."
+                        discreto
+                        confirmar="Desfazer esta conciliação? A linha do extrato volta para a lista do que falta conciliar e você concilia com o título certo. Título baixado pela própria conciliação volta para em aberto."
+                      />
+                    )}
+                  </span>
+                  <span className={`w-24 shrink-0 text-right tabular-nums font-medium ${i.valor < 0 ? "text-perigo" : "text-sucesso"}`}>{formatarMoeda(i.valor)}</span>
+                </li>
+              );
+            })}
             {Math.abs(resto) >= 0.005 && (
               <li className="flex items-center gap-3 py-1 text-xs" title="Saldo inicial da conta lançado nesta data ou linha do extrato marcada como ignorada.">
-                <span className="w-72 shrink-0 text-texto-suave">Saldo inicial da conta ou linha ignorada</span>
+                <span className="w-80 shrink-0 text-texto-suave">Saldo inicial da conta ou linha ignorada</span>
                 <span className="flex-1" />
-                <span className="w-28 shrink-0 text-right tabular-nums font-medium">{formatarMoeda(resto)}</span>
+                <span className="w-24 shrink-0 text-right tabular-nums font-medium">{formatarMoeda(resto)}</span>
               </li>
             )}
           </ul>
@@ -249,7 +305,8 @@ async function PaginaConciliacao({ searchParams }: { searchParams: Promise<Filtr
     for (const [k, v] of Object.entries(tudo)) if (v) p.set(k, v);
     return `?${p.toString()}`;
   };
-  const linkDia = (d: string) => `?${new URLSearchParams({ ...(conta ? { conta: conta.id } : {}), dia: d }).toString()}`;
+  const linkDia = (d: string, destaque?: string) =>
+    `?${new URLSearchParams({ ...(conta ? { conta: conta.id } : {}), dia: d, ...(destaque ? { destaque } : {}) }).toString()}`;
   const somaPend = pend.reduce((s, l) => s + Number(l.valor), 0);
   const pares = [...sugestoes.entries()].map(([linha, s]) => ({
     linha,
@@ -412,6 +469,8 @@ async function PaginaConciliacao({ searchParams }: { searchParams: Promise<Filtr
               sistemaAntes={sistemaAntes}
               itens={doDia.itens}
               linkDia={linkDia}
+              destaque={filtros.destaque ?? null}
+              podeEditar={podeEditar}
             />
           )}
 
@@ -474,7 +533,7 @@ async function PaginaConciliacao({ searchParams }: { searchParams: Promise<Filtr
               const [antR, antP] = ant ? [porId.get(ant.titulos[0])!, porId.get(ant.titulos[1])!] : [];
               const valor = Number(l.valor);
               return (
-                <tr key={l.id} className={l.id === resolvendo?.id ? "bg-primaria-suave/50" : ""}>
+                <tr key={l.id} className={l.id === resolvendo?.id ? "bg-primaria-suave/50" : l.id === filtros.destaque ? "bg-alerta/15" : ""}>
                   <Celula className="whitespace-nowrap tabular-nums">{formatarData(l.data)}</Celula>
                   <Celula className="max-w-md">
                     <span className="block truncate" title={`${l.descricao}${l.documento ? ` · doc ${l.documento}` : ""}`}>
