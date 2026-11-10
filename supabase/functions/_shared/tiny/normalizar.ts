@@ -70,7 +70,7 @@ function situacaoTitulo(v: unknown, valorPago: number, saldo: number): Titulo["s
 // Situações do Tiny em que o título não tem baixa (não vale ler os pagamentos).
 export function semBaixa(v: unknown): boolean {
   const s = (texto(v) ?? "").toLowerCase();
-  return !s || s.startsWith("cancel") || ["aberto", "aberta", "prevista", "previsto", "atrasado", "atrasada", "emissao"].includes(s);
+  return !s || s.startsWith("cancel") || ["aberto", "aberta", "prevista", "previsto", "atrasado", "atrasada", "atrasadas", "emissao"].includes(s);
 }
 
 // Recebimentos/pagamentos de um título: o Tiny devolve uma lista ou { itens }.

@@ -97,6 +97,7 @@ export type Lote = {
   categorias?: Categoria[];
   listados: Listado[];
   pagar_ciclo_inicio?: string;
+  receber_ciclo_inicio?: string;
   receber: Titulo[];
   pagar: Titulo[];
   pedidos: Pedido[];
@@ -107,6 +108,9 @@ export type Lote = {
   erro?: string;
 };
 
+// Volta completa pelos títulos: primeiro os em aberto, depois os vencimentos do ano.
+export type Ciclo = { fase: "abertos" | "ano"; offset: number; inicio?: string };
+
 // Onde cada listagem parou (guardado no banco entre uma leitura e outra).
 export type Cursor = { desde: string; offset: number; inicio?: string };
 export type EstadoLeitura = {
@@ -114,8 +118,10 @@ export type EstadoLeitura = {
   receber?: Cursor;
   pedidos?: Cursor;
   produtos?: Cursor;
-  pagar?: { fase: "abertos" | "ano"; offset: number; inicio?: string };
-  // Volta pelas contas a receber em aberto (pega as que não mudam há tempo).
+  pagar?: Ciclo;
+  receber_ciclo?: Ciclo;
+  // Antigos (até 10/11/2026): listagem do receber por alteração e volta
+  // pelos em aberto. Não são mais usados.
   receber_abertos?: { offset: number };
 };
 

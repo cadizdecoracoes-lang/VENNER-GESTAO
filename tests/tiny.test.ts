@@ -191,9 +191,13 @@ test("leitura: renova o acesso, lista, lê pendentes e grava um lote só", async
   assert.equal(lote.pedidos[0].numero, "301");
   assert.deepEqual(lote.removidos, [{ tipo: "produto", id: 404 }]);
   assert.equal(lote.listados.filter((l) => l.tipo === "produto").length, 200);
-  assert.equal(lote.estado.receber?.desde, "2026-10-23 08:55:00");
+  // Receber: uma página de abertos (curta) e a dos vencimentos do ano fecham a volta.
+  assert.deepEqual(lote.estado.receber_ciclo, { fase: "abertos", offset: 0 });
+  assert.equal(lote.receber_ciclo_inicio, "2026-10-23T12:00:00.000Z");
   assert.equal(lote.estado.produtos?.offset, 200);
   assert.equal(lote.contas, undefined, "cadastros só uma vez por dia");
-  assert.ok(chamadas.some((c) => c.startsWith("/contas-receber?dataAtualizacao=2025-12-01")));
+  assert.ok(chamadas.some((c) => c.startsWith("/contas-receber?situacao=aberto")));
+  assert.ok(chamadas.some((c) => c.startsWith("/contas-receber?dataInicialVencimento=2026-01-01")));
+  assert.ok(!chamadas.some((c) => c.includes("dataAtualizacao") && c.startsWith("/contas-receber")), "receber sem filtro de alteração");
   assert.ok(!chamadas.some((c) => c.startsWith("/contas-pagar")), "contas a pagar desligado");
 });
