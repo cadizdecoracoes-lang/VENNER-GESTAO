@@ -15,7 +15,7 @@ export type LinhaTinyPagar = {
   pagamento: string | null;
 };
 
-const comparavel = (v: Celula) =>
+export const comparavel = (v: Celula) =>
   String(v ?? "")
     .normalize("NFD")
     .replace(/[̀-ͯ]/g, "")

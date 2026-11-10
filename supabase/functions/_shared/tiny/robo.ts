@@ -104,10 +104,9 @@ export async function lerTiny(
         erros.push(`${rotulo}: ${e instanceof Error ? e.message : String(e)}`);
       }
     };
-    await listar("Contas a receber", () =>
-      varrer(tiny, lote, "receber", "/contas-receber", "dataAtualizacao", (estado.receber ??= { desde: "2025-12-01 00:00:00", offset: 0 }), agora, 2),
-    );
-    await listar("Contas a receber em aberto", () => varrerAbertos(tiny, lote, "receber", "/contas-receber", (estado.receber_abertos ??= { offset: 0 }), 1));
+    // Contas a receber: o Tiny não filtra por data de alteração (o filtro
+    // era ignorado), então dá voltas completas como nas contas a pagar.
+    await listar("Contas a receber", () => varrerTitulos(tiny, lote, "receber", estado, agora, 2));
     await listar("Pedidos", () =>
       varrer(tiny, lote, "pedido", "/pedidos", "dataAtualizacao", (estado.pedidos ??= { desde: "2025-01-01 00:00:00", offset: 0 }), agora, 2),
     );
@@ -116,7 +115,7 @@ export async function lerTiny(
         situacao: "A",
       }),
     );
-    if (conta.ler_pagar) await listar("Contas a pagar", () => varrerPagar(tiny, lote, estado, agora, 2));
+    if (conta.ler_pagar) await listar("Contas a pagar", () => varrerTitulos(tiny, lote, "pagar", estado, agora, 2));
 
     // 3. Detalhe de cada pendente (das leituras anteriores).
     for (const p of conta.pendentes) {
@@ -182,41 +181,24 @@ async function varrer(
   return usadas;
 }
 
-// Volta pelos títulos em aberto, uma página por leitura: o filtro por
-// alteração não traz o que está parado desde antes do início da leitura.
-async function varrerAbertos(api: ApiTiny, lote: Lote, tipo: "receber" | "pagar", caminho: string, c: { offset: number }, maximo: number): Promise<number> {
+// Contas a pagar e a receber não têm filtro por alteração: dá voltas
+// completas (em aberto e depois vencimentos de 2026) comparando a assinatura
+// de cada título. No fim da volta, o que não apareceu nela é relido (pago há
+// tempo, excluído...).
+async function varrerTitulos(api: ApiTiny, lote: Lote, tipo: "receber" | "pagar", estado: EstadoLeitura, agora: Date, maximo: number): Promise<number> {
+  const chave = tipo === "pagar" ? "pagar" : "receber_ciclo";
+  const caminho = tipo === "pagar" ? "/contas-pagar" : "/contas-receber";
+  const c = (estado[chave] ??= { fase: "abertos", offset: 0 });
   let usadas = 0;
   while (usadas < maximo) {
-    const r = await api.ler<Pagina>(caminho, { situacao: "aberto", orderBy: "asc", limit: POR_PAGINA, offset: c.offset });
+    if (c.fase === "abertos" && c.offset === 0) c.inicio = agora.toISOString();
+    const filtros = c.fase === "abertos" ? { situacao: "aberto" } : { dataInicialVencimento: HISTORICO_DESDE };
+    const r = await api.ler<Pagina>(caminho, { ...filtros, orderBy: "asc", limit: POR_PAGINA, offset: c.offset });
     usadas++;
     const itens = r?.itens ?? [];
     for (const i of itens) {
       const id = Number((i as { id?: unknown }).id);
       if (id) lote.listados.push({ tipo, id, assinatura: assinatura(tipo, i) });
-    }
-    if (itens.length < POR_PAGINA) {
-      c.offset = 0;
-      break;
-    }
-    c.offset += POR_PAGINA;
-  }
-  return usadas;
-}
-
-// Contas a pagar não têm filtro por alteração: dá voltas completas (em aberto
-// e depois vencimentos de 2026) comparando a assinatura de cada título.
-async function varrerPagar(api: ApiTiny, lote: Lote, estado: EstadoLeitura, agora: Date, maximo: number): Promise<number> {
-  const c = (estado.pagar ??= { fase: "abertos", offset: 0 });
-  let usadas = 0;
-  while (usadas < maximo) {
-    if (c.fase === "abertos" && c.offset === 0) c.inicio = agora.toISOString();
-    const filtros = c.fase === "abertos" ? { situacao: "aberto" } : { dataInicialVencimento: HISTORICO_DESDE };
-    const r = await api.ler<Pagina>("/contas-pagar", { ...filtros, orderBy: "asc", limit: POR_PAGINA, offset: c.offset });
-    usadas++;
-    const itens = r?.itens ?? [];
-    for (const i of itens) {
-      const id = Number((i as { id?: unknown }).id);
-      if (id) lote.listados.push({ tipo: "pagar", id, assinatura: assinatura("pagar", i) });
     }
     if (itens.length === POR_PAGINA) {
       c.offset += POR_PAGINA;
@@ -224,9 +206,8 @@ async function varrerPagar(api: ApiTiny, lote: Lote, estado: EstadoLeitura, agor
       c.fase = "ano";
       c.offset = 0;
     } else {
-      // Volta completa: o que não apareceu nela é relido (pago, excluído...).
-      if (c.inicio) lote.pagar_ciclo_inicio = c.inicio;
-      estado.pagar = { fase: "abertos", offset: 0 };
+      if (c.inicio) lote[tipo === "pagar" ? "pagar_ciclo_inicio" : "receber_ciclo_inicio"] = c.inicio;
+      estado[chave] = { fase: "abertos", offset: 0 };
       break;
     }
   }
