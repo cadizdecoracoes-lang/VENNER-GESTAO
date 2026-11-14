@@ -9,6 +9,7 @@ Sistema de gestão do Grupo Venner (produção, estoque, compras, vendas, financ
 
 ## Regras de entrega
 
+- Toda tela é ao vivo e nenhuma entrega é aceita sem testar com duas telas abertas (seção "Telas ao vivo").
 - Nunca faça push direto na `main`. Toda mudança vai num ramo próprio e vira um pacote (PR). O Alexandre faz o merge quando as verificações estão verdes.
 - O merge na `main` publica sozinho: o workflow `publicar-banco.yml` aplica as migrações e publica as Edge Functions no Supabase de produção, e o `publicar-telas.yml` publica as telas no GitHub Pages. Não rode deploy nem `supabase db push` à mão.
 - Nunca leia, copie nem peça por chat valores de `.env*`, `.dev.vars` ou segredos (Supabase, Tiny, Mercado Livre, Shopee).
@@ -54,6 +55,15 @@ O GitHub (`.github/workflows/ci.yml`) roda tudo isso em cada pacote. Rode `typec
 - Ações de gravação (`actions.ts`) são funções comuns no navegador. `revalidatePath`, `redirect` e `notFound` vêm de `src/lib/navegacao.ts` (mesmos nomes do Next).
 - O que precisa de segredo ou de falar com outra plataforma vai numa Edge Function (`supabase/functions`), chamada com `chamarFuncao` (`src/lib/supabase/funcoes.ts`).
 - Links montados à mão (fora do `Link` do Next) usam `comBase` de `src/lib/endereco.ts`: no GitHub Pages o site fica em `/VENNER-GESTAO`.
+
+## Telas ao vivo (regra obrigatória do Alexandre)
+
+Toda tela é ao vivo. Qualquer cadastro, edição, exclusão, valor ou texto alterado por um usuário aparece na hora para todos os usuários e em todas as telas, contas, pagamentos e relatórios ligados àquele dado, sem botão de atualizar e sem fechar a tela.
+
+- O mecanismo já existe: `src/components/ao-vivo.tsx` (no layout do sistema) escuta o Supabase Realtime e refaz a tela aberta pelo `TelaCliente`, mantendo filtros, período e aba. Use-o; não crie botão "Atualizar" nem peça F5.
+- Toda tabela nova que alimenta uma tela, conta, pagamento ou relatório entra na publicação `supabase_realtime` na mesma migração (ver "Banco de dados"). Totais e relatórios calculados (views, funções) se atualizam porque as tabelas de origem estão na publicação: confira que todas estão.
+- A tela lê os dados dentro do `montar` do `TelaCliente`. Não guarde em estado local uma cópia que não volta a ser lida, senão a mudança de outro usuário não aparece.
+- Nenhuma entrega é aceita sem testar com duas telas abertas (dois navegadores ou duas abas, de preferência com usuários diferentes): altere numa e confira que a outra e as telas ligadas (contas, pagamentos, relatórios) mudam sozinhas. Diga no pacote o que foi testado assim.
 
 ## Visual das telas (regra para toda tela nova ou revisada)
 
