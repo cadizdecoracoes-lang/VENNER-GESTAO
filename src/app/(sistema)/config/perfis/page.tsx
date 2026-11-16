@@ -96,16 +96,22 @@ function MatrizPermissoes({ marcadas, travada }: { marcadas: Set<string>; travad
   );
 }
 
-async function PaginaPerfis({ searchParams }: { searchParams: Promise<{ editar?: string; novo?: string }> }) {
+async function PaginaPerfis({
+  searchParams,
+}: {
+  searchParams: Promise<{ editar?: string; novo?: string; copiar?: string }>;
+}) {
   const acesso = await carregarAcesso();
   if (!pode(acesso, TELA, "ver")) return <SemAcesso codigo={TELA} />;
 
-  const { editar, novo } = await searchParams;
+  const { editar, novo, copiar } = await searchParams;
   const { perfis, usuarios } = await carregar();
   const emEdicao = editar ? perfis.find((p) => p.id === editar) : undefined;
   const mostrarForm = (novo && pode(acesso, TELA, "criar")) || (emEdicao && pode(acesso, TELA, "editar"));
   const travada = !!emEdicao?.todas_empresas;
-  const marcadas = new Set((emEdicao?.perfil_permissoes ?? []).map((p) => `${p.tela_codigo}:${p.acao}`));
+  // Perfil novo pode partir das permissões de outro (ex.: igual à Diretoria, menos uma tela).
+  const modelo = !emEdicao && copiar ? perfis.find((p) => p.id === copiar) : undefined;
+  const marcadas = new Set(((emEdicao ?? modelo)?.perfil_permissoes ?? []).map((p) => `${p.tela_codigo}:${p.acao}`));
   const qtdUsuarios = (id: string) => usuarios.filter((u) => u.perfil_id === id).length;
 
   return (
@@ -141,7 +147,7 @@ async function PaginaPerfis({ searchParams }: { searchParams: Promise<{ editar?:
                 Cancelar
               </Link>
             }
-            key={emEdicao?.id ?? "novo"}
+            key={emEdicao?.id ?? `novo-${modelo?.id ?? ""}`}
             acao={salvarPerfil.bind(null, emEdicao?.id ?? null, travada)}
             rotulo="Salvar"
             className="space-y-3"
@@ -155,6 +161,22 @@ async function PaginaPerfis({ searchParams }: { searchParams: Promise<{ editar?:
               </Campo>
             </div>
             <div className="space-y-2">
+              {!emEdicao && perfis.length > 0 && (
+                <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-texto-suave">
+                  <span>Copiar as permissões de:</span>
+                  {perfis.map((p) =>
+                    p.id === modelo?.id ? (
+                      <span key={p.id} className="font-medium text-texto">
+                        {p.nome}
+                      </span>
+                    ) : (
+                      <LinkAcao key={p.id} href={`?novo=1&copiar=${p.id}`}>
+                        {p.nome}
+                      </LinkAcao>
+                    ),
+                  )}
+                </p>
+              )}
               <p className="text-sm text-texto-suave">
                 {travada
                   ? "Este perfil tem acesso total e enxerga todos os CNPJs. As permissões dele não podem ser retiradas, para o sistema nunca ficar sem quem o administre."
