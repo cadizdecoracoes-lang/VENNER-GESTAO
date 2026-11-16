@@ -47,20 +47,20 @@ select importar_extrato(current_setting('teste.conta')::uuid, 'ofx', 'varios.ofx
 
 -- Recusas.
 select pg_temp.esperar_erro(
-  $$select conciliar_varios(array[pg_temp.linha('V2'), pg_temp.linha('V3')], '{}', array[pg_temp.receber('VAR manual A')])$$,
+  $$select conciliar_lancamentos(array[pg_temp.linha('V2'), pg_temp.linha('V3')], '{}', array[pg_temp.receber('VAR manual A')])$$,
   'somam', 'soma diferente do extrato: recusa');
 select pg_temp.esperar_erro(
-  $$select conciliar_varios(array[pg_temp.linha('V3'), pg_temp.linha('V4')], '{}', array[pg_temp.receber('VAR manual A')])$$,
+  $$select conciliar_lancamentos(array[pg_temp.linha('V3'), pg_temp.linha('V4')], '{}', array[pg_temp.receber('VAR manual A')])$$,
   'só entradas ou só saídas', 'entrada e saída juntas: recusa');
 select pg_temp.esperar_erro(
-  $$select conciliar_varios(array[pg_temp.linha('V2'), pg_temp.linha('V3')],
+  $$select conciliar_lancamentos(array[pg_temp.linha('V2'), pg_temp.linha('V3')],
     array[(select id from contas_pagar where descricao = 'VAR fornecedor')], array[pg_temp.receber('VAR manual parcelado')])$$,
   'só com contas a receber', 'entradas juntas com título a pagar: recusa');
 
 -- Dois títulos manuais para uma entrada (uma linha: mesmo caminho de sempre).
-select conciliar_varios(array[pg_temp.linha('V1')], '{}', array[pg_temp.receber('VAR manual A'), pg_temp.receber('VAR manual B')]);
+select conciliar_lancamentos(array[pg_temp.linha('V1')], '{}', array[pg_temp.receber('VAR manual A'), pg_temp.receber('VAR manual B')]);
 -- Um título recebido em duas entradas em dias diferentes.
-select conciliar_varios(array[pg_temp.linha('V2'), pg_temp.linha('V3')], '{}', array[pg_temp.receber('VAR manual parcelado')]);
+select conciliar_lancamentos(array[pg_temp.linha('V2'), pg_temp.linha('V3')], '{}', array[pg_temp.receber('VAR manual parcelado')]);
 reset role;
 
 select pg_temp.esperar(
@@ -86,7 +86,7 @@ select importar_extrato(current_setting('teste.conta')::uuid, 'ofx', 'varios2.of
   {"data": "2026-11-08", "descricao": "PIX Y", "valor": 20, "id_banco": "V6"}
 ]'::jsonb);
 select pg_temp.esperar_erro(
-  $$select conciliar_varios(array[pg_temp.linha('V5'), pg_temp.linha('V6')], '{}',
+  $$select conciliar_lancamentos(array[pg_temp.linha('V5'), pg_temp.linha('V6')], '{}',
     array[pg_temp.receber('VAR manual parcelado'), pg_temp.receber('VAR outro')])$$,
   'já está conciliado', 'título já conciliado não entra em outro grupo');
 reset role;
@@ -118,7 +118,7 @@ select pg_temp.esperar(
 update contas_receber set valor = 590 where descricao = 'VAR outro';
 set role authenticated;
 set request.jwt.claim.sub = '00000000-0000-0000-0000-00000000000b';
-select conciliar_varios(array[pg_temp.linha('V3'), pg_temp.linha('V5')], '{}',
+select conciliar_lancamentos(array[pg_temp.linha('V3'), pg_temp.linha('V5')], '{}',
   array[pg_temp.receber('VAR manual parcelado'), pg_temp.receber('VAR outro')]);
 reset role;
 select pg_temp.esperar(

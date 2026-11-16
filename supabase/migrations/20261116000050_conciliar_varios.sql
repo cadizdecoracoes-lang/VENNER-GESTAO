@@ -12,7 +12,11 @@
 -- - Um título pode agora estar ligado a mais de uma linha, mas só dentro do
 --   mesmo grupo (antes: índice único por título). Continua valendo "um título
 --   é conciliado uma vez só".
--- - conciliar_varios(lancamentos, pagar, receber): mesma regra de sempre (tudo
+-- - conciliar_lancamentos(lancamentos, pagar, receber). O nome contém
+--   "conciliar_lancamento" de propósito: o gatilho bloquear_titulo_tiny (pacote
+--   #58) só deixa a conciliação mexer em título do Tiny pelas funções cujo nome
+--   bate com esse padrão.
+--   mesma regra de sempre (tudo
 --   conciliado vem de um título a pagar/receber, a soma tem de bater). Com uma
 --   linha só, é o conciliar_lancamento de sempre. Com várias: todas da mesma
 --   conta, todas entradas (com contas a receber) ou todas saídas (com contas a
@@ -77,7 +81,7 @@ grant execute on function public.linhas_do_grupo(uuid[]) to authenticated;
 -- -----------------------------------------------------------------------------
 -- Conciliar vários de uma vez
 -- -----------------------------------------------------------------------------
-create function public.conciliar_varios(lancamentos uuid[], pagar uuid[] default '{}', receber uuid[] default '{}')
+create function public.conciliar_lancamentos(lancamentos uuid[], pagar uuid[] default '{}', receber uuid[] default '{}')
 returns void
 language plpgsql
 set search_path = ''
@@ -243,8 +247,8 @@ begin
   where id = any(lancamentos);
 end;
 $$;
-revoke execute on function public.conciliar_varios(uuid[], uuid[], uuid[]) from public, anon;
-grant execute on function public.conciliar_varios(uuid[], uuid[], uuid[]) to authenticated;
+revoke execute on function public.conciliar_lancamentos(uuid[], uuid[], uuid[]) from public, anon;
+grant execute on function public.conciliar_lancamentos(uuid[], uuid[], uuid[]) to authenticated;
 
 -- -----------------------------------------------------------------------------
 -- Desfazer: o grupo todo

@@ -53,7 +53,7 @@ export async function conciliar(lancamento: string, pagar: string[], receber: st
 // Várias linhas do extrato com vários títulos de uma vez (ex.: um título
 // recebido em duas entradas). O banco reparte o valor e concilia tudo junto.
 export async function conciliarVarios(lancamentos: string[], pagar: string[], receber: string[]): Promise<Estado> {
-  return chamar("conciliar_varios", { lancamentos, pagar, receber });
+  return chamar("conciliar_lancamentos", { lancamentos, pagar, receber });
 }
 
 // Aceita todas as sugestões da tela de uma vez; para na primeira que der erro.
