@@ -1,7 +1,7 @@
 // Conferência com o Tiny: nomes e regras puras usadas pela tela
 // (testadas em tests/conferencia-tiny.test.ts).
 
-export type ModuloConferencia = "pagar" | "compras" | "notas_entrada" | "pedidos" | "notas_saida" | "receber";
+export type ModuloConferencia = "pagar" | "compras" | "notas_entrada" | "pedidos" | "notas_saida" | "receber" | "conciliacao";
 export type Problema = "falta_aqui" | "sobra_aqui" | "diferente" | "so_aqui";
 
 export const NOME_MODULO: Record<ModuloConferencia, string> = {
@@ -11,6 +11,7 @@ export const NOME_MODULO: Record<ModuloConferencia, string> = {
   pedidos: "Pedidos de venda",
   notas_saida: "Notas de saída",
   receber: "Contas a receber",
+  conciliacao: "Conciliação: banco x Tiny",
 };
 
 export const NOME_PROBLEMA: Record<Problema, string> = {
@@ -28,6 +29,7 @@ export const BASE_RESUMO: Record<ModuloConferencia, { tiny: string; venner: stri
   compras: { tiny: "Ordens de compra de 2026 (sem canceladas no valor)", venner: "Pedidos de compra daqui ligados ao Tiny" },
   notas_saida: { tiny: "Notas de saída válidas de 2026", venner: "Pedidos daqui com número de nota" },
   notas_entrada: { tiny: "Notas de entrada válidas de 2026", venner: "Notas de fornecedor daqui (2026)" },
+  conciliacao: { tiny: "Ligações ao extrato com título pago no Tiny", venner: "—" },
 };
 
 export type Diferenca = {

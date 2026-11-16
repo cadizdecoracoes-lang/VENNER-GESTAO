@@ -56,8 +56,10 @@ select robo_tiny_aplicar(current_setting('teste.robo')::uuid, current_setting('t
 reset role;
 select pg_temp.esperar(
   (select string_agg(id_externo || '=' || pendente, ',' order by id_externo) from integracao_fila
-   where tipo = 'receber' and id_externo in (70, 71, 72)) = '70=true,71=true,72=false',
-  'fim da volta: situação diferente da Olist é relida; recebido aqui não');
+   where tipo = 'receber' and id_externo in (70, 71, 72)) = '70=true,71=true,72=true',
+  'fim da volta: situação diferente da Olist é relida, inclusive o recebido aqui (o Tiny vence, desde 16/11)');
+-- Como a migração 46 fez com os títulos de antes: a marca de "alterado aqui" sai.
+update contas_receber set editado_aqui = '{}' where tiny_id = 72;
 
 -- Releitura: a Olist diz em aberto (70) e recebido (71).
 select tiny_aplicar(current_setting('teste.robo')::uuid, $${
@@ -77,8 +79,8 @@ select pg_temp.esperar(
   (select situacao = 'pago' and data_recebimento = '2026-10-05' from contas_receber where tiny_id = 71),
   'recebido na Olist fica recebido com a data');
 select pg_temp.esperar(
-  (select situacao = 'pago' and data_recebimento = '2026-10-04' from contas_receber where tiny_id = 72),
-  'recebido aqui não volta para aberto');
+  (select situacao = 'aberto' and data_recebimento is null from contas_receber where tiny_id = 72),
+  'recebido só aqui volta para aberto como no Tiny');
 select pg_temp.esperar(not exists (select 1 from receber_difere_do_tiny(current_setting('teste.robo')::uuid) x
                                    where x in (70, 71, 72)),
   'depois da releitura, nada mais diferente');

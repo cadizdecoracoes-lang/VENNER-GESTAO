@@ -93,8 +93,8 @@ select pg_temp.esperar(
   (select problema = 'falta_aqui' from conferencia_tiny() where modulo = 'notas_entrada' and tiny_id = 7002),
   'nota de entrada sem nota de fornecedor aqui aparece');
 select pg_temp.esperar(
-  (select count(*) = 6 from conferencia_tiny_resumo()),
-  'resumo traz os seis módulos da conta do Tiny');
+  (select count(*) = 7 from conferencia_tiny_resumo()),
+  'resumo traz os sete módulos da conta do Tiny');
 select pg_temp.esperar(
   (select tiny_qtd >= 2 and tiny_valor >= 350.5 from conferencia_tiny_resumo() where modulo = 'pagar'),
   'resumo soma o que está em aberto no Tiny');
@@ -170,8 +170,8 @@ select pg_temp.esperar(not exists (select 1 from conferencia_tiny()), 'sem permi
 select pg_temp.esperar_erro($$select igualar_ao_tiny('pagar', '{501}')$$, 'Sem permissão', 'sem permissão não corrige');
 reset role;
 
--- A conciliação continua baixando título do Tiny (o bloqueio não a impede),
--- e o conciliado fica fora do "Deixar igual ao Tiny".
+-- A conciliação só liga a linha do extrato ao título do Tiny (não dá baixa);
+-- a conferência mostra o erro de baixa a corrigir no Tiny, e o Tiny vence.
 select set_config('teste.empresa', (select empresa_id::text from contas_pagar where tiny_id = 501), false);
 insert into contas_bancarias (empresa_id, nome) values (current_setting('teste.empresa')::uuid, 'Conta conferência');
 select set_config('teste.conta', id::text, false) from contas_bancarias where nome = 'Conta conferência';
@@ -182,19 +182,49 @@ select importar_extrato(current_setting('teste.conta')::uuid, 'ofx', 'conf.ofx',
 select conciliar_lancamento((select id from extrato_lancamentos where chave = 'id:CF1'),
   array[(select id from contas_pagar where tiny_id = 501)], '{}');
 select pg_temp.esperar(
-  (select situacao = 'pago' and conta_bancaria_id = current_setting('teste.conta')::uuid from contas_pagar where tiny_id = 501),
-  'conciliação baixa o título do Tiny');
+  (select situacao = 'aberto' and conta_bancaria_id is null from contas_pagar where tiny_id = 501),
+  'conciliação não dá baixa no título do Tiny');
 select pg_temp.esperar(
-  (select (igualar_ao_tiny('pagar', '{501}') ->> 'conciliados')::integer = 1),
-  'conciliado não é igualado');
+  (select situacao = 'conciliado' from extrato_lancamentos where chave = 'id:CF1'),
+  'linha do extrato fica conciliada (ligada ao título)');
 select pg_temp.esperar(
-  (select corrigivel = false from conferencia_tiny() where modulo = 'pagar' and tiny_id = 501),
-  'diferença de título conciliado aparece sem correção');
+  (select campos = 'situação' and motivo like '%no Tiny está em aberto%'
+   from conferencia_tiny() where modulo = 'conciliacao' and tiny_id = 501),
+  'conferência mostra: saiu do banco, mas em aberto no Tiny');
 reset role;
+
+-- O Tiny dá a baixa em outra conta: a conferência aponta a conta.
 set role anon;
 select robo_tiny_aplicar(current_setting('teste.robo')::uuid, current_setting('teste.chave'), $${
-  "pagar": [{"id": 501, "situacao": "aberto", "emissao": "2026-11-10", "vencimento": "2026-12-10", "valor": 100,
-             "descricao": "Conferência 501", "contato": {"id": 8501, "nome": "FORNECEDOR CONFERENCIA"}}]
+  "pagar": [{"id": 501, "situacao": "pago", "emissao": "2026-11-10", "vencimento": "2026-12-10", "liquidacao": "2026-12-10",
+             "valor": 100, "valor_pago": 100, "descricao": "Conferência 501", "contato": {"id": 8501, "nome": "FORNECEDOR CONFERENCIA"}}]
 }$$::jsonb);
 reset role;
-select pg_temp.esperar((select situacao = 'pago' from contas_pagar where tiny_id = 501), 'Tiny em aberto não desfaz a conciliação');
+set role authenticated;
+set request.jwt.claim.sub = '00000000-0000-0000-0000-00000000000b';
+select pg_temp.esperar(
+  (select campos = 'conta' from conferencia_tiny() where modulo = 'conciliacao' and tiny_id = 501),
+  'baixa no Tiny em outra conta aparece na conferência');
+-- Desfazer só desliga: o título continua como no Tiny.
+select desfazer_conciliacao((select id from extrato_lancamentos where chave = 'id:CF1'));
+select pg_temp.esperar(
+  (select situacao = 'pago' and data_pagamento = '2026-12-10' from contas_pagar where tiny_id = 501),
+  'desfazer a conciliação não mexe no título do Tiny');
+reset role;
+
+-- Título pago aqui e apagado no Tiny: igualar cancela e limpa a baixa
+-- (sem esbarrar na regra "pago = tem data, valor e conta").
+alter table contas_pagar disable trigger bloquear_titulo_tiny;
+update contas_pagar set situacao = 'pago', data_pagamento = '2026-11-16', valor_pago = 250.5,
+  conta_bancaria_id = (select id from contas_bancarias where empresa_id = contas_pagar.empresa_id limit 1)
+where tiny_id = 502;
+alter table contas_pagar enable trigger bloquear_titulo_tiny;
+update integracao_fila set erro = 'Não existe mais no Tiny', pendente = false where tipo = 'pagar' and id_externo = 502;
+set role authenticated;
+set request.jwt.claim.sub = '00000000-0000-0000-0000-00000000000b';
+select igualar_ao_tiny('pagar', '{502}');
+reset role;
+select pg_temp.esperar(
+  (select situacao = 'cancelado' and data_pagamento is null and valor_pago is null and conta_bancaria_id is null
+   from contas_pagar where tiny_id = 502),
+  'pago apagado no Tiny fica cancelado, sem baixa');

@@ -72,7 +72,7 @@ delete from perfil_permissoes
 where tela_codigo = 'financeiro.conciliacao' and acao = 'excluir' and perfil_id = (select id from perfis where nome = 'Financeiro');
 
 -- Pago pelo Tiny sem a conta da baixa casa com o extrato de qualquer conta da
--- empresa: passa para a conta e a data do extrato e volta se desfizer.
+-- empresa. Desde 16/11 a conciliação só liga: conta e data ficam as do título.
 select set_config('teste.semconta', tiny_conta(current_setting('teste.industria')::uuid, null)::text, false);
 insert into contas_pagar (empresa_id, descricao, categoria_id, valor, vencimento, situacao, data_pagamento, valor_pago, conta_bancaria_id)
 values (current_setting('teste.industria')::uuid, 'TINY pago sem conta', (select id from plano_contas where codigo = '4.06'), 777, '2026-11-10',
@@ -85,9 +85,9 @@ select conciliar_lancamento(
   (select id from extrato_lancamentos where descricao = 'PIX ENVIADO' and data = '2026-11-12'),
   array[(select id from contas_pagar where descricao = 'TINY pago sem conta')]);
 select pg_temp.esperar(
-  (select conta_bancaria_id = current_setting('teste.conta')::uuid and data_pagamento = '2026-11-12' and situacao = 'pago'
+  (select conta_bancaria_id = current_setting('teste.semconta')::uuid and data_pagamento = '2026-11-10' and situacao = 'pago'
    from contas_pagar where descricao = 'TINY pago sem conta'),
-  'pago do Tiny sem conta passa para a conta e a data do extrato');
+  'pago do Tiny sem conta é só ligado ao extrato, sem mudar conta e data');
 select desfazer_conciliacao((select id from extrato_lancamentos where descricao = 'PIX ENVIADO' and data = '2026-11-12'));
 select pg_temp.esperar(
   (select conta_bancaria_id = current_setting('teste.semconta')::uuid and data_pagamento = '2026-11-10' and situacao = 'pago'

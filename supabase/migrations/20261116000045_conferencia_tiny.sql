@@ -610,12 +610,14 @@ begin
       if tipo_fila = 'pagar' then
         update public.contas_pagar set editado_aqui = '{}' where tiny_id = n and editado_aqui <> '{}';
         -- Apagado no Tiny: aqui também deixa de valer.
-        update public.contas_pagar set situacao = 'cancelado', observacao = 'Apagado no Tiny'
+        update public.contas_pagar set situacao = 'cancelado', observacao = 'Apagado no Tiny',
+          data_pagamento = null, valor_pago = null, conta_bancaria_id = null
         where tiny_id = n and situacao <> 'cancelado'
           and exists (select 1 from public.integracao_fila f where f.tipo = 'pagar' and f.id_externo = n and f.erro = 'Não existe mais no Tiny');
       else
         update public.contas_receber set editado_aqui = '{}' where tiny_id = n and editado_aqui <> '{}';
-        update public.contas_receber set situacao = 'cancelado', observacao = 'Apagado no Tiny'
+        update public.contas_receber set situacao = 'cancelado', observacao = 'Apagado no Tiny',
+          data_recebimento = null, valor_recebido = null, conta_bancaria_id = null
         where tiny_id = n and situacao <> 'cancelado'
           and exists (select 1 from public.integracao_fila f where f.tipo = 'receber' and f.id_externo = n and f.erro = 'Não existe mais no Tiny');
       end if;
@@ -791,11 +793,13 @@ where r.tiny_id is not null and r.editado_aqui <> '{}'
 delete from public.tiny_excluidos;
 
 -- Apagados no Tiny que ainda valem aqui (pagos ou baixados aqui): cancelados.
-update public.contas_pagar p set situacao = 'cancelado', observacao = 'Apagado no Tiny'
+update public.contas_pagar p set situacao = 'cancelado', observacao = 'Apagado no Tiny',
+          data_pagamento = null, valor_pago = null, conta_bancaria_id = null
 from public.integracao_fila f
 where f.tipo = 'pagar' and f.id_externo = p.tiny_id and f.erro = 'Não existe mais no Tiny' and p.situacao <> 'cancelado'
   and not exists (select 1 from public.extrato_conciliacoes c where c.conta_pagar_id = p.id);
-update public.contas_receber r set situacao = 'cancelado', observacao = 'Apagado no Tiny'
+update public.contas_receber r set situacao = 'cancelado', observacao = 'Apagado no Tiny',
+          data_recebimento = null, valor_recebido = null, conta_bancaria_id = null
 from public.integracao_fila f
 where f.tipo = 'receber' and f.id_externo = r.tiny_id and f.erro = 'Não existe mais no Tiny' and r.situacao <> 'cancelado'
   and not exists (select 1 from public.extrato_conciliacoes c where c.conta_receber_id = r.id);
