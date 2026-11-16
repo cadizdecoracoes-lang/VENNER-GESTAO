@@ -89,6 +89,7 @@ async function PaginaPedidosCompra({ searchParams }: { searchParams: Promise<{ e
               <tr key={p.id} data-tags={p.etapa}>
                 <Celula className="tabular-nums">
                   <LinkAcao href={`/compras/pedidos/pedido?id=${p.id}`}>{p.numero}</LinkAcao>
+                  {p.numero_tiny && <span className="ml-1 text-xs text-texto-suave">Tiny {p.numero_tiny}</span>}
                 </Celula>
                 <Celula className="whitespace-nowrap tabular-nums text-texto-suave">{formatarData(p.data_pedido)}</Celula>
                 {!selecionada && <Celula className="whitespace-nowrap text-texto-suave">{nomeEmpresa.get(p.empresa_id) ?? "—"}</Celula>}

@@ -2,7 +2,7 @@
 // completa com o Tiny e o banco simulados.
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { categoria, contato, data, pedido, produto, titulo } from "../supabase/functions/_shared/tiny/normalizar.ts";
+import { assinatura, categoria, contato, data, ordemCompra, pedido, produto, titulo } from "../supabase/functions/_shared/tiny/normalizar.ts";
 import { horarioTiny, lerTiny } from "../supabase/functions/_shared/tiny/robo.ts";
 import type { Lote } from "../supabase/functions/_shared/tiny/tipos.ts";
 
@@ -152,7 +152,7 @@ test("leitura: renova o acesso, lista, lê pendentes e grava um lote só", async
           data: {
             empresa_id: "e", access_token: "velho", refresh_token: "r1", expira_em: "2026-10-23T12:01:00Z",
             client_id: "cid", client_secret: "seg", ler_pagar: false, estado: { cadastros_em: "2026-10-23T11:00:00Z" },
-            pendentes: [{ tipo: "receber", id: 1 }, { tipo: "pedido", id: 100 }, { tipo: "produto", id: 404 }],
+            pendentes: [{ tipo: "receber", id: 1 }, { tipo: "pedido", id: 100 }, { tipo: "produto", id: 404 }, { tipo: "compra", id: 700 }],
           },
           error: null,
         };
@@ -175,7 +175,11 @@ test("leitura: renova o acesso, lista, lê pendentes e grava um lote só", async
     if (u.includes("/pedidos/100")) return json({ id: 100, numeroPedido: 301, cliente: { id: 9 }, itens: [] });
     if (u.includes("/pedidos?")) return json({ itens: [] });
     if (u.includes("/produtos/404")) return json({}, 404);
+    if (u.includes("/ordem-compra/700"))
+      return json({ id: 700, numeroPedido: "55", data: "2026-10-20", situacao: 0, contato: { id: 31, nome: "Fornecedor" }, itens: [], parcelas: [] });
+    if (u.includes("/ordem-compra?")) return json({ itens: [{ id: 700, situacao: 0, numeroPedido: "55" }, { id: 701, situacao: 1 }] });
     if (u.includes("/produtos?")) return json({ itens: Array.from({ length: 100 }, (_, i) => ({ id: i + 1 })) });
+    if (u.includes("/notas?")) return json({ itens: [{ id: 900, tipo: "S", numero: "12", situacao: "6", valor: 10 }, { id: 901, tipo: "?" }] });
     throw new Error(`inesperado ${u}`);
   }) as typeof fetch;
   try {
@@ -195,9 +199,45 @@ test("leitura: renova o acesso, lista, lê pendentes e grava um lote só", async
   assert.deepEqual(lote.estado.receber_ciclo, { fase: "abertos", offset: 0 });
   assert.equal(lote.receber_ciclo_inicio, "2026-10-23T12:00:00.000Z");
   assert.equal(lote.estado.produtos?.offset, 200);
+  // Notas fiscais vêm direto da listagem (a inválida fica de fora).
+  assert.deepEqual(lote.notas?.map((n) => n.id), [900]);
+  assert.deepEqual(lote.estado.notas, { offset: 0 });
   assert.equal(lote.contas, undefined, "cadastros só uma vez por dia");
   assert.ok(chamadas.some((c) => c.startsWith("/contas-receber?situacao=aberto")));
   assert.ok(chamadas.some((c) => c.startsWith("/contas-receber?dataInicialVencimento=2026-01-01")));
   assert.ok(!chamadas.some((c) => c.includes("dataAtualizacao") && c.startsWith("/contas-receber")), "receber sem filtro de alteração");
   assert.ok(!chamadas.some((c) => c.startsWith("/contas-pagar")), "contas a pagar desligado");
+  // Ordens de compra: volta completa pelas criadas no ano, detalhe da pendente.
+  assert.ok(chamadas.some((c) => c.startsWith("/ordem-compra?dataInicial=2026-01-01")));
+  assert.deepEqual(lote.listados.filter((l) => l.tipo === "compra").map((l) => l.id), [700, 701]);
+  assert.deepEqual(lote.estado.compras, { offset: 0 });
+  assert.equal(lote.compras?.[0].numero, "55");
+  assert.equal(lote.compras?.[0].fornecedor?.nome, "Fornecedor");
+});
+
+test("ordem de compra: situação, fornecedor, itens e parcelas", () => {
+  const o = ordemCompra(
+    {
+      id: 9, numeroPedido: "123", data: "2026-11-02", dataPrevista: "2026-11-20", situacao: 3, frete: 50.456, desconto: 10, fretePorConta: "r",
+      contato: { id: 4, nome: "Coferpol", cpfCnpj: "11.222.333/0001-44" }, categoria: { id: 8, nome: "Matéria-prima" },
+      observacoes: "Entregar na fábrica", observacoesInternas: "",
+      itens: [
+        { produto: { id: 77, sku: "MP-1", descricao: "Chapa" }, quantidade: 10, preco: 12.5, ipi: 5 },
+        { produto: { id: 78 }, quantidade: 0, preco: 1 },
+      ],
+      parcelas: [{ dias: 30, dataVencimento: "2026-12-02", valor: 100, meioPagamento: "15" }, { dias: 60, valor: 0 }],
+    },
+    "2026-11-16",
+  );
+  assert.equal(o?.numero, "123");
+  assert.equal(o?.situacao, 3);
+  assert.equal(o?.fornecedor?.documento, "11.222.333/0001-44");
+  assert.equal(o?.categoria_id, 8);
+  assert.equal(o?.frete, 50.46);
+  assert.equal(o?.frete_por_conta, "R");
+  assert.equal(o?.observacoes_internas, null);
+  assert.deepEqual(o?.itens, [{ produto_id: 77, sku: "MP-1", descricao: "Chapa", quantidade: 10, valor_unitario: 12.5, aliquota_ipi: 5 }]);
+  assert.deepEqual(o?.parcelas, [{ dias: 30, vencimento: "2026-12-02", valor: 100, meio_pagamento: "15", observacao: null }]);
+  assert.equal(ordemCompra({ numeroPedido: "1" }, "2026-11-16"), null);
+  assert.equal(assinatura("compra", { situacao: 1, data: "2026-11-02", totalPedidoCompra: 100 }), "1|2026-11-02||100|");
 });

@@ -73,7 +73,9 @@ update contas_pagar set situacao = 'pago', data_pagamento = '2026-11-09', valor_
   conta_bancaria_id = (select id from contas_bancarias where tiny_id = 501)
 where tiny_id = 20;
 reset role;
-select pg_temp.esperar(pagar_baixado_aqui((select id from contas_pagar where tiny_id = 20)), 'baixa feita aqui é reconhecida');
+-- (desde "Tiny sempre vence" só a conciliação conta em pagar_baixado_aqui; a
+-- baixa simulada aqui fica protegida pelos campos marcados em editado_aqui)
+select pg_temp.esperar((select editado_aqui && array['situacao'] from contas_pagar where tiny_id = 20), 'baixa feita aqui é reconhecida');
 select tiny_aplicar(current_setting('teste.robo')::uuid, $${
   "pagar": [{"id": 20, "situacao": "aberto", "emissao": "2026-10-20", "vencimento": "2026-11-10", "valor": 120,
              "descricao": "Energia novembro", "contato": {"id": 8001, "nome": "IMOBILIARIA X"}}]
@@ -95,12 +97,12 @@ select set_config('teste.planilha', $$[
 select set_config('teste.previa',
   tiny_aplicar_planilha_pagar(current_setting('teste.industria')::uuid, current_setting('teste.planilha')::jsonb)::text, false);
 select pg_temp.esperar(
-  (select (p ->> 'corrigidos')::integer = 2 and jsonb_array_length(p -> 'mantidos') = 1 and jsonb_array_length(p -> 'nao_achados') = 1
+  (select (p ->> 'corrigidos')::integer = 3 and jsonb_array_length(p -> 'mantidos') = 0 and jsonb_array_length(p -> 'nao_achados') = 1
      and p -> 'corrigir' -> 0 ->> 'de' = 'Pago em 12/09/2026 · Venner C6 BANK'
      and p -> 'corrigir' -> 0 ->> 'para' = 'Pago em 15/09/2026 · Venner C6 BANK'
-     and p -> 'corrigir' -> 1 ->> 'para' = 'Em aberto'
+     and p -> 'corrigir' -> 1 ->> 'para' = 'Em aberto' and p -> 'corrigir' -> 2 ->> 'para' = 'Em aberto'
    from (select current_setting('teste.previa')::jsonb p) x),
-  'prévia: o que muda, o que fica (baixado aqui) e o que não foi achado');
+  'prévia: o que muda (o Tiny vence a baixa feita aqui) e o que não foi achado');
 select pg_temp.esperar((select data_pagamento = '2026-09-12' from contas_pagar where tiny_id = 10), 'prévia não grava nada');
 
 select tiny_aplicar_planilha_pagar(current_setting('teste.industria')::uuid, current_setting('teste.planilha')::jsonb, true);
@@ -109,7 +111,7 @@ select pg_temp.esperar((select data_pagamento = '2026-09-15' and situacao = 'pag
 select pg_temp.esperar(
   (select situacao = 'aberto' and observacao like 'Pago em parte no Tiny: R$ 1000%' from contas_pagar where tiny_id = 11),
   'parcial na planilha fica em aberto com a anotação');
-select pg_temp.esperar((select situacao = 'pago' from contas_pagar where tiny_id = 20), 'baixa feita aqui não muda pela planilha');
+select pg_temp.esperar((select situacao = 'aberto' from contas_pagar where tiny_id = 20), 'baixa feita aqui (sem conciliar) segue a planilha do Tiny');
 select pg_temp.esperar(
   (select h.origem = 'tiny' and h.mudancas ? 'Data do pagamento'
    from contas_pagar p join contas_pagar_historico h on h.conta_id = p.id
