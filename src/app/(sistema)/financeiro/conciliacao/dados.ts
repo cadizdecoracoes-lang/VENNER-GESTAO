@@ -10,6 +10,8 @@ export type ContaConciliacao = { id: string; empresa_id: string; nome: string; b
 type Pessoa = { nome: string; nome_fantasia: string | null } | null;
 export type Ligacao = {
   valor: number;
+  // Conciliadas juntas (várias linhas): o grupo é diferente do id da linha.
+  grupo: string;
   efeito: string;
   contas_pagar: { descricao: string; parcela: string | null; fornecedores: Pessoa } | null;
   contas_receber: { descricao: string; parcela: string | null; clientes: Pessoa } | null;
@@ -72,7 +74,7 @@ export async function carregarLinhas(conta: string, situacao: string, de: string
   let q = supabase
     .from("extrato_lancamentos")
     .select(
-      "id, data, descricao, documento, valor, saldo, situacao, observacao, importacao_id, extrato_conciliacoes(valor, efeito, contas_pagar(descricao, parcela, fornecedores(nome, nome_fantasia)), contas_receber(descricao, parcela, clientes(nome, nome_fantasia)))",
+      "id, data, descricao, documento, valor, saldo, situacao, observacao, importacao_id, extrato_conciliacoes(valor, efeito, grupo, contas_pagar(descricao, parcela, fornecedores(nome, nome_fantasia)), contas_receber(descricao, parcela, clientes(nome, nome_fantasia)))",
     )
     .eq("conta_bancaria_id", conta)
     .order("data")

@@ -35,6 +35,7 @@ import {
   type LinhaConciliacao,
 } from "./dados";
 import { PainelResolver } from "./painel-resolver";
+import { BarraSelecao, MarcarLinha, SelecaoLinhas } from "./selecao-linhas";
 import { SeletorConta } from "./seletor-conta";
 import { SeletorPeriodo } from "./seletor-periodo";
 import { TelaCliente } from "@/components/tela-cliente";
@@ -63,9 +64,15 @@ function Ligacoes({ linha }: { linha: LinhaConciliacao }) {
         <Etiqueta>Ignorada</Etiqueta> {linha.observacao}
       </span>
     );
+  const emGrupo = linha.extrato_conciliacoes.some((c) => c.grupo !== linha.id);
   return (
     <span className="text-xs">
       <Etiqueta cor="sucesso">Conciliada</Etiqueta>{" "}
+      {emGrupo && (
+        <span className="text-texto-suave" title="Conciliada junto com outras linhas do extrato (ex.: um título recebido em duas entradas)">
+          junto com outras linhas ·{" "}
+        </span>
+      )}
       {linha.extrato_conciliacoes
         .map((c) => {
           const t = c.contas_pagar ?? c.contas_receber;
@@ -272,13 +279,19 @@ async function PaginaConciliacao({ searchParams }: { searchParams: Promise<Filtr
 
   // Títulos candidatos (mesmo valor e data próxima), as linhas vizinhas (para
   // achar repetidas) e, no painel de resolver uma linha, candidatos mais amplos.
-  const resolvendo = filtros.linha ? pend.find((l) => l.id === filtros.linha) : undefined;
+  // ?linha= traz uma linha ou várias separadas por vírgula (conciliar juntas).
+  const marcadas = (filtros.linha ?? "").split(",").filter(Boolean);
+  const resolvendoVarias = pend.filter((l) => marcadas.includes(l.id));
+  const resolvendo = resolvendoVarias[0];
+  const emResolucao = new Set(resolvendoVarias.map((l) => l.id));
   const [candidatos, vizinhas, amplos] =
     conta && pend.length
       ? await Promise.all([
           carregarCandidatos(conta, pend[0].data, pend[pend.length - 1].data),
           carregarVizinhas(conta.id, pend[0].data, pend[pend.length - 1].data),
-          resolvendo && podeEditar ? carregarCandidatos(conta, resolvendo.data, resolvendo.data, 45, 30) : Promise.resolve([]),
+          resolvendo && podeEditar
+            ? carregarCandidatos(conta, resolvendo.data, resolvendoVarias[resolvendoVarias.length - 1].data, 45, 30)
+            : Promise.resolve([]),
         ])
       : [[], [], []];
   // Mesmo lançamento trazido por outra importação com a data trocada: a tela
@@ -519,15 +532,31 @@ async function PaginaConciliacao({ searchParams }: { searchParams: Promise<Filtr
 
           {resolvendo && conta && podeEditar && (
             <PainelResolver
-              linha={resolvendo}
+              key={resolvendoVarias.map((l) => l.id).join(",")}
+              linhas={resolvendoVarias}
               candidatos={amplos}
               linkCriar={linkCriar(resolvendo)}
               voltar={base({})}
             />
           )}
 
+          <SelecaoLinhas>
+          {podeEditar && situacao === "pendente" && (
+            <BarraSelecao
+              pendentes={Object.fromEntries(pend.map((l) => [l.id, Number(l.valor)]))}
+              link={(ids) => base({ linha: ids.join(",") })}
+            />
+          )}
           <Tabela
-            colunas={["Data", "Lançamento do extrato", "Valor", "Saldo", "Conciliação", ""]}
+            colunas={[
+              ...(podeEditar && situacao === "pendente" ? [<span key="m" title="Marque várias linhas para conciliar juntas com títulos (ex.: um título recebido em duas entradas)">Juntas</span>] : []),
+              "Data",
+              "Lançamento do extrato",
+              "Valor",
+              "Saldo",
+              "Conciliação",
+              "",
+            ]}
             vazio={
               situacao === "pendente"
                 ? !totalPendConta
@@ -546,7 +575,8 @@ async function PaginaConciliacao({ searchParams }: { searchParams: Promise<Filtr
               const [antR, antP] = ant ? [porId.get(ant.titulos[0])!, porId.get(ant.titulos[1])!] : [];
               const valor = Number(l.valor);
               return (
-                <tr key={l.id} className={l.id === resolvendo?.id ? "bg-primaria-suave/50" : l.id === filtros.destaque ? "bg-alerta/15" : ""}>
+                <tr key={l.id} className={emResolucao.has(l.id) ? "bg-primaria-suave/50" : l.id === filtros.destaque ? "bg-alerta/15" : ""}>
+                  {podeEditar && situacao === "pendente" && <Celula className="w-8">{l.situacao === "pendente" && <MarcarLinha id={l.id} />}</Celula>}
                   <Celula className="whitespace-nowrap tabular-nums">{formatarData(l.data)}</Celula>
                   <Celula className="max-w-md">
                     <span className="block truncate" title={`${l.descricao}${l.documento ? ` · doc ${l.documento}` : ""}`}>
@@ -628,7 +658,11 @@ async function PaginaConciliacao({ searchParams }: { searchParams: Promise<Filtr
                             rotulo="Desfazer"
                             enviando="..."
                             discreto
-                            confirmar="Desfazer? Títulos baixados pela conciliação voltam para em aberto e os lançados aqui são cancelados."
+                            confirmar={
+                              l.extrato_conciliacoes.some((c) => c.grupo !== l.id)
+                                ? "Desfazer? Esta linha foi conciliada junto com outras: todas voltam para pendente. Os títulos não mudam."
+                                : "Desfazer? Títulos baixados pela conciliação voltam para em aberto e os lançados aqui são cancelados."
+                            }
                           />
                         )}
                       </div>
@@ -638,6 +672,7 @@ async function PaginaConciliacao({ searchParams }: { searchParams: Promise<Filtr
               );
             })}
           </Tabela>
+          </SelecaoLinhas>
         </>
       )}
     </div>
