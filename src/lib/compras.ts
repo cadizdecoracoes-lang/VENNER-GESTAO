@@ -28,10 +28,13 @@ export type PedidoCompraResumo = {
   valor_total: number;
   quantidade_notas: number;
   valor_notas: number;
+  // Preenchidos quando o pedido vem do Tiny (ordem de compra): aí só o Tiny muda o pedido.
+  numero_tiny: string | null;
+  situacao_tiny: number | null;
 };
 
 export const CAMPOS_PEDIDO_COMPRA =
-  "id, numero, empresa_id, fornecedor_id, fornecedor_nome, categoria_id, data_pedido, data_prevista, condicao_pagamento, frete_por_conta, transportador, valor_frete, valor_desconto, observacoes, observacoes_internas, etapa, etapa_desde, aprovado_em, quantidade_itens, valor_itens, valor_ipi, valor_total, quantidade_notas, valor_notas";
+  "id, numero, empresa_id, fornecedor_id, fornecedor_nome, categoria_id, data_pedido, data_prevista, condicao_pagamento, frete_por_conta, transportador, valor_frete, valor_desconto, observacoes, observacoes_internas, etapa, etapa_desde, aprovado_em, quantidade_itens, valor_itens, valor_ipi, valor_total, quantidade_notas, valor_notas, numero_tiny, situacao_tiny";
 
 export type MaterialCompra = { id: string; codigo: string; descricao: string; unidade: string; custo_medio: number };
 

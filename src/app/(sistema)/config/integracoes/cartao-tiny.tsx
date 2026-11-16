@@ -57,7 +57,7 @@ export function CartaoTiny({
     >
       <div className="space-y-3 text-sm">
         <p className="text-texto-suave">
-          A cada 5 minutos o sistema lê do Tiny os pedidos de venda, as contas a receber, os produtos e as contas a pagar. O que muda no
+          A cada minuto o sistema lê do Tiny os pedidos de venda, as contas a receber, os produtos, as ordens de compra e as contas a pagar. O que muda no
           Tiny vem para cá, sem desfazer o que foi mudado aqui. A ligação só lê: não altera nada no Tiny.
         </p>
 

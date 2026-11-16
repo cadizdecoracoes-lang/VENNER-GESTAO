@@ -1,6 +1,6 @@
 // Converte as respostas da API v3 do Tiny no formato que o banco grava.
 // Funções puras (testadas em tests/tiny.test.ts).
-import type { Categoria, ContaFinanceira, Contato, ItemPedido, Pedido, Produto, Titulo } from "./tipos.ts";
+import type { Categoria, ContaFinanceira, Contato, ItemPedido, OrdemCompra, Pedido, Produto, Titulo } from "./tipos.ts";
 
 type Bruto = Record<string, unknown>;
 
@@ -234,11 +234,60 @@ export function produto(v: unknown): Produto | null {
   };
 }
 
+export function ordemCompra(v: unknown, hoje: string): OrdemCompra | null {
+  const d = obj(v);
+  const id = inteiro(d.id);
+  if (!id) return null;
+  const cat = obj(d.categoria);
+  const frete = texto(d.fretePorConta)?.toUpperCase() ?? null;
+  return {
+    id,
+    numero: texto(d.numeroPedido) ?? String(id),
+    data: data(d.data) ?? hoje,
+    data_prevista: data(d.dataPrevista),
+    situacao: inteiro(d.situacao) ?? 0,
+    fornecedor: contato(d.contato),
+    categoria_id: inteiro(cat.id),
+    categoria_nome: texto(cat.nome) ?? texto(cat.descricao),
+    frete: arred2(numero(d.frete)),
+    desconto: arred2(numero(d.desconto)),
+    frete_por_conta: frete && ["R", "D", "T", "3", "4", "S"].includes(frete) ? frete : null,
+    observacoes: texto(d.observacoes),
+    observacoes_internas: texto(d.observacoesInternas),
+    itens: lista(d.itens)
+      .map(obj)
+      .map((i) => {
+        const p = obj(i.produto);
+        return {
+          produto_id: inteiro(p.id),
+          sku: texto(p.sku),
+          descricao: texto(p.descricao),
+          quantidade: numero(i.quantidade),
+          valor_unitario: Math.max(0, numero(i.preco)),
+          aliquota_ipi: Math.max(0, numero(i.ipi)),
+        };
+      })
+      .filter((i) => i.quantidade > 0 && (i.produto_id || i.sku)),
+    parcelas: lista(d.parcelas)
+      .map(obj)
+      .map((p) => ({
+        dias: Math.max(0, inteiro(p.dias) ?? 0),
+        vencimento: data(p.dataVencimento) ?? "",
+        valor: arred2(numero(p.valor)),
+        meio_pagamento: texto(p.meioPagamento),
+        observacao: texto(p.observacoes),
+      }))
+      .filter((p) => p.vencimento && p.valor > 0),
+  };
+}
+
 // O que muda na listagem e obriga a ler o detalhe de novo.
-export function assinatura(tipo: "receber" | "pagar" | "pedido" | "produto", v: unknown): string {
+export function assinatura(tipo: "receber" | "pagar" | "pedido" | "produto" | "compra", v: unknown): string {
   const d = obj(v);
   const campos =
-    tipo === "pedido"
+    tipo === "compra"
+      ? [d.situacao, d.data, d.dataPrevista, d.totalPedidoCompra ?? d.valor, d.numeroPedido]
+      : tipo === "pedido"
       ? [d.situacao, d.valor, d.dataPrevista]
       : tipo === "produto"
         ? [d.dataAlteracao, d.situacao, obj(d.precos).preco]

@@ -92,7 +92,7 @@ export function CartaoNotaFiscal({
             {nota.situacao === "autorizada" && (
               <Fonte>
                 {nota.contas_lancadas
-                  ? "Contas a receber lançadas no Tiny; aparecem aqui na próxima leitura (a cada 5 minutos)."
+                  ? "Contas a receber lançadas no Tiny; aparecem aqui na próxima leitura (a cada minuto)."
                   : "As contas a receber ainda não foram lançadas no Tiny. Clique em Atualizar."}
               </Fonte>
             )}

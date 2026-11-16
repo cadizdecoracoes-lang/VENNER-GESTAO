@@ -1,10 +1,10 @@
 // Uma leitura do Tiny: renova o acesso, lê o detalhe do que ficou pendente,
 // percorre as listagens atrás do que mudou e grava tudo de uma vez no banco.
-// Chamada a cada 5 minutos pelo Supabase (Edge Function robo-tiny) ou pelo
+// Chamada a cada minuto pelo Supabase (Edge Function robo-tiny) ou pelo
 // botão "Ler agora". A chave do robô é conferida pelo banco em cada chamada.
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { ApiTiny, renovarTiny, SemOrcamento } from "./api.ts";
-import { assinatura, categoria, contaFinanceira, data, numero, pedido, produto, semBaixa, titulo } from "./normalizar.ts";
+import { assinatura, categoria, contaFinanceira, data, numero, ordemCompra, pedido, produto, semBaixa, titulo } from "./normalizar.ts";
 import { HISTORICO_DESDE, type Cursor, type EstadoLeitura, type Lote, type TipoFila } from "./tipos.ts";
 
 type Inicio = {
@@ -50,6 +50,7 @@ export async function lerTiny(
     pagar: [],
     pedidos: [],
     produtos: [],
+    compras: [],
     falhas: [],
     removidos: [],
     estado,
@@ -115,6 +116,7 @@ export async function lerTiny(
         situacao: "A",
       }),
     );
+    await listar("Ordens de compra", () => varrerCompras(tiny, lote, estado, 2));
     if (conta.ler_pagar) await listar("Contas a pagar", () => varrerTitulos(tiny, lote, "pagar", estado, agora, 2));
 
     // 3. Detalhe de cada pendente (das leituras anteriores).
@@ -214,6 +216,28 @@ async function varrerTitulos(api: ApiTiny, lote: Lote, tipo: "receber" | "pagar"
   return usadas;
 }
 
+// Ordens de compra: sem filtro por alteração na API, então percorre as
+// criadas desde HISTORICO_DESDE e a assinatura diz quais mudaram.
+async function varrerCompras(api: ApiTiny, lote: Lote, estado: EstadoLeitura, maximo: number): Promise<number> {
+  const c = (estado.compras ??= { offset: 0 });
+  let usadas = 0;
+  while (usadas < maximo) {
+    const r = await api.ler<Pagina>("/ordem-compra", { dataInicial: HISTORICO_DESDE, orderBy: "asc", limit: POR_PAGINA, offset: c.offset });
+    usadas++;
+    const itens = r?.itens ?? [];
+    for (const i of itens) {
+      const id = Number((i as { id?: unknown }).id);
+      if (id) lote.listados.push({ tipo: "compra", id, assinatura: assinatura("compra", i) });
+    }
+    if (itens.length < POR_PAGINA) {
+      c.offset = 0;
+      break;
+    }
+    c.offset += POR_PAGINA;
+  }
+  return usadas;
+}
+
 async function detalhar(api: ApiTiny, lote: Lote, tipo: TipoFila, id: number, agora: Date) {
   if (tipo === "receber" || tipo === "pagar") {
     const caminho = tipo === "receber" ? "/contas-receber" : "/contas-pagar";
@@ -231,6 +255,12 @@ async function detalhar(api: ApiTiny, lote: Lote, tipo: TipoFila, id: number, ag
     if (!p) throw new Error("Pedido sem número no Tiny");
     if (!p.cliente) throw new Error("Pedido sem cliente no Tiny");
     lote.pedidos.push(p);
+  } else if (tipo === "compra") {
+    const d = await api.ler(`/ordem-compra/${id}`);
+    if (!d) return void lote.removidos.push({ tipo, id });
+    const o = ordemCompra(d, data(agora.toISOString()) ?? "");
+    if (!o) throw new Error("Ordem de compra sem número no Tiny");
+    (lote.compras ??= []).push(o);
   } else {
     const d = await api.ler(`/produtos/${id}`);
     if (!d) return void lote.removidos.push({ tipo, id });
