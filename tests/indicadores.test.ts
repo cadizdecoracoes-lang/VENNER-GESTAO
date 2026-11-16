@@ -240,3 +240,26 @@ test("sem dados: diagnóstico avisa em vez de inventar", () => {
   assert.ok(diag.every((p) => p.gravidade === "sem_dados"));
   assert.equal(ondeEstaOProblema(diag).area, null);
 });
+
+test("folha completa: holerites + VT + auxílio + ajuda de custo (em outra categoria)", () => {
+  const d = dadosExemplo();
+  // Ajuda de custo de 3 mil por mês lançada em "Aluguel" (categoria errada).
+  const ajuda = ["2026-09", "2026-10"].map((mes) => ({ mes, pessoa: "Pessoa A", categoria_id: "al", categoria: "Aluguel", valor: 3000, qtd: 1 }));
+  const folha = ["2026-09-01", "2026-10-01"].map((competencia) => ({ empresa_id: "a", competencia, setor: "producao", funcionarios: 10, custo: 30000 }));
+  const beneficios = ["2026-09-01", "2026-10-01"].flatMap((competencia) => [
+    { empresa_id: "a", competencia, tipo: "vt" as const, setor: "producao", pessoas: 10, valor: 4000 },
+    { empresa_id: "a", competencia, tipo: "va" as const, setor: "sem_setor", pessoas: 5, valor: 1000 },
+  ]);
+  const linhas = montarMeses(d, classificarCategorias(CATEGORIAS), folha, { beneficios, ajuda });
+  const set = linhas[0];
+  assert.equal(set.porClasse.fixa, 17000, "ajuda sai do aluguel");
+  assert.equal(set.porClasse.folha, 33000, "e entra na folha do contas a pagar");
+  assert.equal(set.vt, 4000);
+  assert.equal(set.va, 1000);
+  assert.equal(set.folhaTotal, 38000);
+  assert.equal(set.folhaProducao, 34000, "VT da produção entra na folha da produção");
+  assert.equal(linhas[2].folhaTotal, null);
+  const pe = pontoEquilibrio(linhas, d.hoje, 15000);
+  assert.equal(pe.folhaAtual, 38000);
+  assert.equal(pe.fixasSemFolha, 17000);
+});

@@ -81,6 +81,12 @@ export const FAIXAS: { faixa: FaixaAberto; rotulo: string; vencido: boolean }[] 
 // Custo da folha por mês e setor (view folha_custo_mensal do RH).
 export type FolhaMes = { empresa_id: string; competencia: string; setor: string; funcionarios: number; custo: number };
 
+// Benefícios fora do holerite (view folha_beneficios_mensal) e ajuda de custo
+// paga pelo contas a pagar (função indicadores_ajuda_custo).
+export type BeneficioMes = { empresa_id: string; competencia: string; tipo: "vt" | "va" | "outro"; setor: string; pessoas: number; valor: number };
+export type AjudaCusto = { mes: string; pessoa: string; categoria_id: string | null; categoria: string | null; valor: number; qtd: number };
+export type ExtrasFolha = { beneficios: BeneficioMes[]; ajuda: AjudaCusto[] };
+
 export type Categoria = { id: string; codigo: string | null; nome: string; tipo: "receita" | "despesa"; pai_id: string | null };
 
 export const vazio = (hoje: string, de: string, ate: string): DadosIndicadores => ({
@@ -246,6 +252,12 @@ export type LinhaMes = {
   saidaPedidos: number; // pedidos que saíram da fábrica (R$)
   saidaPedidosQtd: number;
   folhaHolerite: number | null; // custo da folha pelos holerites
+  vt: number | null; // vale-transporte pago à parte
+  va: number | null; // auxílio-alimentação
+  ajudaCusto: number; // ajuda de custo paga pelo contas a pagar
+  // Custo total da folha: holerites + benefícios + ajuda de custo (só nos
+  // meses com holerite); sem holerite, a folha do contas a pagar.
+  folhaTotal: number | null;
   funcionarios: number | null;
   funcionariosProducao: number | null;
   folhaProducao: number | null;
@@ -263,7 +275,12 @@ const zeroClasses = (): Record<Classe, number> => ({
   transferencia: 0,
 });
 
-export function montarMeses(dados: DadosIndicadores, classes: Map<string, Classe>, folha: FolhaMes[] | null): LinhaMes[] {
+export function montarMeses(
+  dados: DadosIndicadores,
+  classes: Map<string, Classe>,
+  folha: FolhaMes[] | null,
+  extras: ExtrasFolha = { beneficios: [], ajuda: [] },
+): LinhaMes[] {
   return mesesEntre(dados.de, dados.ate).map((mes) => {
     const porClasse = zeroClasses();
     let receita = 0;
@@ -283,11 +300,25 @@ export function montarMeses(dados: DadosIndicadores, classes: Map<string, Classe
         porClasse[classe ?? "fixa"] += n(t.previsto);
       }
     }
+    // Ajuda de custo lançada em outra categoria: conta como folha.
+    const ajudaMes = extras.ajuda.filter((a) => a.mes === mes);
+    for (const a of ajudaMes) {
+      const classe = a.categoria_id ? (classes.get(a.categoria_id) ?? "fixa") : "fixa";
+      if (classe !== "folha" && classe !== "transferencia") {
+        porClasse[classe] -= n(a.valor);
+        porClasse.folha += n(a.valor);
+      }
+    }
+    const ajudaCusto = somar(ajudaMes, (a) => a.valor);
+    const benMes = extras.beneficios.filter((b) => b.competencia.slice(0, 7) === mes);
+    const vt = benMes.some((b) => b.tipo === "vt") ? somar(benMes.filter((b) => b.tipo === "vt"), (b) => b.valor) : null;
+    const va = benMes.some((b) => b.tipo !== "vt") ? somar(benMes.filter((b) => b.tipo !== "vt"), (b) => b.valor) : null;
     const variaveis = somar(CLASSES_VARIAVEIS, (c) => porClasse[c]);
     const fixas = somar(CLASSES_FIXAS, (c) => porClasse[c]);
     const pedidos = dados.pedidos_mes.filter((p) => p.mes === mes);
     const folhaMes = folha?.filter((f) => f.competencia.slice(0, 7) === mes) ?? [];
     const temFolha = folha !== null && folhaMes.length > 0;
+    const folhaHolerite = temFolha ? somar(folhaMes, (f) => f.custo) : null;
     return {
       mes,
       receita,
@@ -314,10 +345,17 @@ export function montarMeses(dados: DadosIndicadores, classes: Map<string, Classe
       entradaPedidosQtd: somar(pedidos, (p) => p.entrada_qtd),
       saidaPedidos: somar(pedidos, (p) => p.saida_valor),
       saidaPedidosQtd: somar(pedidos, (p) => p.saida_qtd),
-      folhaHolerite: temFolha ? somar(folhaMes, (f) => f.custo) : null,
+      folhaHolerite,
+      vt,
+      va,
+      ajudaCusto,
+      folhaTotal: folhaHolerite !== null ? folhaHolerite + n(vt) + n(va) + ajudaCusto : porClasse.folha || null,
       funcionarios: temFolha ? somar(folhaMes, (f) => f.funcionarios) : null,
       funcionariosProducao: temFolha ? somar(folhaMes.filter((f) => f.setor === "producao"), (f) => f.funcionarios) : null,
-      folhaProducao: temFolha ? somar(folhaMes.filter((f) => f.setor === "producao"), (f) => f.custo) : null,
+      folhaProducao: temFolha
+        ? somar(folhaMes.filter((f) => f.setor === "producao"), (f) => f.custo) +
+          somar(benMes.filter((b) => b.setor === "producao"), (b) => b.valor)
+        : null,
     };
   });
 }
@@ -363,7 +401,8 @@ export function pontoEquilibrio(linhas: LinhaMes[], hoje: string, folhaAlvo: num
   const variaveis = media(base, (l) => l.variaveis) ?? 0;
   const margem = receita > 0 ? (receita - variaveis) / receita : null;
   const folhaPagar = media(base, (l) => l.porClasse.folha) ?? 0;
-  const folhaHolerite = media(base, (l) => l.folhaHolerite);
+  // Folha completa (holerites + VT + auxílio + ajuda de custo) nos meses com holerite.
+  const folhaHolerite = media(base, (l) => (l.folhaHolerite !== null ? l.folhaTotal : null));
   const fixasSemFolha = (media(base, (l) => l.fixas) ?? 0) - folhaPagar;
   const folhaAtual = folhaHolerite ?? folhaPagar;
   const origemFolha = folhaHolerite !== null ? "holerites" : folhaPagar > 0 ? "contas_pagar" : "nenhuma";

@@ -26,6 +26,8 @@ import {
   type Categoria,
   type Classe,
   type DadosIndicadores,
+  type AjudaCusto,
+  type BeneficioMes,
   type FolhaMes,
   type LinhaMes,
   type TipoTitulo,
@@ -87,7 +89,8 @@ function lerPeriodo(periodo: string | undefined, hoje: string) {
 }
 
 async function carregar(de: string, ate: string, empresa: string | null, hoje: string) {
-  if (!supabaseConfigurado) return { dados: vazio(hoje, de, ate), categorias: [] as Categoria[], folha: null, erroFolha: null };
+  if (!supabaseConfigurado)
+    return { dados: vazio(hoje, de, ate), categorias: [] as Categoria[], folha: null, beneficios: [] as BeneficioMes[], ajuda: [] as AjudaCusto[] };
   const supabase = criarClienteNavegador();
   let folhaConsulta = supabase
     .from("folha_custo_mensal")
@@ -96,10 +99,19 @@ async function carregar(de: string, ate: string, empresa: string | null, hoje: s
     .lte("competencia", ate)
     .limit(5000);
   if (empresa) folhaConsulta = folhaConsulta.eq("empresa_id", empresa);
-  const [dados, categorias, folha] = await Promise.all([
+  let beneficiosConsulta = supabase
+    .from("folha_beneficios_mensal")
+    .select("empresa_id, competencia, tipo, setor, pessoas, valor")
+    .gte("competencia", de)
+    .lte("competencia", ate)
+    .limit(5000);
+  if (empresa) beneficiosConsulta = beneficiosConsulta.eq("empresa_id", empresa);
+  const [dados, categorias, folha, beneficios, ajuda] = await Promise.all([
     supabase.rpc("indicadores_gestao", { de, ate, empresa }),
     supabase.from("plano_contas").select("id, codigo, nome, tipo, pai_id").limit(5000),
     folhaConsulta,
+    beneficiosConsulta,
+    supabase.rpc("indicadores_ajuda_custo", { de, ate, empresa }),
   ]);
   if (dados.error) throw new Error(dados.error.message);
   return {
@@ -107,7 +119,8 @@ async function carregar(de: string, ate: string, empresa: string | null, hoje: s
     categorias: (categorias.data ?? []) as Categoria[],
     // Sem a folha (pacote do RH ainda não publicado ou sem holerites): estrutura vazia.
     folha: folha.error ? null : ((folha.data ?? []) as FolhaMes[]).map((f) => ({ ...f, custo: Number(f.custo), funcionarios: Number(f.funcionarios) })),
-    erroFolha: folha.error?.message ?? null,
+    beneficios: ((beneficios.data ?? []) as BeneficioMes[]).map((b) => ({ ...b, valor: Number(b.valor), pessoas: Number(b.pessoas) })),
+    ajuda: ((ajuda.data ?? []) as AjudaCusto[]).map((a) => ({ ...a, valor: Number(a.valor) })),
   };
 }
 
@@ -121,9 +134,9 @@ async function PaginaIndicadores({ searchParams }: { searchParams: Promise<Filtr
   const aba: Aba = ABAS.some((a) => a.id === filtros.aba) ? (filtros.aba as Aba) : "diagnostico";
   const folhaAlvo = /^\d+$/.test(filtros.folha ?? "") ? Number(filtros.folha) : FOLHA_META;
 
-  const { dados, categorias, folha } = await carregar(periodo.de, periodo.ate, selecionada?.id ?? null, hoje);
+  const { dados, categorias, folha, beneficios, ajuda } = await carregar(periodo.de, periodo.ate, selecionada?.id ?? null, hoje);
   const classes = classificarCategorias(categorias);
-  const linhas = montarMeses(dados, classes, folha && folha.length ? folha : null);
+  const linhas = montarMeses(dados, classes, folha && folha.length ? folha : null, { beneficios, ajuda });
   const mesesMedia = mesesDaMedia(
     linhas.map((l) => l.mes),
     hoje,
@@ -142,7 +155,7 @@ async function PaginaIndicadores({ searchParams }: { searchParams: Promise<Filtr
   };
   const textoPeriodo = `${formatarData(periodo.de)} a ${formatarData(periodo.ate)}`;
   const daEmpresa = selecionada ? `só ${selecionada.nome}` : "todas as empresas que você vê";
-  const ctx = { dados, linhas, mesesMedia, pe, prazos, folha, classes, categorias, folhaAlvo, textoPeriodo, daEmpresa, periodo };
+  const ctx = { dados, linhas, mesesMedia, pe, prazos, folha, beneficios, ajuda, classes, categorias, folhaAlvo, textoPeriodo, daEmpresa, periodo };
 
   return (
     <div className="space-y-3">
@@ -196,6 +209,8 @@ type Ctx = {
   pe: ReturnType<typeof pontoEquilibrio>;
   prazos: ReturnType<typeof calcularPrazos>;
   folha: FolhaMes[] | null;
+  beneficios: BeneficioMes[];
+  ajuda: AjudaCusto[];
   classes: Map<string, Classe>;
   categorias: Categoria[];
   folhaAlvo: number;
@@ -601,43 +616,177 @@ function Compras(c: Ctx) {
 }
 
 // ---------------------------------------------------------------------------
-// Folha × produtividade
+// Folha × produtividade (holerites + VT + auxílio + ajuda de custo)
 // ---------------------------------------------------------------------------
+const SETORES_FOLHA: [string, string][] = [
+  ["producao", "Produção"],
+  ["logistica", "Logística"],
+  ["comercial", "Comercial"],
+  ["administrativo", "Administrativo"],
+  ["sem_setor", "Sem setor"],
+];
+
 function Folha(c: Ctx) {
   const temFolha = c.linhas.some((l) => l.folhaHolerite !== null);
   const saida = (l: LinhaMes) => (l.saidaPedidos > 0 ? l.saidaPedidos : l.faturado);
+  const custo = (l: LinhaMes) => l.folhaTotal;
+  // Último mês com holerite: base do quadro por setor e do simulador.
+  const ultimo = [...c.linhas].reverse().find((l) => l.folhaHolerite !== null);
+  const doMes = (lista: { competencia: string }[]) => lista.filter((x) => ultimo && x.competencia.slice(0, 7) === ultimo.mes);
+  const folhaMes = c.folha ? (doMes(c.folha) as FolhaMes[]) : [];
+  const benMes = doMes(c.beneficios) as BeneficioMes[];
+  const setores = SETORES_FOLHA.map(([id, nome]) => {
+    const h = folhaMes.filter((f) => f.setor === id);
+    const b = benMes.filter((x) => x.setor === id);
+    const pessoas = somaQtd(h, (x) => x.funcionarios);
+    const valor = somaQtd(h, (x) => x.custo) + somaQtd(b, (x) => x.valor);
+    return { id, nome, pessoas, valor, porPessoa: pessoas ? valor / pessoas : null };
+  }).filter((x) => x.valor > 0 || x.pessoas > 0);
+  const ajudaMes = ultimo ? c.ajuda.filter((a) => a.mes === ultimo.mes) : [];
+  const totalSetores = somaQtd(setores, (x) => x.valor) + somaQtd(ajudaMes, (a) => a.valor);
+  const pessoasTotal = somaQtd(setores, (x) => x.pessoas);
+  const custoMedio = pessoasTotal ? totalSetores / pessoasTotal : null;
+  const corte = totalSetores - c.folhaAlvo;
+  const cabem = custoMedio ? Math.floor(c.folhaAlvo / custoMedio) : null;
+  const producao = setores.find((x) => x.id === "producao");
+  const saidaMedia = c.pe.saidaAtual;
+  // Mantendo a proporção de produção, quantas pessoas de produção cabem na meta.
+  const pessoasProducaoMeta = producao && producao.porPessoa && totalSetores ? Math.floor((c.folhaAlvo * (producao.valor / totalSetores)) / producao.porPessoa) : null;
+  const ajudaPessoas = [...new Set(c.ajuda.map((a) => a.pessoa))];
   return (
     <div className="space-y-3">
       {!temFolha && (
         <SemDados>
-          {c.folha === null
-            ? "A folha ainda não chegou ao sistema (pacote de RH › Funcionários com os holerites)."
-            : "Nenhum holerite importado no período."}{" "}
-          A estrutura abaixo se preenche sozinha quando os holerites forem importados. Enquanto isso, a folha do contas a pagar aparece na linha
-          própria.
+          Nenhum holerite no período (RH › Funcionários › Importar holerites). Enquanto isso, a folha vem do contas a pagar, na linha própria.
         </SemDados>
       )}
       <TabelaMeses
         meses={c.linhas}
         mesesMedia={c.mesesMedia}
         linhas={[
-          { rotulo: "Custo da folha (holerites)", valor: (l) => l.folhaHolerite, estilo: "total", dica: "Proventos do mensal + FGTS." },
-          { rotulo: "Folha da produção", valor: (l) => l.folhaProducao, estilo: "sub" },
-          { rotulo: "Folha no contas a pagar", valor: (l) => l.porClasse.folha, estilo: "sub" },
+          { rotulo: "Holerites (proventos + FGTS)", valor: (l) => l.folhaHolerite, estilo: "sub" },
+          { rotulo: "Vale-transporte (fora do holerite)", valor: (l) => l.vt, estilo: "sub", href: (l) => `/rh/funcionarios/beneficios?mes=${l.mes}` },
+          { rotulo: "Auxílio-alimentação", valor: (l) => l.va, estilo: "sub", href: (l) => `/rh/funcionarios/beneficios?mes=${l.mes}` },
+          { rotulo: "Ajuda de custo (contas a pagar)", valor: (l) => l.ajudaCusto || null, estilo: "sub" },
+          { rotulo: "= Custo total da folha", valor: custo, estilo: "total", dica: "Holerites + VT + auxílio + ajuda de custo. Sem holerite no mês: a folha lançada no contas a pagar." },
+          { rotulo: "Folha da produção", valor: (l) => l.folhaProducao, estilo: "sub", dica: "Holerites e benefícios de quem está no setor Produção." },
+          { rotulo: "Folha no contas a pagar (conferência)", valor: (l) => l.porClasse.folha, estilo: "sub" },
           { rotulo: "Funcionários", valor: (l) => l.funcionarios, formato: "numero" },
           { rotulo: "Funcionários da produção", valor: (l) => l.funcionariosProducao, formato: "numero", estilo: "sub" },
+          { rotulo: "Custo médio por funcionário", valor: (l) => (l.funcionarios && l.folhaTotal ? l.folhaTotal / l.funcionarios : null) },
           "separador",
           { rotulo: "Saída da fábrica (R$)", valor: saida },
           { rotulo: "Saída por funcionário da produção", valor: (l) => (l.funcionariosProducao ? saida(l) / l.funcionariosProducao : null), estilo: "total" },
           { rotulo: "Saída por funcionário (todos)", valor: (l) => (l.funcionarios ? saida(l) / l.funcionarios : null) },
-          { rotulo: "R$ produzido por R$ 1 de folha", valor: (l) => (l.folhaHolerite ? saida(l) / l.folhaHolerite : null), formato: "vezes", estilo: "total" },
-          { rotulo: "Folha ÷ receita", valor: (l) => ((l.folhaHolerite ?? l.porClasse.folha) && l.receita ? (l.folhaHolerite ?? l.porClasse.folha) / l.receita : null), formato: "pct" },
+          { rotulo: "R$ produzido por R$ 1 de folha", valor: (l) => (l.folhaTotal ? saida(l) / l.folhaTotal : null), formato: "vezes", estilo: "total" },
+          { rotulo: "Folha ÷ receita", valor: (l) => (l.folhaTotal && l.receita ? l.folhaTotal / l.receita : null), formato: "pct" },
         ]}
       />
+
+      {ultimo && setores.length > 0 && (
+        <div className="grid gap-3 lg:grid-cols-2">
+          <Secao titulo={`Por setor em ${rotuloMes(ultimo.mes)}`}>
+            <Tabela colunas={["Setor", "Pessoas", "Custo", "Por pessoa", "% da folha"]}>
+              {setores.map((x) => (
+                <tr key={x.id}>
+                  <Celula>{x.nome}</Celula>
+                  <Celula className="text-right tabular-nums">{x.pessoas || "—"}</Celula>
+                  <Celula className="text-right tabular-nums">{m$(x.valor)}</Celula>
+                  <Celula className="text-right tabular-nums">{m$(x.porPessoa)}</Celula>
+                  <Celula className="text-right tabular-nums">
+                    <Barra fracao={totalSetores ? x.valor / totalSetores : 0} /> {totalSetores ? formatar(x.valor / totalSetores, "pct") : ""}
+                  </Celula>
+                </tr>
+              ))}
+              {ajudaMes.length > 0 && (
+                <tr>
+                  <Celula>Ajuda de custo</Celula>
+                  <Celula className="text-right tabular-nums">{new Set(ajudaMes.map((a) => a.pessoa)).size}</Celula>
+                  <Celula className="text-right tabular-nums">{m$(somaQtd(ajudaMes, (a) => a.valor))}</Celula>
+                  <Celula />
+                  <Celula className="text-right tabular-nums">{totalSetores ? formatar(somaQtd(ajudaMes, (a) => a.valor) / totalSetores, "pct") : ""}</Celula>
+                </tr>
+              )}
+            </Tabela>
+          </Secao>
+          <Secao titulo="Simulador de redução da folha">
+            <div className="space-y-2 rounded-xl bg-superficie p-3 text-sm shadow-[0_1px_3px_rgba(16,24,40,0.06)]">
+              <SimuladorFolha valor={c.folhaAlvo} />
+              <table className="w-full">
+                <tbody className="divide-y divide-borda/70">
+                  <tr>
+                    <td className="py-1">Folha completa em {rotuloMes(ultimo.mes)}</td>
+                    <td className="py-1 text-right tabular-nums">{m$(totalSetores)}</td>
+                  </tr>
+                  <tr>
+                    <td className="py-1">Corte necessário por mês</td>
+                    <td className={`py-1 text-right font-semibold tabular-nums ${corte > 0 ? "text-perigo" : ""}`}>
+                      {corte > 0 ? `${m$(corte)} (${formatar(corte / totalSetores, "pct")})` : "já dentro da meta"}
+                    </td>
+                  </tr>
+                  <tr>
+                    <td className="py-1">Pessoas que cabem na meta, ao custo médio de {m$(custoMedio)}</td>
+                    <td className="py-1 text-right tabular-nums">
+                      {cabem ?? "—"} de {pessoasTotal}
+                    </td>
+                  </tr>
+                  <tr>
+                    <td className="py-1">Delas na produção, mantendo a proporção de hoje</td>
+                    <td className="py-1 text-right tabular-nums">
+                      {pessoasProducaoMeta ?? "—"} de {producao?.pessoas ?? 0}
+                    </td>
+                  </tr>
+                  <tr>
+                    <td className="py-1">Saída por pessoa da produção para manter a fábrica de hoje</td>
+                    <td className="py-1 text-right tabular-nums">
+                      {saidaMedia && pessoasProducaoMeta ? m$(saidaMedia / pessoasProducaoMeta) : "—"}
+                      {saidaMedia && producao?.pessoas ? <span className="text-xs text-texto-suave"> (hoje {m$(saidaMedia / producao.pessoas)})</span> : null}
+                    </td>
+                  </tr>
+                  <tr>
+                    <td className="py-1">Para chegar ao ponto de equilíbrio com essa folha</td>
+                    <td className="py-1 text-right tabular-nums">
+                      {c.pe.pontoAlvo !== null && pessoasProducaoMeta ? `${m$(c.pe.pontoAlvo / pessoasProducaoMeta)} por pessoa` : "—"}
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+              <p className="text-xs text-texto-suave">
+                Simulação simples: custo médio de hoje por pessoa e a mesma divisão entre setores. Mostra quanto cada pessoa da produção precisaria
+                entregar com a equipe reduzida.
+              </p>
+            </div>
+          </Secao>
+        </div>
+      )}
+
+      {ajudaPessoas.length > 0 && (
+        <Secao titulo={`Ajuda de custo no contas a pagar (${ajudaPessoas.length} ${ajudaPessoas.length === 1 ? "pessoa" : "pessoas"})`}>
+          <Tabela colunas={["Pessoa", "Categoria no Tiny", ...c.linhas.map((l) => rotuloMes(l.mes))]}>
+            {ajudaPessoas.map((p) => (
+              <tr key={p}>
+                <Celula>{p}</Celula>
+                <Celula className="text-xs text-texto-suave">{c.ajuda.find((a) => a.pessoa === p)?.categoria ?? "sem categoria"}</Celula>
+                {c.linhas.map((l) => {
+                  const v = somaQtd(
+                    c.ajuda.filter((a) => a.pessoa === p && a.mes === l.mes),
+                    (a) => a.valor,
+                  );
+                  return (
+                    <Celula key={l.mes} className="text-right tabular-nums">
+                      {v ? m$(v) : "—"}
+                    </Celula>
+                  );
+                })}
+              </tr>
+            ))}
+          </Tabela>
+        </Secao>
+      )}
       <Fonte>
-        Fonte: holerites importados (RH) e pedidos que saíram da fábrica (ou NF de saída) · {c.daEmpresa} · {c.textoPeriodo}. Com um CNPJ
-        escolhido no topo, só a folha desse CNPJ entra; a empregadora dos holerites pode ser outra empresa do grupo, por isso compare no
-        consolidado.
+        Fonte: holerites importados, VT e auxílio-alimentação (RH › Funcionários › VT e alimentação), contas a pagar com &quot;ajuda de custo&quot; na
+        descrição ou na categoria, e pedidos que saíram da fábrica (ou NF de saída) · {c.daEmpresa} · {c.textoPeriodo}. Sem INSS da empresa. Com
+        um CNPJ escolhido no topo, só a folha desse CNPJ entra; a empregadora dos holerites é a ASHI, por isso compare no consolidado.
       </Fonte>
     </div>
   );
