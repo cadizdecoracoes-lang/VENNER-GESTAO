@@ -16,10 +16,13 @@ exception when others then
   raise notice 'ok: %', mensagem;
 end $$;
 
+-- Os eventos provisórios saíram; um evento da folha para as consultas.
+insert into eventos_folha (codigo, descricao, tipo) values ('1', 'Salário', 'provento');
+
 -- financeiro@teste terminou 50_cadastros_financeiro.sql como Contabilidade.
 set role authenticated;
 set request.jwt.claim.sub = '00000000-0000-0000-0000-00000000000e';
-select pg_temp.esperar((select count(*) from eventos_folha) = 17, 'contabilidade consulta os eventos do holerite');
+select pg_temp.esperar((select count(*) from eventos_folha) = 1, 'contabilidade consulta os eventos do holerite');
 select pg_temp.esperar_erro(
   $$insert into eventos_folha (codigo, descricao, tipo) values ('900', 'x', 'provento')$$,
   'row-level security', 'contabilidade não cria evento');
@@ -30,12 +33,12 @@ set role authenticated;
 set request.jwt.claim.sub = '00000000-0000-0000-0000-00000000000e';
 insert into eventos_folha (codigo, descricao, tipo, forma_calculo, incide_inss, incide_fgts, incide_irrf)
 values ('011', 'Insalubridade', 'provento', 'percentual', true, true, true);
-select pg_temp.esperar((select count(*) from eventos_folha) = 18, 'RH cadastra evento');
+select pg_temp.esperar((select count(*) from eventos_folha) = 2, 'RH cadastra evento');
 select pg_temp.esperar_erro(
   $$insert into eventos_folha (codigo, descricao, tipo, incide_inss) values ('202', 'Base INSS', 'informativo', true)$$,
   'check', 'evento informativo não tem incidência');
 select pg_temp.esperar_erro(
-  $$insert into eventos_folha (codigo, descricao, tipo) values ('001', 'Repetido', 'provento')$$,
+  $$insert into eventos_folha (codigo, descricao, tipo) values ('011', 'Repetido', 'provento')$$,
   'duplicate', 'código do evento não se repete');
 reset role;
 
