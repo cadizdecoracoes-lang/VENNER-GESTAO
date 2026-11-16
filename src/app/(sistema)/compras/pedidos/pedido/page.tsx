@@ -117,9 +117,11 @@ async function PaginaPedidoCompra({ params }: { params: Promise<{ id: string }> 
   const categoria = cat as { codigo: string; nome: string } | null;
   const empresa = empresas.find((e) => e.id === p.empresa_id)?.nome;
 
-  const editavel = p.etapa === "criacao" || p.etapa === "orcamento";
-  const podeEditar = pode(acesso, TELA, "editar");
-  const podeAprovar = pode(acesso, TELA, "aprovar");
+  // Pedido que vem do Tiny só muda no Tiny: aqui fica só para consulta.
+  const doTiny = p.situacao_tiny !== null;
+  const editavel = !doTiny && (p.etapa === "criacao" || p.etapa === "orcamento");
+  const podeEditar = !doTiny && pode(acesso, TELA, "editar");
+  const podeAprovar = !doTiny && pode(acesso, TELA, "aprovar");
   const temEscolhido = orcamentos.some((o) => o.escolhido);
   const nomeFornecedor = (o: Orcamento) => o.fornecedores?.nome_fantasia || o.fornecedores?.nome || "—";
 
@@ -149,6 +151,11 @@ async function PaginaPedidoCompra({ params }: { params: Promise<{ id: string }> 
             </p>
           </div>
           <div className="text-right">
+            {doTiny && (
+              <span className="mr-1" title="Ordem de compra lida do Tiny: altere no Tiny e ela muda aqui sozinha.">
+                <Etiqueta cor="neutra">Tiny {p.numero_tiny}</Etiqueta>
+              </span>
+            )}
             <Etiqueta cor={COR_ETAPA_COMPRA[p.etapa]}>{ETAPAS_COMPRA[p.etapa]}</Etiqueta>
             <p className="mt-1 text-xl font-semibold tabular-nums">{formatarMoeda(Number(p.valor_total))}</p>
             <Fonte>

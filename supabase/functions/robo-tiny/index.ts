@@ -1,4 +1,4 @@
-// Robô do Tiny: chamado pelo próprio banco a cada 5 minutos (pg_cron + pg_net)
+// Robô do Tiny: chamado pelo próprio banco a cada minuto (pg_cron + pg_net)
 // com a chave que ele gerou para a conta. Sem login: quem confere a chave é o banco.
 // Com {"registrar": true}, aponta o agendamento para esta função (feito pela
 // publicação no GitHub depois de cada deploy).

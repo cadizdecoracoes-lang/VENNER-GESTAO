@@ -85,7 +85,7 @@ async function PaginaIntegracoes({ searchParams }: { searchParams: Promise<Filtr
 
       {filtros.ligada === "tiny" && (
         <p className="rounded-xl bg-sucesso/10 px-4 py-2.5 text-sm text-sucesso">
-          Tiny ligado. A primeira leitura começa em até 5 minutos; a carga completa leva algumas horas.
+          Tiny ligado. A primeira leitura começa em até 1 minuto; a carga completa leva algumas horas.
         </p>
       )}
       {filtros.ligada && filtros.ligada !== "tiny" && (

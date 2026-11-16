@@ -126,6 +126,7 @@ export const MENU: GrupoMenu[] = [
       tela("config.usuarios", "Usuários", "Quem acessa o sistema e com qual perfil."),
       tela("config.perfis", "Perfis de acesso", "Telas e ações liberadas para cada perfil."),
       tela("config.integracoes", "Integrações", "Contas do Mercado Livre e lojas da Shopee ligadas ao sistema para buscar as vendas."),
+      tela("config.conferencia_tiny", "Conferência com o Tiny", "O que está diferente entre o Tiny e o sistema, módulo por módulo, com o motivo."),
       tela("config.atualizacoes", "Atualizações", "Histórico do que mudou no sistema e quando."),
     ],
   },
