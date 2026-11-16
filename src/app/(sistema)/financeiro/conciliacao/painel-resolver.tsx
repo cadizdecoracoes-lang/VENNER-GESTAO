@@ -17,7 +17,9 @@ const semAcento = (t: string) => t.normalize("NFD").replace(/[̀-ͯ]/g, "").toLo
 // marcar como transferência ou ignorar (estes dois só com uma linha). A
 // conciliação não lança nada: sem título, o atalho abre a conta nova no
 // pagar/receber já preenchida. Com várias linhas (ex.: um título recebido em
-// duas entradas), os títulos têm de somar exatamente o total das linhas.
+// duas entradas), os títulos têm de somar exatamente o total das linhas e a
+// conciliação só liga extrato e títulos: não dá baixa nem muda o título (a
+// baixa é a do Tiny; o que estiver diferente se corrige no Tiny).
 export function PainelResolver({
   linhas,
   candidatos,
@@ -177,6 +179,7 @@ export function PainelResolver({
                         {t.pessoa && <span className="font-medium">{t.pessoa} · </span>}
                         {t.descricao}
                         {!doLado(t) && <span className="text-xs text-texto-suave"> · a {t.tipo}, desconta</span>}
+                        {varias && !t.pago && <span className="text-xs text-alerta"> · em aberto no Tiny</span>}
                       </td>
                       <td
                         className={`whitespace-nowrap px-3 py-1.5 text-right tabular-nums ${doLado(t) ? "" : "text-perigo"} ${Math.abs(t.valor - valor) < 0.01 ? "font-semibold" : ""}`}

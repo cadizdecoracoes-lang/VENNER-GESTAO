@@ -6,25 +6,28 @@
 -- diferentes. O financeiro marca as linhas do extrato e os títulos e confirma;
 -- tudo sai da lista de pendentes junto.
 --
+-- Regra do Alexandre (16/11/2026 14:30): a conciliação é só apoio para achar
+-- diferença e erro de baixa feita no Tiny; não dá baixa nem altera título (a
+-- correção é feita só no Tiny). Por isso esta conciliação só VINCULA linhas e
+-- títulos (efeito 'vinculou'), em aberto ou pagos; a Conferência com o Tiny
+-- aponta o que ficou diferente (título em aberto, outra data, outra conta).
+--
 -- - extrato_conciliacoes.grupo: as ligações conciliadas juntas. Até aqui cada
 --   linha era o seu grupo (grupo = lancamento_id, também o padrão para quem
 --   grava sem grupo, como conciliar_lancamento e lancar_transferencia).
 -- - Um título pode agora estar ligado a mais de uma linha, mas só dentro do
 --   mesmo grupo (antes: índice único por título). Continua valendo "um título
 --   é conciliado uma vez só".
--- - conciliar_lancamentos(lancamentos, pagar, receber). O nome contém
---   "conciliar_lancamento" de propósito: o gatilho bloquear_titulo_tiny (pacote
---   #58) só deixa a conciliação mexer em título do Tiny pelas funções cujo nome
---   bate com esse padrão.
---   mesma regra de sempre (tudo
---   conciliado vem de um título a pagar/receber, a soma tem de bater). Com uma
---   linha só, é o conciliar_lancamento de sempre. Com várias: todas da mesma
---   conta, todas entradas (com contas a receber) ou todas saídas (com contas a
---   pagar). O valor de cada título é repartido entre as linhas em ordem de
---   data; título em aberto é baixado na data da última linha que o recebeu.
+-- - conciliar_lancamentos(lancamentos, pagar, receber): com uma linha chama o
+--   conciliar_lancamento de sempre. Com várias: todas da mesma conta, todas
+--   entradas (com contas a receber) ou todas saídas (com contas a pagar), e a
+--   soma dos títulos (pago: valor baixado no Tiny; em aberto: valor do título)
+--   tem de bater com o total das linhas. O valor de cada título é repartido
+--   entre as linhas em ordem de data, só para mostrar.
 -- - Desfazer uma linha de um grupo desfaz o grupo todo; excluir uma importação
 --   também devolve para pendente as linhas de outra importação que estavam no
---   mesmo grupo.
+--   mesmo grupo (gatilho soltar_grupo; as funções de desfazer e excluir não
+--   mudam).
 
 alter table public.extrato_conciliacoes add column grupo uuid;
 update public.extrato_conciliacoes set grupo = lancamento_id;
@@ -58,25 +61,6 @@ end;
 $$;
 create trigger validar_grupo before insert or update of grupo, conta_pagar_id, conta_receber_id on public.extrato_conciliacoes
   for each row execute function public.validar_grupo_conciliacao();
-
--- Linhas ligadas às linhas dadas pela conciliação em grupo (inclui as dadas).
-create function public.linhas_do_grupo(linhas uuid[])
-returns uuid[]
-language sql
-stable
-set search_path = ''
-as $$
-  select coalesce(array_agg(distinct x.id), '{}') from (
-    select unnest(linhas) as id
-    union
-    select c2.lancamento_id
-    from public.extrato_conciliacoes c
-    join public.extrato_conciliacoes c2 on c2.grupo = c.grupo
-    where c.lancamento_id = any(linhas)
-  ) x;
-$$;
-revoke execute on function public.linhas_do_grupo(uuid[]) from public, anon;
-grant execute on function public.linhas_do_grupo(uuid[]) to authenticated;
 
 -- -----------------------------------------------------------------------------
 -- Conciliar vários de uma vez
@@ -161,19 +145,13 @@ begin
     if t.situacao = 'cancelado' then
       raise exception 'O título "%" está cancelado', t.descricao;
     end if;
-    if t.situacao = 'pago' and t.conta_bancaria_id <> ls[1].conta_bancaria_id and not public.conta_tiny_sem_banco(t.conta_bancaria_id) then
-      raise exception 'O título "%" foi baixado em outra conta bancária. Estorne a baixa ou concilie na conta certa', t.descricao;
-    end if;
     if exists (select 1 from public.extrato_conciliacoes c where c.conta_pagar_id = t.id or c.conta_receber_id = t.id) then
       raise exception 'O título "%" já está conciliado com outro lançamento do extrato', t.descricao;
     end if;
     ts := ts || jsonb_build_object(
       'id', t.id,
       'pago', t.situacao = 'pago',
-      -- Com várias linhas, o título tem de bater exato (sem baixa pelo valor do extrato).
-      'valor', case when t.situacao = 'pago' then t.valor_baixado else t.valor_aberto end,
-      'conta', t.conta_bancaria_id,
-      'data', t.data_ref);
+      'valor', case when t.situacao = 'pago' then t.valor_baixado else t.valor_aberto end);
     soma := soma + case when t.situacao = 'pago' then t.valor_baixado else t.valor_aberto end;
   end loop;
   if jsonb_array_length(ts) <> qtd_titulos then
@@ -193,15 +171,11 @@ begin
     parte := least(resto_linha, resto_titulo);
     if parte > 0.004 then
       l := ls[i];
-      insert into public.extrato_conciliacoes (lancamento_id, conta_pagar_id, conta_receber_id, valor, efeito, conta_anterior, data_anterior, grupo)
+      insert into public.extrato_conciliacoes (lancamento_id, conta_pagar_id, conta_receber_id, valor, efeito, grupo)
       values (l.id,
         case when not entrada then (titulo ->> 'id')::uuid end,
         case when entrada then (titulo ->> 'id')::uuid end,
-        round(parte, 2),
-        case when (titulo ->> 'pago')::boolean then 'vinculou' else 'baixou' end,
-        case when (titulo ->> 'pago')::boolean and (titulo ->> 'conta')::uuid <> l.conta_bancaria_id then (titulo ->> 'conta')::uuid end,
-        case when (titulo ->> 'pago')::boolean and (titulo ->> 'conta')::uuid <> l.conta_bancaria_id then (titulo ->> 'data')::date end,
-        grupo_novo);
+        round(parte, 2), 'vinculou', grupo_novo);
     end if;
     resto_linha := resto_linha - parte;
     resto_titulo := resto_titulo - parte;
@@ -218,31 +192,7 @@ begin
     end if;
   end loop;
 
-  -- Pago do Tiny sem conta passa a ser desta conta; em aberto é baixado. A
-  -- data é a da última linha do extrato ligada ao título.
-  update public.contas_pagar p
-  set conta_bancaria_id = x.conta, data_pagamento = x.dia,
-    situacao = 'pago', valor_pago = case when x.baixou then x.total else p.valor_pago end
-  from (
-    select c.conta_pagar_id as id, max(e.data) as dia, max(e.conta_bancaria_id::text)::uuid as conta,
-      sum(c.valor) as total, bool_or(c.efeito = 'baixou') as baixou, bool_or(c.conta_anterior is not null) as mudou
-    from public.extrato_conciliacoes c join public.extrato_lancamentos e on e.id = c.lancamento_id
-    where c.grupo = grupo_novo and c.conta_pagar_id is not null
-    group by c.conta_pagar_id
-  ) x
-  where p.id = x.id and (x.baixou or x.mudou);
-  update public.contas_receber r
-  set conta_bancaria_id = x.conta, data_recebimento = x.dia,
-    situacao = 'pago', valor_recebido = case when x.baixou then x.total else r.valor_recebido end
-  from (
-    select c.conta_receber_id as id, max(e.data) as dia, max(e.conta_bancaria_id::text)::uuid as conta,
-      sum(c.valor) as total, bool_or(c.efeito = 'baixou') as baixou, bool_or(c.conta_anterior is not null) as mudou
-    from public.extrato_conciliacoes c join public.extrato_lancamentos e on e.id = c.lancamento_id
-    where c.grupo = grupo_novo and c.conta_receber_id is not null
-    group by c.conta_receber_id
-  ) x
-  where r.id = x.id and (x.baixou or x.mudou);
-
+  -- Os títulos não mudam: a baixa é a do Tiny.
   update public.extrato_lancamentos set situacao = 'conciliado', conciliado_por = auth.uid(), conciliado_em = now()
   where id = any(lancamentos);
 end;
@@ -251,101 +201,33 @@ revoke execute on function public.conciliar_lancamentos(uuid[], uuid[], uuid[]) 
 grant execute on function public.conciliar_lancamentos(uuid[], uuid[], uuid[]) to authenticated;
 
 -- -----------------------------------------------------------------------------
--- Desfazer: o grupo todo
+-- Desfazer ou excluir uma linha solta o grupo todo
 -- -----------------------------------------------------------------------------
-create or replace function public.desfazer_conciliacao(lancamento uuid)
-returns void
+-- Quando sai uma ligação de um grupo com várias linhas (desfazer a conciliação
+-- de uma linha, excluir a importação), saem as outras ligações do grupo e as
+-- outras linhas voltam para pendente. Assim desfazer_conciliacao e
+-- excluir_importacao_extrato seguem como estão (o que fazem com os títulos é
+-- deles; as ligações em grupo só vinculam e não mudam título nenhum).
+create function public.soltar_grupo_conciliacao()
+returns trigger
 language plpgsql
 set search_path = ''
 as $$
 declare
-  linhas uuid[];
-  pagar uuid[];
-  receber uuid[];
+  outras uuid[];
 begin
-  if not public.tem_permissao('financeiro.conciliacao', 'editar') then
-    raise exception 'Seu perfil não pode conciliar o extrato';
+  with apagadas as (
+    delete from public.extrato_conciliacoes c where c.grupo = old.grupo returning c.lancamento_id
+  )
+  select array_agg(distinct lancamento_id) into outras from apagadas where lancamento_id <> old.lancamento_id;
+  if outras is not null then
+    update public.extrato_lancamentos e
+    set situacao = 'pendente', observacao = null, conciliado_por = null, conciliado_em = null
+    where e.id = any(outras) and e.situacao = 'conciliado'
+      and not exists (select 1 from public.extrato_conciliacoes c where c.lancamento_id = e.id);
   end if;
-  if not exists (select 1 from public.extrato_lancamentos where id = lancamento) then
-    raise exception 'Lançamento do extrato não encontrado';
-  end if;
-  linhas := public.linhas_do_grupo(array[lancamento]);
-  perform 1 from public.extrato_lancamentos where id = any(linhas) order by id for update;
-
-  select array_agg(distinct conta_pagar_id) filter (where efeito = 'baixou'), array_agg(distinct conta_receber_id) filter (where efeito = 'baixou')
-  into pagar, receber
-  from public.extrato_conciliacoes where lancamento_id = any(linhas);
-  perform public.devolver_conta_tiny(linhas);
-  delete from public.extrato_conciliacoes where lancamento_id = any(linhas);
-
-  update public.contas_pagar set situacao = 'aberto', data_pagamento = null, valor_pago = null, conta_bancaria_id = null
-  where id = any(coalesce(pagar, '{}'));
-  update public.contas_receber set situacao = 'aberto', data_recebimento = null, valor_recebido = null, conta_bancaria_id = null
-  where id = any(coalesce(receber, '{}'));
-
-  update public.extrato_lancamentos
-  set situacao = 'pendente', observacao = null, conciliado_por = null, conciliado_em = null
-  where id = any(linhas);
+  return null;
 end;
 $$;
-
--- -----------------------------------------------------------------------------
--- Excluir importação: linhas de outra importação no mesmo grupo voltam a pendente
--- -----------------------------------------------------------------------------
-create or replace function public.excluir_importacao_extrato(importacao uuid)
-returns jsonb
-language plpgsql
-set search_path = ''
-as $$
-declare
-  imp public.extrato_importacoes;
-  todas uuid[];
-  pagar uuid[];
-  receber uuid[];
-  linhas integer;
-  conciliadas integer;
-begin
-  if not public.tem_permissao('financeiro.conciliacao', 'excluir') then
-    raise exception 'Seu perfil não pode excluir extrato importado';
-  end if;
-  select * into imp from public.extrato_importacoes where id = importacao for update;
-  if imp.id is null or not public.pode_ver_empresa(imp.empresa_id) then
-    raise exception 'Importação não encontrada';
-  end if;
-
-  select count(*), count(*) filter (where situacao <> 'pendente')
-  into linhas, conciliadas
-  from public.extrato_lancamentos where importacao_id = importacao;
-
-  todas := public.linhas_do_grupo(array(select id from public.extrato_lancamentos where importacao_id = importacao));
-
-  select array_agg(distinct c.conta_pagar_id) filter (where c.efeito = 'baixou'),
-    array_agg(distinct c.conta_receber_id) filter (where c.efeito = 'baixou')
-  into pagar, receber
-  from public.extrato_conciliacoes c
-  where c.lancamento_id = any(todas);
-
-  perform public.devolver_conta_tiny(todas);
-  delete from public.extrato_conciliacoes c where c.lancamento_id = any(todas);
-
-  update public.contas_pagar set situacao = 'aberto', data_pagamento = null, valor_pago = null, conta_bancaria_id = null
-  where id = any(coalesce(pagar, '{}'));
-  update public.contas_receber set situacao = 'aberto', data_recebimento = null, valor_recebido = null, conta_bancaria_id = null
-  where id = any(coalesce(receber, '{}'));
-
-  -- Linhas de outra importação que estavam no mesmo grupo voltam para a lista.
-  update public.extrato_lancamentos
-  set situacao = 'pendente', observacao = null, conciliado_por = null, conciliado_em = null
-  where id = any(todas) and importacao_id is distinct from importacao and situacao = 'conciliado';
-
-  -- As linhas saem junto (on delete cascade).
-  delete from public.extrato_importacoes where id = importacao;
-  -- Cópia que estava de fora por repetir uma linha desta importação volta para a lista.
-  perform public.marcar_repetidos_extrato(imp.conta_bancaria_id);
-
-  return jsonb_build_object(
-    'linhas', linhas,
-    'conciliadas', conciliadas,
-    'reabertos', coalesce(array_length(pagar, 1), 0) + coalesce(array_length(receber, 1), 0));
-end;
-$$;
+create trigger soltar_grupo after delete on public.extrato_conciliacoes
+  for each row when (old.grupo <> old.lancamento_id) execute function public.soltar_grupo_conciliacao();

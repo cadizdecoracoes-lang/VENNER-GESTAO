@@ -660,7 +660,7 @@ async function PaginaConciliacao({ searchParams }: { searchParams: Promise<Filtr
                             discreto
                             confirmar={
                               l.extrato_conciliacoes.some((c) => c.grupo !== l.id)
-                                ? "Desfazer? Esta linha foi conciliada junto com outras: todas voltam para pendente e os títulos baixados pela conciliação voltam para em aberto."
+                                ? "Desfazer? Esta linha foi conciliada junto com outras: todas voltam para pendente. Os títulos não mudam."
                                 : "Desfazer? Títulos baixados pela conciliação voltam para em aberto e os lançados aqui são cancelados."
                             }
                           />

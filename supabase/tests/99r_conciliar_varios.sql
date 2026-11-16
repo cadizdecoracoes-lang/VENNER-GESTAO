@@ -1,6 +1,7 @@
 -- Testes da conciliação de vários lançamentos do extrato com vários títulos de
 -- uma vez: dois títulos manuais para uma entrada; um título recebido em duas
--- entradas em dias diferentes; desfazer o grupo todo; excluir importação.
+-- entradas em dias diferentes; desfazer o grupo todo; excluir importação. A
+-- conciliação em grupo só vincula: nunca baixa nem altera o título (Tiny).
 \set ON_ERROR_STOP 1
 
 create function pg_temp.esperar(condicao boolean, mensagem text) returns void language plpgsql as $$
@@ -67,12 +68,12 @@ select pg_temp.esperar(
   (select count(*) from extrato_lancamentos where chave in ('id:V1', 'id:V2', 'id:V3') and situacao = 'conciliado') = 3,
   'as três entradas saem da lista de pendentes');
 select pg_temp.esperar(
-  (select bool_and(situacao = 'pago' and data_recebimento = '2026-11-03' and conta_bancaria_id = current_setting('teste.conta')::uuid)
-   from contas_receber where descricao in ('VAR manual A', 'VAR manual B')),
-  'os dois títulos manuais baixados na data da entrada');
+  (select situacao = 'aberto' and valor_recebido is null and data_recebimento is null and conta_bancaria_id is null
+   from contas_receber where descricao = 'VAR manual parcelado'),
+  'conciliar em grupo não dá baixa no título (a baixa é a do Tiny)');
 select pg_temp.esperar(
-  (select situacao = 'pago' and valor_recebido = 1500 and data_recebimento = '2026-11-07' from contas_receber where descricao = 'VAR manual parcelado'),
-  'título parcelado baixado pelo total, na data da última entrada');
+  (select bool_and(efeito = 'vinculou') from extrato_conciliacoes where conta_receber_id = pg_temp.receber('VAR manual parcelado')),
+  'ligações do grupo só vinculam');
 select pg_temp.esperar(
   (select count(*) = 2 and count(distinct grupo) = 1 and sum(valor) = 1500
    from extrato_conciliacoes where conta_receber_id = pg_temp.receber('VAR manual parcelado')),
@@ -105,7 +106,7 @@ select pg_temp.esperar(
   'desfazer uma linha volta as duas para pendente');
 select pg_temp.esperar(
   (select situacao = 'aberto' and valor_recebido is null from contas_receber where descricao = 'VAR manual parcelado'),
-  'título volta para em aberto');
+  'título continua como estava');
 select pg_temp.esperar(
   not exists (select 1 from extrato_conciliacoes where conta_receber_id = pg_temp.receber('VAR manual parcelado')),
   'ligações do grupo apagadas');
@@ -114,8 +115,9 @@ select pg_temp.esperar(
   'outra conciliação fica como estava');
 
 -- Grupo com linhas de duas importações: excluir uma devolve a outra para pendente.
--- V3 600 + V5 1490 = parcelado 1500 + outro 590.
-update contas_receber set valor = 590 where descricao = 'VAR outro';
+-- V3 600 + V5 1490 = parcelado 1500 + outro 590 (pago no Tiny).
+update contas_receber set valor = 590, situacao = 'pago', valor_recebido = 590, data_recebimento = '2026-11-08',
+  conta_bancaria_id = current_setting('teste.conta')::uuid where descricao = 'VAR outro';
 set role authenticated;
 set request.jwt.claim.sub = '00000000-0000-0000-0000-00000000000b';
 select conciliar_lancamentos(array[pg_temp.linha('V3'), pg_temp.linha('V5')], '{}',
@@ -132,5 +134,6 @@ select pg_temp.esperar(
   (select situacao = 'pendente' from extrato_lancamentos where chave = 'id:V3'),
   'linha da outra importação volta para pendente');
 select pg_temp.esperar(
-  (select bool_and(situacao = 'aberto') from contas_receber where descricao in ('VAR manual parcelado', 'VAR outro')),
-  'títulos do grupo voltam para em aberto');
+  (select situacao = 'aberto' from contas_receber where descricao = 'VAR manual parcelado')
+  and (select situacao = 'pago' and valor_recebido = 590 and data_recebimento = '2026-11-08' from contas_receber where descricao = 'VAR outro'),
+  'excluir a importação não mexe nos títulos');
