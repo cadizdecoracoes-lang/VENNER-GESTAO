@@ -1,6 +1,6 @@
 // Converte as respostas da API v3 do Tiny no formato que o banco grava.
 // Funções puras (testadas em tests/tiny.test.ts).
-import type { Categoria, ContaFinanceira, Contato, ItemPedido, OrdemCompra, Pedido, Produto, Titulo } from "./tipos.ts";
+import type { Categoria, ContaFinanceira, Contato, ItemPedido, NotaTiny, OrdemCompra, Pedido, Produto, Titulo } from "./tipos.ts";
 
 type Bruto = Record<string, unknown>;
 
@@ -278,6 +278,32 @@ export function ordemCompra(v: unknown, hoje: string): OrdemCompra | null {
         observacao: texto(p.observacoes),
       }))
       .filter((p) => p.vencimento && p.valor > 0),
+  };
+}
+
+// Nota fiscal da listagem do Tiny (não precisa do detalhe).
+export function notaTiny(v: unknown): NotaTiny | null {
+  const d = obj(v);
+  const id = inteiro(d.id);
+  const tipo = texto(d.tipo)?.toUpperCase();
+  if (!id || (tipo !== "E" && tipo !== "S")) return null;
+  const c = obj(d.cliente);
+  const origem = obj(d.origem);
+  const chave = (texto(d.chaveAcesso) ?? "").replace(/\D/g, "");
+  return {
+    id,
+    tipo,
+    numero: texto(d.numero)?.replace(/^0+(?=\d)/, "") ?? null,
+    serie: texto(d.serie),
+    chave: chave.length === 44 ? chave : null,
+    situacao: inteiro(d.situacao) ?? 0,
+    emissao: data(d.dataEmissao),
+    contato_nome: texto(c.nome),
+    contato_documento: texto(c.cpfCnpj),
+    valor: arred2(numero(d.valor)),
+    origem_tipo: texto(origem.tipo),
+    origem_id: texto(origem.id),
+    pedido_ecommerce: texto(obj(d.ecommerce).numeroPedidoEcommerce),
   };
 }
 

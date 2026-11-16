@@ -4,7 +4,7 @@
 // botão "Ler agora". A chave do robô é conferida pelo banco em cada chamada.
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { ApiTiny, renovarTiny, SemOrcamento } from "./api.ts";
-import { assinatura, categoria, contaFinanceira, data, numero, ordemCompra, pedido, produto, semBaixa, titulo } from "./normalizar.ts";
+import { assinatura, categoria, contaFinanceira, data, notaTiny, numero, ordemCompra, pedido, produto, semBaixa, titulo } from "./normalizar.ts";
 import { HISTORICO_DESDE, type Cursor, type EstadoLeitura, type Lote, type TipoFila } from "./tipos.ts";
 
 type Inicio = {
@@ -23,7 +23,7 @@ type Pagina = { itens?: unknown[]; paginacao?: { total?: number } };
 
 const POR_PAGINA = 100;
 // Páginas de listagem por leitura (o resto do orçamento vai para os detalhes).
-const PAGINAS_POR_LEITURA = 8;
+const PAGINAS_POR_LEITURA = 10;
 
 // Horário de Brasília no formato dos filtros do Tiny ("2026-10-23 09:00:00").
 export function horarioTiny(agora: Date, minutos = 0): string {
@@ -118,6 +118,7 @@ export async function lerTiny(
     );
     await listar("Ordens de compra", () => varrerCompras(tiny, lote, estado, 2));
     if (conta.ler_pagar) await listar("Contas a pagar", () => varrerTitulos(tiny, lote, "pagar", estado, agora, 2));
+    await listar("Notas fiscais", () => varrerNotas(tiny, lote, estado, 2));
 
     // 3. Detalhe de cada pendente (das leituras anteriores).
     for (const p of conta.pendentes) {
@@ -228,6 +229,28 @@ async function varrerCompras(api: ApiTiny, lote: Lote, estado: EstadoLeitura, ma
     for (const i of itens) {
       const id = Number((i as { id?: unknown }).id);
       if (id) lote.listados.push({ tipo: "compra", id, assinatura: assinatura("compra", i) });
+    }
+    if (itens.length < POR_PAGINA) {
+      c.offset = 0;
+      break;
+    }
+    c.offset += POR_PAGINA;
+  }
+  return usadas;
+}
+
+// Notas fiscais (entrada e saída): a listagem já traz o que a conferência
+// precisa, então grava direto, em voltas completas desde HISTORICO_DESDE.
+async function varrerNotas(api: ApiTiny, lote: Lote, estado: EstadoLeitura, maximo: number): Promise<number> {
+  const c = (estado.notas ??= { offset: 0 });
+  let usadas = 0;
+  while (usadas < maximo) {
+    const r = await api.ler<Pagina>("/notas", { dataInicial: HISTORICO_DESDE, orderBy: "asc", limit: POR_PAGINA, offset: c.offset });
+    usadas++;
+    const itens = r?.itens ?? [];
+    for (const i of itens) {
+      const n = notaTiny(i);
+      if (n) (lote.notas ??= []).push(n);
     }
     if (itens.length < POR_PAGINA) {
       c.offset = 0;

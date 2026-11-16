@@ -105,6 +105,25 @@ export type OrdemCompra = {
   parcelas: { dias: number; vencimento: string; valor: number; meio_pagamento: string | null; observacao: string | null }[];
 };
 
+// Nota fiscal do Tiny, como vem da listagem (entrada ou saída). Situação:
+// 1 pendente, 2 emitida, 3 cancelada, 4 aguardando recibo, 5 rejeitada,
+// 6 autorizada, 7 DANFE emitida, 8 registrada, 9 aguardando protocolo, 10 denegada.
+export type NotaTiny = {
+  id: number;
+  tipo: "E" | "S";
+  numero: string | null;
+  serie: string | null;
+  chave: string | null;
+  situacao: number;
+  emissao: string | null;
+  contato_nome: string | null;
+  contato_documento: string | null;
+  valor: number;
+  origem_tipo: string | null;
+  origem_id: string | null;
+  pedido_ecommerce: string | null;
+};
+
 export type Categoria = { id: number; descricao: string; grupo: string; tipo: "receita" | "despesa"; ativa: boolean };
 
 export type ContaFinanceira = { id: number; descricao: string; ativa: boolean };
@@ -123,6 +142,7 @@ export type Lote = {
   pedidos: Pedido[];
   produtos: Produto[];
   compras?: OrdemCompra[];
+  notas?: NotaTiny[];
   falhas: { tipo: TipoFila; id: number; erro: string }[];
   removidos: { tipo: TipoFila; id: number }[];
   estado: EstadoLeitura;
@@ -144,6 +164,9 @@ export type EstadoLeitura = {
   // Ordens de compra: a listagem não filtra por alteração, então dá voltas
   // completas pelas criadas desde HISTORICO_DESDE comparando a assinatura.
   compras?: { offset: number };
+  // Notas fiscais: voltas completas pelas criadas desde HISTORICO_DESDE
+  // (gravadas direto da listagem, sem ler o detalhe).
+  notas?: { offset: number };
   // Antigos (até 10/11/2026): listagem do receber por alteração e volta
   // pelos em aberto. Não são mais usados.
   receber_abertos?: { offset: number };

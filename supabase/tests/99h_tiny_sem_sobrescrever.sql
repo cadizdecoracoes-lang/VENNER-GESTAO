@@ -48,6 +48,13 @@ select pg_temp.esperar(
 select pg_temp.esperar((current_setting('teste.resumo')::jsonb ->> 'mantidos')::integer = 1, 'resumo conta o título mantido');
 
 -- Baixa feita aqui (teste 99e, título 20) já marcada: o Tiny pago em outra data não troca.
+-- (no 99e a planilha do Tiny desfez essa baixa: refeita aqui)
+set role authenticated;
+set request.jwt.claim.sub = '00000000-0000-0000-0000-00000000000b';
+update contas_pagar set situacao = 'pago', data_pagamento = '2026-11-09', valor_pago = 120,
+  conta_bancaria_id = (select id from contas_bancarias where tiny_id = 501)
+where tiny_id = 20;
+reset role;
 select pg_temp.esperar(
   (select editado_aqui @> '{situacao,data_pagamento}' from contas_pagar where tiny_id = 20), 'baixa feita aqui fica marcada');
 select tiny_aplicar(current_setting('teste.robo')::uuid, $${

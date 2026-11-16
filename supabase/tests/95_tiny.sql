@@ -2,6 +2,12 @@
 -- contas, categorias, títulos a receber e a pagar, pedidos e a fila.
 \set ON_ERROR_STOP 1
 
+-- Os testes de 95 a 99q simulam títulos do Tiny mudados aqui (regras de antes
+-- do pacote "Tiny sempre vence"). Desde então o banco recusa essa mudança; o
+-- bloqueio volta a valer no 99r_conferencia_tiny.sql, que testa a regra nova.
+alter table contas_pagar disable trigger bloquear_titulo_tiny;
+alter table contas_receber disable trigger bloquear_titulo_tiny;
+
 create function pg_temp.esperar(condicao boolean, mensagem text) returns void language plpgsql as $$
 begin
   if not coalesce(condicao, false) then raise exception 'FALHOU: %', mensagem; end if;
@@ -180,7 +186,7 @@ select pg_temp.esperar(
        from integracao_robo where integracao_id = current_setting('teste.tiny')::uuid),
   'acesso renovado, leitura liberada e estado guardado');
 
--- A fábrica avança o pedido aqui; o Tiny dizendo "aprovado" não faz voltar.
+-- A fábrica avança o pedido aqui; desde "Tiny sempre vence" a etapa volta à do Tiny.
 update pedidos_venda set etapa_id = (select id from etapas_pedido where nome = 'Montagem') where tiny_id = 100;
 -- Recebimento lançado aqui não volta para aberto pelo Tiny.
 update contas_receber set situacao = 'pago', data_recebimento = '2026-11-01', valor_recebido = 800,
@@ -202,8 +208,8 @@ reset role;
 
 select pg_temp.esperar((select situacao from contas_receber where tiny_id = 2) = 'pago', 'recebimento daqui é mantido');
 select pg_temp.esperar(
-  (select e.nome from pedidos_venda p join etapas_pedido e on e.id = p.etapa_id where p.tiny_id = 100) = 'Montagem',
-  'etapa marcada aqui não volta');
+  (select e.nome from pedidos_venda p join etapas_pedido e on e.id = p.etapa_id where p.tiny_id = 100) = 'Confirmado pelo cliente',
+  'etapa do pedido fica igual à situação do Tiny');
 select pg_temp.esperar(
   (select sum(quantidade) from pedido_venda_itens pi join pedidos_venda p on p.id = pi.pedido_id where p.tiny_id = 100) = 4,
   'itens refeitos com a versão do Tiny');

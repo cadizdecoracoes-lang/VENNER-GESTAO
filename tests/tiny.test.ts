@@ -179,6 +179,7 @@ test("leitura: renova o acesso, lista, lê pendentes e grava um lote só", async
       return json({ id: 700, numeroPedido: "55", data: "2026-10-20", situacao: 0, contato: { id: 31, nome: "Fornecedor" }, itens: [], parcelas: [] });
     if (u.includes("/ordem-compra?")) return json({ itens: [{ id: 700, situacao: 0, numeroPedido: "55" }, { id: 701, situacao: 1 }] });
     if (u.includes("/produtos?")) return json({ itens: Array.from({ length: 100 }, (_, i) => ({ id: i + 1 })) });
+    if (u.includes("/notas?")) return json({ itens: [{ id: 900, tipo: "S", numero: "12", situacao: "6", valor: 10 }, { id: 901, tipo: "?" }] });
     throw new Error(`inesperado ${u}`);
   }) as typeof fetch;
   try {
@@ -198,6 +199,9 @@ test("leitura: renova o acesso, lista, lê pendentes e grava um lote só", async
   assert.deepEqual(lote.estado.receber_ciclo, { fase: "abertos", offset: 0 });
   assert.equal(lote.receber_ciclo_inicio, "2026-10-23T12:00:00.000Z");
   assert.equal(lote.estado.produtos?.offset, 200);
+  // Notas fiscais vêm direto da listagem (a inválida fica de fora).
+  assert.deepEqual(lote.notas?.map((n) => n.id), [900]);
+  assert.deepEqual(lote.estado.notas, { offset: 0 });
   assert.equal(lote.contas, undefined, "cadastros só uma vez por dia");
   assert.ok(chamadas.some((c) => c.startsWith("/contas-receber?situacao=aberto")));
   assert.ok(chamadas.some((c) => c.startsWith("/contas-receber?dataInicialVencimento=2026-01-01")));
