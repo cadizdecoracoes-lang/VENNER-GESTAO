@@ -219,6 +219,99 @@ test("Sicoob por OCR: dia mais novo primeiro, C/D na linha de baixo, DOC e mês 
   assert.ok(r.avisos.some((a) => a.startsWith("Conferido")));
 });
 
+test("Sicoob em PDF de texto: valor que quebra em duas linhas fica acima do histórico (erro de 17/11)", () => {
+  // Como veio o extrato de novembro da VENNER: valor de 1.000,00 para cima
+  // quebra em duas linhas (número e C/D) e o número sai um pouco acima da linha
+  // com a data. Antes, o número virava complemento do lançamento de cima e o
+  // C/D do de baixo trocava o sinal do de cima ("TARIFA COBRANÇA · 2.278,56 ·
+  // 05/11 CRÉD.LIQ.COBRANÇA" com + R$ 1,10).
+  const linhas = ocr(
+    "SICOOB",
+    "COOP.: 5004-0 / SICOOB UNICENTRO BR",
+    "CONTA: 1.193.734-3 / VENNER INDUSTRIA E COMERCIO LTDA",
+    "PERÍODO: 01/11/2026 - 16/11/2026",
+    "HISTÓRICO DE MOVIMENTAÇÃO",
+    "DATA HISTÓRICO VALOR",
+    "32.921,49",
+    "11/11 SALDO DO DIA",
+    "C",
+    "11/11 DÉB.TIT.COMPE.EFETI 1.771,05",
+    "D",
+    "DOC.: 1234",
+    "23.000,00",
+    "11/11 PIX RECEB.OUTRA IF",
+    "C",
+    "Recebimento Pix",
+    "FWC COMERCIO LTDA",
+    "DOC.: Pix",
+    "11/11 PIX EMIT.OUTRA IF 584,92D",
+    "Pagamento Pix",
+    "72.675.028 0004-82",
+    "DOC.: Pix",
+    "12.277,46",
+    "05/11 SALDO DO DIA",
+    "C",
+    "05/11 TARIFA COBRANÇA 1,10D",
+    "DOC.: 4908910",
+    "2.278,56",
+    "05/11 CRÉD.LIQ.COBRANÇA",
+    "C",
+    "DOC.: 4908900",
+    "10.000,00",
+    "05/11 SALDO ANTERIOR",
+    "C",
+    "RESUMO",
+  );
+  const r = lerExtratoPdf(linhas);
+  assert.deepEqual(
+    r.linhas.map((l) => [l.data, l.valor, l.descricao, l.documento]),
+    [
+      ["2026-11-05", 2278.56, "CRÉD.LIQ.COBRANÇA", "4908900"],
+      ["2026-11-05", -1.1, "TARIFA COBRANÇA", "4908910"],
+      ["2026-11-11", -584.92, "PIX EMIT.OUTRA IF · 72.675.028 0004-82", null],
+      ["2026-11-11", 23000, "PIX RECEB.OUTRA IF · FWC COMERCIO LTDA", null],
+      ["2026-11-11", -1771.05, "DÉB.TIT.COMPE.EFETI", "1234"],
+    ],
+  );
+  assert.ok(r.linhas.every((l) => !l.conferir && !l.sinalIncerto));
+  assert.equal(r.saldoInicial, 10000);
+  assert.equal(r.saldoFinal, 32921.49);
+  assert.ok(r.avisos.some((a) => a.startsWith("Conferido")));
+});
+
+test("Sicoob: valor solto logo abaixo da linha com data e dia que não fecha fica marcado", () => {
+  const linhas = ocr(
+    "SICOOB",
+    "PERÍODO: 01/11/2026 - 30/11/2026",
+    "DATA HISTÓRICO VALOR",
+    "12/11 SALDO DO DIA 500,00C",
+    "12/11 PIX EMIT.OUTRA IF",
+    "9.488,86",
+    "D",
+    "Pagamento Pix",
+    "09.390.745 0001-89",
+    "DOC.: Pix",
+    "12/11 CRED.TR.CT.INTERCRED",
+    "10.296,91",
+    "C",
+    "11/11 SALDO DO DIA 0,00C",
+    "11/11 TARIFA COBRANÇA 1,10D",
+    "11/11 SALDO ANTERIOR 1,10C",
+    "RESUMO",
+  );
+  const r = lerExtratoPdf(linhas);
+  assert.deepEqual(
+    r.linhas.map((l) => [l.data, l.valor, l.descricao, !!l.conferir]),
+    [
+      ["2026-11-11", -1.1, "TARIFA COBRANÇA", false],
+      ["2026-11-12", 10296.91, "CRED.TR.CT.INTERCRED", true],
+      ["2026-11-12", -9488.86, "PIX EMIT.OUTRA IF · 09.390.745 0001-89", true],
+    ],
+  );
+  // 0,00 + 10.296,91 - 9.488,86 = 808,05, e o extrato diz 500,00.
+  assert.ok(r.avisos.some((a) => a.includes("não fecha em 12/11")));
+});
+
 test("C6 por OCR: ano pelo saldo do dia, sinal pelo tipo e correção de um dígito que fecha o dia", () => {
   const linhas = pdf(
     [[40, "Data Data Tipo Descrição Valor"]],
