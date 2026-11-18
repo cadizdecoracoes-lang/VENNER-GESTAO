@@ -79,6 +79,10 @@ export function lerOfx(texto: string): ExtratoLido {
     if (!data || !valor) continue;
     const memo = tag(b, "MEMO");
     const nome = tag(b, "NAME");
+    // O Itaú manda o saldo de cada dia como se fosse lançamento ("SALDO TOTAL
+    // DISPONÍVEL DIA"): é informação, não entrada nem saída de dinheiro.
+    // Só "saldo..." (não "total..."): no OFX, pular por engano some com dinheiro.
+    if ([nome, memo].some((t) => t && /^(saldo|sdo\b|s a l d o)/.test(semAcento(t)))) continue;
     const descricao = [nome, memo && memo !== nome ? memo : null].filter(Boolean).join(" · ") || tag(b, "TRNTYPE") || "Sem descrição";
     linhas.push({
       data,

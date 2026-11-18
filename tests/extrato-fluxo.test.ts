@@ -39,6 +39,20 @@ test("OFX: lançamentos, sinal, FITID, conta e saldo final", () => {
   assert.deepEqual(r.conta, { banco: "0341", agencia: "0001", numero: "12345-6" });
 });
 
+test("OFX do Itaú: linhas de saldo do dia não viram lançamento", () => {
+  const r = lerOfx(`<OFX><BANKTRANLIST>
+<STMTTRN><TRNTYPE>OTHER<DTPOSTED>20261103<TRNAMT>-3030.11<FITID>20261103001<CHECKNUM>20261103001<MEMO>SALDO TOTAL DISPONÍVEL DIA</STMTTRN>
+<STMTTRN><TRNTYPE>CREDIT<DTPOSTED>20261103<TRNAMT>12700.00<FITID>20261103002<MEMO>PIX RECEBIDO AX CAPI03/11</STMTTRN>
+<STMTTRN><TRNTYPE>OTHER<DTPOSTED>20261104<TRNAMT>-2719.74<FITID>20261104001<NAME>SALDO TOTAL DISPONIVEL DIA</STMTTRN>
+<STMTTRN><TRNTYPE>DEBIT<DTPOSTED>20261104<TRNAMT>-50.00<FITID>20261104002<MEMO>TOTALPASS MENSAL</STMTTRN>
+</BANKTRANLIST><LEDGERBAL><BALAMT>-2719.74<DTASOF>20261104</LEDGERBAL></OFX>`);
+  assert.deepEqual(
+    r.linhas.map((l) => [l.descricao, l.valor]),
+    [["PIX RECEBIDO AX CAPI03/11", 12700], ["TOTALPASS MENSAL", -50]],
+  );
+  assert.equal(r.saldoFinal, -2719.74);
+});
+
 test("valores de célula com o sinal dos bancos", () => {
   assert.equal(valorCelula("-305,10"), -305.1);
   assert.equal(valorCelula("305,10-"), -305.1);
