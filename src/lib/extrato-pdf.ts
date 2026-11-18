@@ -411,20 +411,72 @@ function lerItau(linhas: LinhaPdf[]): Montagem {
 
 // ---------------------------------------------------------------------------
 // Sicoob (SISBR > Extrato conta corrente)
-// DATA | HISTÓRICO | VALOR (com C/D, às vezes o C/D cai na linha de baixo).
+// DATA | HISTÓRICO | VALOR (com C/D).
 // Lista do dia mais novo para o mais velho; as linhas abaixo completam o
 // histórico (nome, CNPJ) e "DOC.:" é o documento.
+// Valor de 1.000,00 para cima não cabe na coluna e quebra em duas linhas: o
+// número numa e o C/D sozinho na de baixo. O número às vezes fica um pouco
+// acima do histórico e vira uma linha só dele, antes da linha com a data. Por
+// isso o valor sozinho numa linha vale para a linha com data logo abaixo, se
+// ela não tiver valor; se vier depois de uma linha com data sem valor e antes
+// do complemento ou do C/D dela, vale para ela. O C/D sozinho vale para o
+// último lançamento ou saldo lido. Antes (17/11) o valor solto
+// virava complemento do lançamento de cima, que ficava com o valor e o C/D
+// do lançamento seguinte.
+// No fim, o "saldo do dia" confere cada dia: dia que não fecha fica marcado.
 // ---------------------------------------------------------------------------
 const SAIDA_SICOOB = /(deb|emit|tarifa|pagto|pagamento|pag\.|saque|compra|iof|juros|envi|tar\.)/;
 const ENTRADA_SICOOB = /(cred|receb|deposito|estorno|resgate|rendimento|devol|liq\.? ?cobranca)/;
+
+// Lançamento ou saldo lido do Sicoob, à espera do valor ou do C/D.
+type ItemSicoob =
+  | { tipo: "lancamento"; linha: LinhaExtrato; historico: string; semValor: boolean }
+  | { tipo: "saldo"; qual: "dia" | "anterior" | "outro"; data: string; v: number | null };
 
 function lerSicoob(linhas: LinhaPdf[], ocr: boolean): Montagem {
   const m: Montagem = { linhas: [], saldoInicial: null, saldoFinal: null, conta: { banco: null, agencia: null, numero: null }, avisos: [] };
   let periodo: { ano: number; mesIni: number; mesFim: number } | null = null;
   let dentro = false;
+  // Último lançamento (recebe complemento e DOC) e último item (recebe o C/D).
   let ultima: LinhaExtrato | undefined;
-  let saldoDia: { data: string; v: number }[] = [];
+  let alvo: ItemSicoob | null = null;
+  // Lançamento ou saldo com data e sem valor, esperando o valor da linha de baixo.
+  let esperando: ItemSicoob | null = null;
+  // Valor que veio sozinho, antes da linha com a data.
+  let valorSolto: { v: number; sinal: -1 | 0 | 1 } | null = null;
+  const saldos: Extract<ItemSicoob, { tipo: "saldo" }>[] = [];
   let datasCorrigidas = 0;
+
+  const darValor = (item: ItemSicoob, v: { v: number; sinal: -1 | 0 | 1 }) => {
+    if (item.tipo === "saldo") {
+      item.v = v.sinal < 0 ? -v.v : v.v;
+      return;
+    }
+    const h = semAcento(item.historico);
+    let sinal = v.sinal;
+    if (sinal === 0) sinal = SAIDA_SICOOB.test(h) ? -1 : ENTRADA_SICOOB.test(h) ? 1 : 0;
+    item.linha.valor = arred2(sinal < 0 ? -v.v : v.v);
+    if (sinal === 0) item.linha.sinalIncerto = true;
+    else delete item.linha.sinalIncerto;
+    item.semValor = false;
+  };
+  // Valor solto entre uma linha com data sem valor e o resto dela: é dela.
+  const resolverSolto = () => {
+    if (!valorSolto || !esperando) return;
+    darValor(esperando, valorSolto);
+    alvo = esperando;
+    esperando = null;
+    valorSolto = null;
+  };
+  const darSinal = (item: ItemSicoob, letra: "C" | "D") => {
+    if (item.tipo === "saldo") {
+      if (item.v !== null) item.v = letra === "D" ? -Math.abs(item.v) : Math.abs(item.v);
+      return;
+    }
+    item.linha.valor = letra === "D" ? -Math.abs(item.linha.valor) : Math.abs(item.linha.valor);
+    delete item.linha.sinalIncerto;
+  };
+
   for (const l of linhas) {
     const texto = textoLinha(l);
     const sem = semAcento(texto);
@@ -440,10 +492,18 @@ function lerSicoob(linhas: LinhaPdf[], ocr: boolean): Montagem {
     }
     if (!dentro) continue;
     if (/^resumo\b/.test(sem)) break;
+
+    // Valor sozinho na linha (o número de um valor que quebrou em duas linhas).
+    const solto = lerDinheiro(texto);
+    if (solto) {
+      resolverSolto();
+      valorSolto = solto;
+      continue;
+    }
+
     // OCR às vezes lê "23/06 —", "05/0868": dia/mês no começo, o resto é histórico.
     const md = texto.match(/^(\d{2})\/(\d{2})\d*\s*[—–-]*\s*(.*)$/);
-    const valorFim = texto.match(DINHEIRO_NO_FIM);
-    if (md && valorFim) {
+    if (md) {
       let mes = +md[2];
       const dia = +md[1];
       if (periodo && (mes < periodo.mesIni || mes > periodo.mesFim)) {
@@ -454,38 +514,57 @@ function lerSicoob(linhas: LinhaPdf[], ocr: boolean): Montagem {
       }
       const ano = periodo ? periodo.ano - (mes > periodo.mesFim ? 1 : 0) : new Date().getFullYear();
       const data = iso(ano, mes, dia);
-      const historico = md[3].slice(0, md[3].length - valorFim[0].length).trim();
-      const v = lerDinheiro(valorFim[1])!;
-      const h = semAcento(historico);
+      const valorFim = md[3].match(DINHEIRO_NO_FIM);
+      let historico = (valorFim ? md[3].slice(0, md[3].length - valorFim[0].length) : md[3]).trim();
+      // C/D na mesma linha do histórico, sem o número (o número veio sozinho).
+      let letra: "C" | "D" | null = null;
+      const cd = valorFim ? null : historico.match(/\s([CD])$/);
+      if (cd) {
+        letra = cd[1] as "C" | "D";
+        historico = historico.slice(0, -2).trim();
+      }
+      let v = valorFim ? lerDinheiro(valorFim[1]) : null;
+      if (v) resolverSolto();
+      else if (valorSolto) v = valorSolto;
+      valorSolto = null;
+      // Lançamento anterior que ficou sem valor: não achamos o valor dele.
+      esperando = null;
+
       // OCR junta palavras ("SALDODODIA"): compara sem espaços.
-      const hj = h.replace(/[^a-z]/g, "");
+      const hj = semAcento(historico).replace(/[^a-z]/g, "");
+      let item: ItemSicoob;
       if (/^saldo/.test(hj)) {
-        const valor = v.sinal < 0 ? -v.v : v.v;
-        if (/^saldododia/.test(hj)) saldoDia.push({ data, v: valor });
-        else if (/^saldoanterior/.test(hj)) m.saldoInicial = valor;
+        item = { tipo: "saldo", qual: /^saldododia/.test(hj) ? "dia" : /^saldoanterior/.test(hj) ? "anterior" : "outro", data, v: null };
+        saldos.push(item);
         ultima = undefined;
-        continue;
+      } else {
+        ultima = nova(data, historico, 0);
+        item = { tipo: "lancamento", linha: ultima, historico, semValor: true };
+        m.linhas.push(ultima);
+        if (valorFim) {
+          if (valorDuvidoso(l)) {
+            ultima.conferir = true;
+            duvidosas.add(ultima);
+          }
+          valorLido.set(ultima, valorFim[1]);
+        }
       }
-      let sinal = v.sinal;
-      if (sinal === 0) sinal = SAIDA_SICOOB.test(h) ? -1 : ENTRADA_SICOOB.test(h) ? 1 : 0;
-      ultima = nova(data, historico, sinal < 0 ? -v.v : v.v, sinal === 0 ? { sinalIncerto: true } : {});
-      if (valorDuvidoso(l)) {
-        ultima.conferir = true;
-        duvidosas.add(ultima);
-      }
-      valorLido.set(ultima, valorFim[1]);
-      m.linhas.push(ultima);
+      if (v) darValor(item, v);
+      else esperando = item;
+      if (letra) darSinal(item, letra);
+      alvo = item;
       continue;
     }
-    if (!ultima) continue;
+
+    // Linha sem data depois de um valor solto: o valor era da linha de cima.
+    resolverSolto();
     // C/D que caiu sozinho na linha de baixo.
     if (/^[CD][a-z]?$/i.test(texto) || (ocr && texto.length <= 3 && !/\d/.test(texto))) {
       const letra = texto[0].toUpperCase();
-      if (letra === "D") ultima.valor = -Math.abs(ultima.valor);
-      else if (letra === "C") ultima.valor = Math.abs(ultima.valor);
-      if (letra === "C" || letra === "D") delete ultima.sinalIncerto;
+      if (alvo && (letra === "C" || letra === "D")) darSinal(alvo, letra);
       continue;
     }
+    if (!ultima) continue;
     const doc = texto.match(/^DOC\.?:+\s*(.+)$/i);
     if (doc) {
       if (!/^pix$/i.test(doc[1].trim())) ultima.documento = doc[1].trim();
@@ -494,9 +573,34 @@ function lerSicoob(linhas: LinhaPdf[], ocr: boolean): Montagem {
     if (/^(pagamento|recebimento) pix$/i.test(texto)) continue;
     complementar(ultima, texto);
   }
+  resolverSolto();
+
+  for (const s of saldos) if (s.qual === "anterior" && s.v !== null) m.saldoInicial = s.v;
   // Saldo final: o "saldo do dia" da data mais nova.
-  saldoDia = saldoDia.sort((a, b) => b.data.localeCompare(a.data));
-  m.saldoFinal = saldoDia[0]?.v ?? null;
+  const dias = saldos.filter((s): s is typeof s & { v: number } => s.qual === "dia" && s.v !== null).sort((a, b) => a.data.localeCompare(b.data));
+  m.saldoFinal = dias[dias.length - 1]?.v ?? null;
+
+  const semValor = m.linhas.filter((x) => x.valor === 0);
+  for (const x of semValor) x.conferir = true;
+  if (semValor.length) m.avisos.push(`${semValor.length} lançamento(s) sem valor no PDF: confira as linhas marcadas.`);
+
+  // Confere cada dia: saldo do dia anterior + lançamentos do dia = saldo do dia.
+  if (m.saldoInicial !== null && dias.length) {
+    const diasErrados: string[] = [];
+    let antes = m.saldoInicial;
+    let desde = "";
+    for (const d of dias) {
+      const doDia = m.linhas.filter((x) => x.data > desde && x.data <= d.data);
+      const diferenca = arred2(antes + doDia.reduce((s, x) => s + x.valor, 0) - d.v);
+      if (Math.abs(diferenca) >= 0.01) {
+        for (const x of doDia) x.conferir = true;
+        diasErrados.push(d.data.slice(8, 10) + "/" + d.data.slice(5, 7));
+      } else for (const x of doDia) delete x.sinalIncerto; // o dia fechou: o sentido está certo
+      antes = d.v;
+      desde = d.data;
+    }
+    if (diasErrados.length) m.avisos.push(`O saldo do dia não fecha em ${diasErrados.join(", ")}: confira as linhas marcadas desses dias.`);
+  }
   if (datasCorrigidas) m.avisos.push(`${datasCorrigidas} data(s) lidas fora do período do extrato foram ajustadas para o mês do período: confira.`);
   return m;
 }
