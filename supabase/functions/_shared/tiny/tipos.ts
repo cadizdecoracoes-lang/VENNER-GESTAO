@@ -167,6 +167,10 @@ export type EstadoLeitura = {
   // Notas fiscais: voltas completas pelas criadas desde HISTORICO_DESDE
   // (gravadas direto da listagem, sem ler o detalhe).
   notas?: { offset: number };
+  // Títulos com vencimento perto de hoje, relidos a cada minuto em volta.
+  // sem_fim: o Tiny recusou o filtro dataFinalVencimento.
+  pagar_recentes?: { offset: number; sem_fim?: boolean };
+  receber_recentes?: { offset: number; sem_fim?: boolean };
   // Antigos (até 10/11/2026): listagem do receber por alteração e volta
   // pelos em aberto. Não são mais usados.
   receber_abertos?: { offset: number };

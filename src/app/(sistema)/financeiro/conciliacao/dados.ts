@@ -13,9 +13,11 @@ export type Ligacao = {
   // Conciliadas juntas (várias linhas): o grupo é diferente do id da linha.
   grupo: string;
   efeito: string;
-  contas_pagar: { descricao: string; parcela: string | null; fornecedores: Pessoa } | null;
-  contas_receber: { descricao: string; parcela: string | null; clientes: Pessoa } | null;
+  contas_pagar: ({ descricao: string; parcela: string | null; fornecedores: Pessoa } & SituacaoLigada) | null;
+  contas_receber: ({ descricao: string; parcela: string | null; clientes: Pessoa } & SituacaoLigada) | null;
 };
+// Como o título ligado está agora (o Tiny pode ter mudado depois de conciliar).
+type SituacaoLigada = { situacao: string; tiny_id: number | null; conta_bancaria_id: string | null; contas_bancarias: { nome: string } | null };
 export type LinhaConciliacao = {
   id: string;
   data: string;
@@ -74,7 +76,7 @@ export async function carregarLinhas(conta: string, situacao: string, de: string
   let q = supabase
     .from("extrato_lancamentos")
     .select(
-      "id, data, descricao, documento, valor, saldo, situacao, observacao, importacao_id, extrato_conciliacoes(valor, efeito, grupo, contas_pagar(descricao, parcela, fornecedores(nome, nome_fantasia)), contas_receber(descricao, parcela, clientes(nome, nome_fantasia)))",
+      "id, data, descricao, documento, valor, saldo, situacao, observacao, importacao_id, extrato_conciliacoes(valor, efeito, grupo, contas_pagar(descricao, parcela, situacao, tiny_id, conta_bancaria_id, contas_bancarias(nome), fornecedores(nome, nome_fantasia)), contas_receber(descricao, parcela, situacao, tiny_id, conta_bancaria_id, contas_bancarias(nome), clientes(nome, nome_fantasia)))",
     )
     .eq("conta_bancaria_id", conta)
     .order("data")
@@ -205,20 +207,24 @@ export async function carregarVizinhas(conta: string, de: string, ate: string): 
 }
 
 // Títulos que podem casar com as linhas: em aberto do CNPJ (pelo vencimento)
-// e já baixados nesta conta e ainda sem conciliação (pela data da baixa).
+// e já baixados no CNPJ (pela data da baixa). Os baixados nesta conta e sem
+// conciliação podem ser escolhidos; os baixados em outra conta ou já ligados
+// a outra linha do extrato vêm bloqueados, com o motivo (o que corrigir no
+// Tiny), para a tela mostrar em vez de "nenhum título".
 export async function carregarCandidatos(
   conta: ContaConciliacao,
   de: string,
   ate: string,
   folgaAberto = 10,
-  folgaPago = 3,
+  folgaPago = 10,
 ): Promise<TituloCandidato[]> {
   if (!supabaseConfigurado) return [];
   const supabase = criarClienteNavegador();
   // Pagos pelo Tiny sem a conta da baixa também servem (passam para esta conta ao conciliar).
   const tinySemConta = await contasTinySemBanco(conta.empresa_id);
-  const contas = [conta.id, ...tinySemConta];
-  const folga = tinySemConta.length ? Math.max(folgaPago, folgaAberto) : folgaPago;
+  const contas = new Set([conta.id, ...tinySemConta]);
+  const folga = Math.max(folgaPago, tinySemConta.length ? folgaAberto : 0);
+  const ligacao = "extrato_conciliacoes(extrato_lancamentos(data, descricao, conta_bancaria_id, contas_bancarias(nome)))";
   const [pa, pp, ra, rp] = await Promise.all([
     supabase
       .from("contas_pagar")
@@ -230,8 +236,8 @@ export async function carregarCandidatos(
       .limit(3000),
     supabase
       .from("contas_pagar")
-      .select("id, descricao, parcela, valor_pago, data_pagamento, conta_bancaria_id, fornecedores(nome, nome_fantasia), extrato_conciliacoes(id)")
-      .in("conta_bancaria_id", contas)
+      .select(`id, descricao, parcela, valor_pago, data_pagamento, conta_bancaria_id, contas_bancarias(nome), fornecedores(nome, nome_fantasia), ${ligacao}`)
+      .eq("empresa_id", conta.empresa_id)
       .eq("situacao", "pago")
       .gte("data_pagamento", somarDias(de, -folga))
       .lte("data_pagamento", somarDias(ate, folga))
@@ -246,26 +252,51 @@ export async function carregarCandidatos(
       .limit(3000),
     supabase
       .from("contas_receber")
-      .select("id, descricao, parcela, valor_recebido, data_recebimento, conta_bancaria_id, clientes(nome, nome_fantasia), extrato_conciliacoes(id)")
-      .in("conta_bancaria_id", contas)
+      .select(`id, descricao, parcela, valor_recebido, data_recebimento, conta_bancaria_id, contas_bancarias(nome), clientes(nome, nome_fantasia), ${ligacao}`)
+      .eq("empresa_id", conta.empresa_id)
       .eq("situacao", "pago")
       .gte("data_recebimento", somarDias(de, -folga))
       .lte("data_recebimento", somarDias(ate, folga))
       .limit(3000),
   ]);
-  type Bruto = Record<string, unknown> & { extrato_conciliacoes?: unknown[] };
+  type Ligado = { extrato_lancamentos: { data: string; descricao: string; conta_bancaria_id: string; contas_bancarias: { nome: string } | null } | null };
+  type Bruto = Record<string, unknown> & { extrato_conciliacoes?: Ligado[]; contas_bancarias?: { nome: string } | null };
   const desc = (t: Bruto) => `${t.descricao}${t.parcela ? ` (${t.parcela})` : ""}`;
+  const dataBr = (d: string) => d.split("-").reverse().join("/");
+  // Pago: livre nesta conta; senão, bloqueado com o motivo.
+  const pago = (t: Bruto, tipo: "pagar" | "receber"): TituloCandidato => {
+    const data = (tipo === "pagar" ? t.data_pagamento : t.data_recebimento) as string;
+    const base: TituloCandidato = {
+      id: t.id as string,
+      tipo,
+      descricao: desc(t),
+      pessoa: nomePessoa((tipo === "pagar" ? t.fornecedores : t.clientes) as Pessoa),
+      valor: Number(tipo === "pagar" ? t.valor_pago : t.valor_recebido),
+      data,
+      pago: true,
+    };
+    const outra = t.extrato_conciliacoes?.find((c) => c.extrato_lancamentos)?.extrato_lancamentos;
+    if (outra) {
+      const onde = outra.conta_bancaria_id === conta.id ? "" : ` da conta ${outra.contas_bancarias?.nome ?? "outra"}`;
+      return { ...base, bloqueado: true, aviso: `já conciliado com outra linha${onde}: ${dataBr(outra.data)} ${outra.descricao}` };
+    }
+    if (!contas.has(t.conta_bancaria_id as string)) {
+      const nome = t.contas_bancarias?.nome ?? "outra conta";
+      return {
+        ...base,
+        bloqueado: true,
+        aviso: `baixado no Tiny na conta ${nome} em ${dataBr(data)}, mas o extrato é da conta ${conta.nome}: corrija a conta da baixa no Tiny`,
+      };
+    }
+    return { ...base, semConta: t.conta_bancaria_id !== conta.id };
+  };
   const lista: TituloCandidato[] = [];
   for (const t of (pa.data ?? []) as unknown as Bruto[])
     lista.push({ id: t.id as string, tipo: "pagar", descricao: desc(t), pessoa: nomePessoa(t.fornecedores as Pessoa), valor: Number(t.valor), data: t.vencimento as string, pago: false });
-  for (const t of (pp.data ?? []) as unknown as Bruto[])
-    if (!t.extrato_conciliacoes?.length)
-      lista.push({ id: t.id as string, tipo: "pagar", descricao: desc(t), pessoa: nomePessoa(t.fornecedores as Pessoa), valor: Number(t.valor_pago), data: t.data_pagamento as string, pago: true, semConta: t.conta_bancaria_id !== conta.id });
+  for (const t of (pp.data ?? []) as unknown as Bruto[]) lista.push(pago(t, "pagar"));
   for (const t of (ra.data ?? []) as unknown as Bruto[])
     lista.push({ id: t.id as string, tipo: "receber", descricao: desc(t), pessoa: nomePessoa(t.clientes as Pessoa), valor: Number(t.valor_liquido), data: t.vencimento as string, pago: false });
-  for (const t of (rp.data ?? []) as unknown as Bruto[])
-    if (!t.extrato_conciliacoes?.length)
-      lista.push({ id: t.id as string, tipo: "receber", descricao: desc(t), pessoa: nomePessoa(t.clientes as Pessoa), valor: Number(t.valor_recebido), data: t.data_recebimento as string, pago: true, semConta: t.conta_bancaria_id !== conta.id });
+  for (const t of (rp.data ?? []) as unknown as Bruto[]) lista.push(pago(t, "receber"));
   return lista;
 }
 

@@ -74,6 +74,7 @@ export function PainelResolver({
   const exigeExato = varias || escolhidos.length > 1;
 
   function alternar(id: string) {
+    if (candidatos.find((t) => t.id === id)?.bloqueado) return;
     const n = new Set(marcados);
     if (n.has(id)) n.delete(id);
     else n.add(id);
@@ -168,9 +169,14 @@ export function PainelResolver({
                     </tr>
                   )}
                   {lista.map((t) => (
-                    <tr key={t.id} onClick={() => alternar(t.id)} className={`cursor-pointer hover:bg-fundo ${marcados.has(t.id) ? "bg-primaria-suave/60" : ""}`}>
+                    <tr
+                      key={t.id}
+                      onClick={() => alternar(t.id)}
+                      title={t.bloqueado ? "Não dá para escolher: corrija no Tiny e ele fica disponível sozinho" : undefined}
+                      className={`${t.bloqueado ? "cursor-not-allowed opacity-80" : "cursor-pointer hover:bg-fundo"} ${marcados.has(t.id) ? "bg-primaria-suave/60" : ""}`}
+                    >
                       <td className="w-8 px-3 py-1.5">
-                        <input type="checkbox" readOnly checked={marcados.has(t.id)} aria-label="Escolher" />
+                        <input type="checkbox" readOnly disabled={t.bloqueado} checked={marcados.has(t.id)} aria-label="Escolher" />
                       </td>
                       <td className="whitespace-nowrap px-2 py-1.5 tabular-nums text-texto-suave">
                         {t.pago ? "pago" : "vence"} {formatarData(t.data)}
@@ -180,6 +186,7 @@ export function PainelResolver({
                         {t.descricao}
                         {!doLado(t) && <span className="text-xs text-texto-suave"> · a {t.tipo}, desconta</span>}
                         {varias && !t.pago && <span className="text-xs text-alerta"> · em aberto no Tiny</span>}
+                        {t.aviso && <span className="text-xs text-alerta"> · {t.aviso}</span>}
                       </td>
                       <td
                         className={`whitespace-nowrap px-3 py-1.5 text-right tabular-nums ${doLado(t) ? "" : "text-perigo"} ${Math.abs(t.valor - valor) < 0.01 ? "font-semibold" : ""}`}

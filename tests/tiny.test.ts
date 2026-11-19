@@ -207,6 +207,9 @@ test("leitura: renova o acesso, lista, lê pendentes e grava um lote só", async
   assert.ok(chamadas.some((c) => c.startsWith("/contas-receber?dataInicialVencimento=2026-01-01")));
   assert.ok(!chamadas.some((c) => c.includes("dataAtualizacao") && c.startsWith("/contas-receber")), "receber sem filtro de alteração");
   assert.ok(!chamadas.some((c) => c.startsWith("/contas-pagar")), "contas a pagar desligado");
+  // Títulos recentes: uma página por leitura, vencimento de 45 dias atrás a 15 à frente.
+  assert.ok(chamadas.some((c) => c.startsWith("/contas-receber?dataInicialVencimento=2026-09-08&dataFinalVencimento=2026-11-07")));
+  assert.deepEqual(lote.estado.receber_recentes, { offset: 0 });
   // Ordens de compra: volta completa pelas criadas no ano, detalhe da pendente.
   assert.ok(chamadas.some((c) => c.startsWith("/ordem-compra?dataInicial=2026-01-01")));
   assert.deepEqual(lote.listados.filter((l) => l.tipo === "compra").map((l) => l.id), [700, 701]);

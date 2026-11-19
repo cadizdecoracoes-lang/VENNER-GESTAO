@@ -23,7 +23,11 @@ type Pagina = { itens?: unknown[]; paginacao?: { total?: number } };
 
 const POR_PAGINA = 100;
 // Páginas de listagem por leitura (o resto do orçamento vai para os detalhes).
-const PAGINAS_POR_LEITURA = 10;
+const PAGINAS_POR_LEITURA = 12;
+// Janela dos títulos recentes, relida a cada minuto: é onde caem as baixas
+// que a conciliação confere (vencimento de 45 dias atrás a 15 dias à frente).
+const RECENTES_ANTES = 45;
+const RECENTES_DEPOIS = 15;
 
 // Horário de Brasília no formato dos filtros do Tiny ("2026-10-23 09:00:00").
 export function horarioTiny(agora: Date, minutos = 0): string {
@@ -105,6 +109,11 @@ export async function lerTiny(
         erros.push(`${rotulo}: ${e instanceof Error ? e.message : String(e)}`);
       }
     };
+    // Títulos recentes primeiro (uma página de cada por leitura): baixa,
+    // estorno ou exclusão feitos no Tiny chegam em poucos minutos, sem
+    // esperar a volta completa pelo ano.
+    if (conta.ler_pagar) await listar("Contas a pagar recentes", () => varrerRecentes(tiny, lote, "pagar", estado, agora));
+    await listar("Contas a receber recentes", () => varrerRecentes(tiny, lote, "receber", estado, agora));
     // Contas a receber: o Tiny não filtra por data de alteração (o filtro
     // era ignorado), então dá voltas completas como nas contas a pagar.
     await listar("Contas a receber", () => varrerTitulos(tiny, lote, "receber", estado, agora, 2));
@@ -215,6 +224,37 @@ async function varrerTitulos(api: ApiTiny, lote: Lote, tipo: "receber" | "pagar"
     }
   }
   return usadas;
+}
+
+// Uma página por leitura dos títulos com vencimento perto de hoje, em volta
+// (a próxima leitura continua da página seguinte). A assinatura de cada um
+// diz se mudou; o que mudou vai para a fila de detalhes.
+async function varrerRecentes(api: ApiTiny, lote: Lote, tipo: "receber" | "pagar", estado: EstadoLeitura, agora: Date): Promise<number> {
+  const chave = tipo === "pagar" ? "pagar_recentes" : "receber_recentes";
+  const c = (estado[chave] ??= { offset: 0 });
+  const dia = (d: number) => horarioTiny(agora, d * 24 * 60).slice(0, 10);
+  let r: Pagina | null;
+  try {
+    r = await api.ler<Pagina>(tipo === "pagar" ? "/contas-pagar" : "/contas-receber", {
+      dataInicialVencimento: dia(-RECENTES_ANTES),
+      dataFinalVencimento: c.sem_fim ? undefined : dia(RECENTES_DEPOIS),
+      orderBy: "asc",
+      limit: POR_PAGINA,
+      offset: c.offset,
+    });
+  } catch (e) {
+    // Se o Tiny recusar o filtro de fim do vencimento, segue só com o início.
+    if (e instanceof SemOrcamento || c.sem_fim || !/respondeu 400/.test(String(e))) throw e;
+    c.sem_fim = true;
+    return 1;
+  }
+  const itens = r?.itens ?? [];
+  for (const i of itens) {
+    const id = Number((i as { id?: unknown }).id);
+    if (id) lote.listados.push({ tipo, id, assinatura: assinatura(tipo, i) });
+  }
+  c.offset = itens.length < POR_PAGINA ? 0 : c.offset + POR_PAGINA;
+  return 1;
 }
 
 // Ordens de compra: sem filtro por alteração na API, então percorre as
