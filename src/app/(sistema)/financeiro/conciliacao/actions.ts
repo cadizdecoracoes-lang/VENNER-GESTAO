@@ -8,19 +8,23 @@ import { carregarCandidatos, carregarContas, carregarLinhas } from "./dados";
 const CAMINHO = "/financeiro/conciliacao";
 const ORIGENS = ["ofx", "planilha", "pdf"] as const;
 
-// Grava as linhas lidas do arquivo (a tela já mostrou e a pessoa conferiu).
-export async function importarExtrato(_: Estado, form: FormData): Promise<Estado> {
-  if (!supabaseConfigurado) return SEM_BANCO;
-  let dados: { conta: string; origem: (typeof ORIGENS)[number]; arquivo: string; saldoFinal: number | null; linhas: LinhaExtrato[] };
-  try {
-    dados = JSON.parse(String(form.get("dados") ?? ""));
-  } catch {
-    return { erro: "Leia o arquivo do extrato antes de importar." };
-  }
+export type ExtratoParaGravar = {
+  conta: string;
+  origem: (typeof ORIGENS)[number];
+  arquivo: string;
+  saldoFinal: number | null;
+  // "banco|agência|conta" lido do arquivo: a tela reconhece a conta da próxima vez.
+  contaNoArquivo: string | null;
+  linhas: LinhaExtrato[];
+};
+
+// Grava um arquivo lido (a tela já mostrou e a pessoa conferiu). Lançamento
+// que já está no sistema não entra de novo (regra do banco, importar_extrato).
+export async function gravarExtrato(dados: ExtratoParaGravar): Promise<{ importadas: number; repetidas: number } | { erro: string }> {
+  if (!supabaseConfigurado) return { erro: SEM_BANCO.erro ?? "Sem banco de dados." };
   if (!dados.conta) return { erro: "Escolha a conta bancária do extrato." };
   if (!ORIGENS.includes(dados.origem)) return { erro: "Formato de arquivo não reconhecido." };
   if (!dados.linhas?.length) return { erro: "O arquivo não tem lançamentos para importar." };
-
   const supabase = criarClienteNavegador();
   const { data, error } = await supabase.rpc("importar_extrato", {
     conta_bancaria: dados.conta,
@@ -28,13 +32,27 @@ export async function importarExtrato(_: Estado, form: FormData): Promise<Estado
     arquivo: dados.arquivo,
     linhas: dados.linhas.map(({ data, descricao, documento, valor, saldo, id_banco }) => ({ data, descricao, documento, valor, saldo, id_banco })),
     saldo_final: dados.saldoFinal,
+    conta_no_arquivo: dados.contaNoArquivo,
   });
   if (error) return { erro: mensagemErro(error) };
   const r = data as { importadas: number; repetidas: number };
-  // O que casa sem dúvida com um título já sai conciliado: na lista ficam só as divergências.
-  const auto = await conciliarCertas(dados.conta);
+  return { importadas: r.importadas, repetidas: r.repetidas };
+}
+
+// Depois de gravar todos os arquivos: o que casa sem dúvida com um título já
+// sai conciliado (na lista ficam só as divergências) e vai para a conciliação.
+export async function terminarImportacao(contas: string[], arquivos: number, importadas: number, repetidas: number) {
+  let auto = 0;
+  for (const c of contas) auto += await conciliarCertas(c);
   revalidatePath(CAMINHO);
-  redirect(`${CAMINHO}?conta=${dados.conta}&importadas=${r.importadas}&repetidas=${r.repetidas}&automaticas=${auto}`);
+  const busca = new URLSearchParams({
+    conta: contas[0] ?? "",
+    importadas: String(importadas),
+    repetidas: String(repetidas),
+    automaticas: String(auto),
+    ...(arquivos > 1 ? { arquivos: String(arquivos), contas: String(contas.length) } : {}),
+  });
+  redirect(`${CAMINHO}?${busca}`);
 }
 
 async function chamar(funcao: string, args: Record<string, unknown>): Promise<Estado> {
