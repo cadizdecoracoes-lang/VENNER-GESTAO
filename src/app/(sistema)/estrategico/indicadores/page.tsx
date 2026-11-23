@@ -32,9 +32,11 @@ import {
   type LinhaMes,
   type TipoTitulo,
 } from "@/lib/indicadores";
+import { descreverOrigem } from "@/lib/indicadores-origem";
 import { supabaseConfigurado } from "@/lib/supabase/config";
 import { criarClienteNavegador } from "@/lib/supabase/client";
-import { Barra, EtiquetaGravidade, formatar, SemDados, Secao, TabelaMeses } from "./pecas";
+import { carregarLancamentos, PainelOrigem } from "./origem";
+import { Barra, EtiquetaGravidade, formatar, LINK_ORIGEM, SemDados, Secao, TabelaMeses } from "./pecas";
 import { SimuladorFolha } from "./simulador";
 
 const TELA = "estrategico.indicadores";
@@ -79,7 +81,9 @@ const AJUDA = (
   </>
 );
 
-type Filtros = { aba?: string; periodo?: string; folha?: string };
+// origem = número aberto no painel "Origem do valor"; mes = mês (AAAA-MM) ou
+// "media"; sub = linha da composição escolhida (ex.: uma categoria).
+type Filtros = { aba?: string; periodo?: string; folha?: string; origem?: string; mes?: string; sub?: string };
 
 function lerPeriodo(periodo: string | undefined, hoje: string) {
   const mesAtual = hoje.slice(0, 8) + "01";
@@ -155,7 +159,14 @@ async function PaginaIndicadores({ searchParams }: { searchParams: Promise<Filtr
   };
   const textoPeriodo = `${formatarData(periodo.de)} a ${formatarData(periodo.ate)}`;
   const daEmpresa = selecionada ? `só ${selecionada.nome}` : "todas as empresas que você vê";
-  const ctx = { dados, linhas, mesesMedia, pe, prazos, folha, beneficios, ajuda, classes, categorias, folhaAlvo, textoPeriodo, daEmpresa, periodo };
+  // Abre a origem de um número (painel no topo da aba).
+  const ver = (origem: string, mes?: string) => link({ origem, mes });
+  const ctx = { dados, linhas, mesesMedia, pe, prazos, folha, beneficios, ajuda, classes, categorias, folhaAlvo, textoPeriodo, daEmpresa, periodo, ver };
+
+  const origem = filtros.origem
+    ? descreverOrigem(filtros.origem, { dados, linhas, mesesMedia, classes, categorias, folha, beneficios, ajuda, pe, folhaAlvo }, filtros.mes, filtros.sub)
+    : null;
+  const lancamentos = origem ? await carregarLancamentos(origem, periodo.de, periodo.ate, selecionada?.id ?? null) : null;
 
   return (
     <div className="space-y-3">
@@ -188,6 +199,16 @@ async function PaginaIndicadores({ searchParams }: { searchParams: Promise<Filtr
         ))}
       </nav>
 
+      {origem && (
+        <PainelOrigem
+          origem={origem}
+          lancamentos={lancamentos}
+          linkOrigem={(chave) => link({ origem: chave, mes: chave.startsWith("calc:") ? undefined : (filtros.mes ?? "media") })}
+          linkSub={(sub) => link({ origem: filtros.origem, mes: filtros.mes, sub })}
+          fechar={link({})}
+        />
+      )}
+
       {aba === "diagnostico" && <Diagnostico {...ctx} diagnostico={diagnostico} problema={problema} link={link} />}
       {aba === "equilibrio" && <Equilibrio {...ctx} />}
       {aba === "financeiro" && <Financeiro {...ctx} />}
@@ -217,6 +238,7 @@ type Ctx = {
   textoPeriodo: string;
   daEmpresa: string;
   periodo: { id: string; de: string; ate: string };
+  ver: (origem: string, mes?: string) => string;
 };
 
 const m$ = (v: number | null | undefined) => formatar(v ?? null, "moeda");
@@ -253,14 +275,14 @@ function Diagnostico(
           rotulo="Receita média/mês"
           valor={m$(pe.receita)}
           detalhe={pe.baseReceita === "notas" ? "pelas NFs" : undefined}
-          href={c.link({ aba: "financeiro" })}
+          href={c.ver("receita", "media")}
           fonte={`Contas a receber (categorias de receita) pelo vencimento, média de ${pe.meses} mês(es) fechado(s) · ${c.daEmpresa}.`}
         />
         <Indicador
           rotulo="Resultado médio/mês"
           valor={m$(mediaDe(c, (l) => l.resultado))}
           cor={(mediaDe(c, (l) => l.resultado) ?? 0) < 0 ? "text-perigo" : "text-sucesso"}
-          href={c.link({ aba: "financeiro" })}
+          href={c.ver("calc:resultado", "media")}
           fonte="Receita − custos variáveis − despesas fixas (sem investimentos e transferências), pelo vencimento."
         />
         <Indicador
@@ -268,7 +290,7 @@ function Diagnostico(
           valor={pe.pontoAlvo !== null ? m$(pe.pontoAlvo) : "—"}
           detalhe={pe.falta ? `faltam ${m$(pe.falta)}/mês` : pe.pontoAlvo !== null ? "receita atual já cobre" : "sem margem"}
           cor={pe.falta ? "text-perigo" : ""}
-          href={c.link({ aba: "equilibrio" })}
+          href={c.ver("calc:ponto_alvo", "media")}
           fonte="Despesas fixas com a folha da meta ÷ margem de contribuição."
         />
         <Indicador
@@ -276,14 +298,14 @@ function Diagnostico(
           valor={pe.saidaAtual && entrada ? formatar(pe.saidaAtual / entrada, "pct") : "—"}
           detalhe={`${m$(pe.saidaAtual)} de ${m$(entrada)}/mês`}
           cor={pe.saidaAtual && entrada && pe.saidaAtual / entrada < 0.95 ? "text-perigo" : ""}
-          href={c.link({ aba: "producao" })}
+          href={c.ver("pedidos:saida", "media")}
           fonte="Pedidos que saíram da fábrica (faturados) ÷ pedidos que entraram, média mensal."
         />
         <Indicador
           rotulo="Fila na fábrica"
           valor={m$(somaQtd(naFabrica, (e) => e.valor))}
           detalhe={`${somaQtd(naFabrica, (e) => e.qtd)} pedidos`}
-          href="/vendas/pedidos"
+          href={c.ver("etapa:fila")}
           fonte="Pedidos aprovados no Tiny que ainda não foram faturados (fase produção), hoje."
         />
       </div>
@@ -319,21 +341,42 @@ function Diagnostico(
 // ---------------------------------------------------------------------------
 function Equilibrio(c: Ctx) {
   const { pe } = c;
-  const linha = (rotulo: string, atual: React.ReactNode, alvo: React.ReactNode, dica?: string, total?: boolean) => (
-    <tr className={total ? "font-semibold" : ""}>
-      <Celula>
-        <span title={dica}>{rotulo}</span>
-      </Celula>
-      <Celula className="text-right tabular-nums">{atual}</Celula>
-      <Celula className="text-right tabular-nums">{alvo}</Celula>
-    </tr>
-  );
+  // Cada valor abre a origem (composição e lançamentos, ou a conta).
+  const linha = (
+    rotulo: string,
+    atual: React.ReactNode,
+    alvo: React.ReactNode,
+    dica?: string,
+    total?: boolean,
+    origem?: string | [string, string | undefined],
+  ) => {
+    const [oAtual, oAlvo] = Array.isArray(origem) ? origem : [origem, origem];
+    const valor = (v: React.ReactNode, o?: string) =>
+      o ? (
+        <Link href={c.ver(o, "media")} className={LINK_ORIGEM} title="Ver a origem">
+          {v}
+        </Link>
+      ) : (
+        v
+      );
+    return (
+      <tr className={total ? "font-semibold" : ""}>
+        <Celula>
+          <span title={dica}>{rotulo}</span>
+        </Celula>
+        <Celula className="text-right tabular-nums">{valor(atual, oAtual)}</Celula>
+        <Celula className="text-right tabular-nums">{valor(alvo, oAlvo)}</Celula>
+      </tr>
+    );
+  };
+  const folhaOrigem = pe.origemFolha === "holerites" ? "folha" : "classe:folha";
+  const receitaOrigem = pe.baseReceita === "notas" ? "notas:S" : "receita";
   const pct = (v: number | null) => formatar(v, "pct");
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <SimuladorFolha valor={c.folhaAlvo} />
-        <span className="text-xs text-texto-suave">Média de {pe.meses} mês(es) fechado(s) · {c.daEmpresa}</span>
+        <span className="text-xs text-texto-suave">Média de {pe.meses} mês(es) fechado(s) · {c.daEmpresa} · clique num valor para ver a origem</span>
       </div>
       {pe.receita === 0 && <SemDados>Sem receitas no período: o ponto de equilíbrio precisa de contas a receber ou notas de saída.</SemDados>}
       {pe.origemFolha !== "holerites" && (
@@ -343,29 +386,35 @@ function Equilibrio(c: Ctx) {
         </SemDados>
       )}
       <Tabela colunas={["Por mês", "Hoje", `Com folha de ${m$(c.folhaAlvo)}`]}>
-        {linha("Receita média", m$(pe.receita), m$(pe.receita), pe.baseReceita === "notas" ? "Pelas notas de saída do Tiny." : "Contas a receber pelo vencimento.")}
-        {linha("(−) Custos variáveis", m$(pe.variaveis), m$(pe.variaveis), "Impostos sobre venda, matéria-prima e embalagens, comissões e fretes.")}
-        {linha("Margem de contribuição", pct(pe.margem), pct(pe.margem), "(Receita − variáveis) ÷ receita: quanto sobra de cada R$ 1 vendido para pagar os fixos.", true)}
-        {linha("Despesas fixas sem folha", m$(pe.fixasSemFolha), m$(pe.fixasSemFolha), "Aluguel, energia, administrativo, serviços, juros e tarifas.")}
-        {linha("Folha", m$(pe.folhaAtual), m$(pe.folhaAlvo), pe.origemFolha === "holerites" ? "Holerites (proventos + FGTS)." : "Contas a pagar de salários e encargos.")}
-        {linha("Total de fixos", m$(pe.fixasSemFolha + pe.folhaAtual), m$(pe.fixasSemFolha + pe.folhaAlvo), undefined, true)}
+        {linha("Receita média", m$(pe.receita), m$(pe.receita), pe.baseReceita === "notas" ? "Pelas notas de saída do Tiny." : "Contas a receber pelo vencimento.", false, receitaOrigem)}
+        {linha("(−) Custos variáveis", m$(pe.variaveis), m$(pe.variaveis), "Impostos sobre venda, matéria-prima e embalagens, comissões e fretes.", false, "grupo:variaveis")}
+        {linha("Margem de contribuição", pct(pe.margem), pct(pe.margem), "(Receita − variáveis) ÷ receita: quanto sobra de cada R$ 1 vendido para pagar os fixos.", true, "calc:margem")}
+        {linha("Despesas fixas sem folha", m$(pe.fixasSemFolha), m$(pe.fixasSemFolha), "Aluguel, energia, administrativo, serviços, juros e tarifas.", false, "grupo:fixas_sem_folha")}
+        {linha("Folha", m$(pe.folhaAtual), m$(pe.folhaAlvo), pe.origemFolha === "holerites" ? "Holerites + VT + auxílio + ajuda de custo." : "Contas a pagar de salários e encargos.", false, [folhaOrigem, undefined])}
+        {linha("Total de fixos", m$(pe.fixasSemFolha + pe.folhaAtual), m$(pe.fixasSemFolha + pe.folhaAlvo), undefined, true, ["calc:fixos", "calc:fixos_alvo"])}
         {linha(
           "Ponto de equilíbrio (faturamento mínimo)",
           pe.pontoAtual !== null ? m$(pe.pontoAtual) : "sem margem",
           pe.pontoAlvo !== null ? m$(pe.pontoAlvo) : "sem margem",
           "Fixos ÷ margem de contribuição.",
           true,
+          ["calc:ponto", "calc:ponto_alvo"],
         )}
         {linha(
           "Falta faturar por mês",
           pe.pontoAtual !== null ? m$(Math.max(0, pe.pontoAtual - pe.receita)) : "—",
           pe.falta !== null ? m$(pe.falta) : "—",
+          undefined,
+          false,
+          ["calc:falta", "calc:falta_alvo"],
         )}
         {linha(
           "Pedidos por mês necessários",
           pe.pontoAtual !== null && pe.ticketMedio ? formatar(pe.pontoAtual / pe.ticketMedio, "numero") : "—",
           pe.pedidosNecessarios !== null ? formatar(pe.pedidosNecessarios, "numero") : "—",
           `Pelo pedido médio do período (${m$(pe.ticketMedio)}).`,
+          false,
+          ["calc:pedidos", "calc:pedidos_alvo"],
         )}
         {linha(
           "Produção necessária × saída atual",
@@ -373,6 +422,7 @@ function Equilibrio(c: Ctx) {
           pe.pontoAlvo !== null && pe.saidaAtual ? pct(pe.pontoAlvo / pe.saidaAtual) : "—",
           `A fábrica entrega hoje ${m$(pe.saidaAtual)} por mês. Acima de 100% = precisa produzir mais do que produz.`,
           true,
+          ["calc:producao", "calc:producao_alvo"],
         )}
       </Tabela>
       <Fonte>
@@ -395,31 +445,30 @@ function Financeiro(c: Ctx) {
     const k = c.classes.get(cat.id) ?? "fixa";
     porClasse.set(k, [...(porClasse.get(k) ?? []), cat]);
   }
-  const pagar = (m: LinhaMes) => `/financeiro/pagar?de=${m.mes}-01&ate=${ultimoDiaMes(m.mes + "-01")}&por=vencimento&situacao=`;
-  const receber = (m: LinhaMes) => `/financeiro/receber?de=${m.mes}-01&ate=${ultimoDiaMes(m.mes + "-01")}&por=vencimento&situacao=`;
   return (
     <div className="space-y-3">
       <Secao titulo="Despesas + custos × receita (pelo vencimento)">
         <TabelaMeses
           meses={c.linhas}
           mesesMedia={c.mesesMedia}
+          ver={c.ver}
           linhas={[
-            { rotulo: "Receita", valor: (l) => l.receita, estilo: "total", href: receber },
-            { rotulo: "(−) Impostos e deduções", valor: cl("deducao"), estilo: "sub" },
-            { rotulo: "(−) Matéria-prima e embalagens", valor: cl("materia_prima"), estilo: "sub" },
-            { rotulo: "(−) Comissões e fretes", valor: cl("variavel"), estilo: "sub" },
+            { rotulo: "Receita", valor: (l) => l.receita, estilo: "total", origem: "receita" },
+            { rotulo: "(−) Impostos e deduções", valor: cl("deducao"), estilo: "sub", origem: "classe:deducao" },
+            { rotulo: "(−) Matéria-prima e embalagens", valor: cl("materia_prima"), estilo: "sub", origem: "classe:materia_prima" },
+            { rotulo: "(−) Comissões e fretes", valor: cl("variavel"), estilo: "sub", origem: "classe:variavel" },
             { rotulo: "= Margem de contribuição", valor: (l) => l.receita - l.variaveis, estilo: "total", negativoRuim: true },
             { rotulo: "Margem %", valor: (l) => (l.receita ? (l.receita - l.variaveis) / l.receita : null), formato: "pct", estilo: "sub" },
-            { rotulo: "(−) Folha", valor: cl("folha"), estilo: "sub", dica: "Salários, encargos e benefícios lançados no contas a pagar." },
-            { rotulo: "(−) Despesas fixas", valor: cl("fixa"), estilo: "sub", dica: "Inclui contas a pagar sem categoria." },
-            { rotulo: "(−) Juros e tarifas", valor: cl("financeiro"), estilo: "sub" },
+            { rotulo: "(−) Folha", valor: cl("folha"), estilo: "sub", origem: "classe:folha", dica: "Salários, encargos e benefícios lançados no contas a pagar." },
+            { rotulo: "(−) Despesas fixas", valor: cl("fixa"), estilo: "sub", origem: "classe:fixa", dica: "Inclui contas a pagar sem categoria." },
+            { rotulo: "(−) Juros e tarifas", valor: cl("financeiro"), estilo: "sub", origem: "classe:financeiro" },
             { rotulo: "= Resultado", valor: (l) => l.resultado, estilo: "total", negativoRuim: true },
             { rotulo: "Despesas + custos ÷ receita", valor: (l) => (l.receita ? (l.variaveis + l.fixas) / l.receita : null), formato: "pct" },
-            { rotulo: "Investimentos (fora do resultado)", valor: cl("investimento"), estilo: "sub" },
-            { rotulo: "Total a pagar", valor: (l) => l.variaveis + l.fixas + l.porClasse.investimento, estilo: "sub", href: pagar },
+            { rotulo: "Investimentos (fora do resultado)", valor: cl("investimento"), estilo: "sub", origem: "classe:investimento" },
+            { rotulo: "Total a pagar", valor: (l) => l.variaveis + l.fixas + l.porClasse.investimento, estilo: "sub", origem: "grupo:total_pagar" },
             "separador",
-            { rotulo: "Recebido (caixa)", valor: (l) => l.recebido },
-            { rotulo: "Pago (caixa)", valor: (l) => l.pago },
+            { rotulo: "Recebido (caixa)", valor: (l) => l.recebido, origem: "caixa:recebido" },
+            { rotulo: "Pago (caixa)", valor: (l) => l.pago, origem: "caixa:pago" },
             { rotulo: "Saldo do caixa no mês", valor: (l) => l.recebido - l.pago, estilo: "total", negativoRuim: true },
           ]}
         />
@@ -436,10 +485,16 @@ function Financeiro(c: Ctx) {
               <tr key={f.faixa}>
                 <Celula className={f.vencido ? "text-perigo" : ""}>{f.rotulo}</Celula>
                 <Celula className="text-right tabular-nums">
-                  {m$(r)} <span className="text-xs text-texto-suave">{v("receber")?.qtd ?? 0}</span>
+                  <Link href={c.ver(`aberto:receber:${f.faixa}`)} className={LINK_ORIGEM}>
+                    {m$(r)}
+                  </Link>{" "}
+                  <span className="text-xs text-texto-suave">{v("receber")?.qtd ?? 0}</span>
                 </Celula>
                 <Celula className="text-right tabular-nums">
-                  {m$(p)} <span className="text-xs text-texto-suave">{v("pagar")?.qtd ?? 0}</span>
+                  <Link href={c.ver(`aberto:pagar:${f.faixa}`)} className={LINK_ORIGEM}>
+                    {m$(p)}
+                  </Link>{" "}
+                  <span className="text-xs text-texto-suave">{v("pagar")?.qtd ?? 0}</span>
                 </Celula>
                 <Celula className={`text-right tabular-nums ${r - p < 0 ? "text-perigo" : ""}`}>{m$(r - p)}</Celula>
               </tr>
@@ -477,13 +532,14 @@ function Vendas(c: Ctx) {
       <TabelaMeses
         meses={c.linhas}
         mesesMedia={c.mesesMedia}
+        ver={c.ver}
         linhas={[
-          { rotulo: "Pedidos novos (R$)", valor: (l) => l.entradaPedidos, estilo: "total" },
-          { rotulo: "Pedidos novos (quantidade)", valor: (l) => l.entradaPedidosQtd, formato: "numero", estilo: "sub" },
+          { rotulo: "Pedidos novos (R$)", valor: (l) => l.entradaPedidos, estilo: "total", origem: "pedidos:entrada" },
+          { rotulo: "Pedidos novos (quantidade)", valor: (l) => l.entradaPedidosQtd, formato: "numero", estilo: "sub", origem: "pedidos:entrada" },
           { rotulo: "Pedido médio", valor: (l) => (l.entradaPedidosQtd ? l.entradaPedidos / l.entradaPedidosQtd : null), estilo: "sub" },
-          { rotulo: "Faturado (NF de saída do Tiny)", valor: (l) => l.faturado },
-          { rotulo: "Receita no contas a receber", valor: (l) => l.receita },
-          { rotulo: "Recebido (caixa)", valor: (l) => l.recebido },
+          { rotulo: "Faturado (NF de saída do Tiny)", valor: (l) => l.faturado, origem: "notas:S" },
+          { rotulo: "Receita no contas a receber", valor: (l) => l.receita, origem: "receita" },
+          { rotulo: "Recebido (caixa)", valor: (l) => l.recebido, origem: "caixa:recebido" },
           {
             rotulo: "Crescimento dos pedidos sobre o mês anterior",
             valor: (l) => {
@@ -506,7 +562,11 @@ function Vendas(c: Ctx) {
                 <tr key={x.canal}>
                   <Celula>{x.nome}</Celula>
                   <Celula className="text-right tabular-nums">{formatar(x.pedidos, "numero")}</Celula>
-                  <Celula className="text-right tabular-nums">{m$(x.vendido)}</Celula>
+                  <Celula className="text-right tabular-nums">
+                    <Link href={c.ver(`canal:${x.canal}`)} className={LINK_ORIGEM}>
+                      {m$(x.vendido)}
+                    </Link>
+                  </Celula>
                   <Celula className="text-right tabular-nums">{m$(x.ticket)}</Celula>
                   <Celula className="text-right tabular-nums">{total ? formatar(x.vendido / total, "pct") : "—"}</Celula>
                 </tr>
@@ -545,7 +605,11 @@ function Producao(c: Ctx) {
                 <span className="text-xs text-texto-suave">{e.fase === "negociacao" ? "negociação" : e.fase === "producao" ? "fábrica" : "expedição"}</span>
               </Celula>
               <Celula className="text-right tabular-nums">{e.qtd}</Celula>
-              <Celula className="text-right tabular-nums">{m$(e.valor)}</Celula>
+              <Celula className="text-right tabular-nums">
+                <Link href={c.ver(`etapa:${e.etapa_id}`)} className={LINK_ORIGEM}>
+                  {m$(e.valor)}
+                </Link>
+              </Celula>
               <Celula>
                 <Barra fracao={Number(e.valor) / maior} cor={e.fase === "producao" ? "bg-alerta" : "bg-primaria"} />
               </Celula>
@@ -553,7 +617,15 @@ function Producao(c: Ctx) {
               <Celula className="text-right tabular-nums">{formatar(e.idade_media, "dias")}</Celula>
               <Celula className="text-right tabular-nums">{formatar(e.idade_maxima, "dias")}</Celula>
               <Celula className={`text-right tabular-nums ${e.atrasados ? "text-perigo" : ""}`}>{e.atrasados}</Celula>
-              <Celula className="text-right tabular-nums">{m$(e.valor_atrasado)}</Celula>
+              <Celula className="text-right tabular-nums">
+                {e.atrasados ? (
+                  <Link href={c.ver(`etapa:${e.etapa_id}:atrasados`)} className={LINK_ORIGEM}>
+                    {m$(e.valor_atrasado)}
+                  </Link>
+                ) : (
+                  m$(e.valor_atrasado)
+                )}
+              </Celula>
             </tr>
           ))}
         </Tabela>
@@ -562,10 +634,11 @@ function Producao(c: Ctx) {
         <TabelaMeses
           meses={c.linhas}
           mesesMedia={c.mesesMedia}
+          ver={c.ver}
           linhas={[
-            { rotulo: "Entraram (pedidos novos)", valor: (l) => l.entradaPedidos },
-            { rotulo: "Saíram da fábrica (faturados)", valor: (l) => l.saidaPedidos, estilo: "total" },
-            { rotulo: "Saíram (quantidade)", valor: (l) => l.saidaPedidosQtd, formato: "numero", estilo: "sub" },
+            { rotulo: "Entraram (pedidos novos)", valor: (l) => l.entradaPedidos, origem: "pedidos:entrada" },
+            { rotulo: "Saíram da fábrica (faturados)", valor: (l) => l.saidaPedidos, estilo: "total", origem: "pedidos:saida" },
+            { rotulo: "Saíram (quantidade)", valor: (l) => l.saidaPedidosQtd, formato: "numero", estilo: "sub", origem: "pedidos:saida" },
             { rotulo: "Saída ÷ entrada", valor: (l) => (l.entradaPedidos ? l.saidaPedidos / l.entradaPedidos : null), formato: "pct" },
             { rotulo: "Fila acumulada no período", valor: (l) => (fila += l.entradaPedidos - l.saidaPedidos), negativoRuim: false, dica: "Entradas − saídas desde o início do período." },
             {
@@ -577,7 +650,7 @@ function Producao(c: Ctx) {
               },
               formato: "dias",
             },
-            { rotulo: "NF de saída do Tiny", valor: (l) => l.faturado, estilo: "sub" },
+            { rotulo: "NF de saída do Tiny", valor: (l) => l.faturado, estilo: "sub", origem: "notas:S" },
           ]}
         />
       </Secao>
@@ -598,11 +671,12 @@ function Compras(c: Ctx) {
       <TabelaMeses
         meses={c.linhas}
         mesesMedia={c.mesesMedia}
+        ver={c.ver}
         linhas={[
-          { rotulo: "Ordens de compra (Tiny)", valor: (l) => l.comprasPedidos },
-          { rotulo: "NF de entrada (Tiny)", valor: (l) => l.comprasNf },
-          { rotulo: "Matéria-prima no contas a pagar", valor: (l) => l.porClasse.materia_prima },
-          { rotulo: "Receita", valor: (l) => l.receita, estilo: "total" },
+          { rotulo: "Ordens de compra (Tiny)", valor: (l) => l.comprasPedidos, origem: "compras" },
+          { rotulo: "NF de entrada (Tiny)", valor: (l) => l.comprasNf, origem: "notas:E" },
+          { rotulo: "Matéria-prima no contas a pagar", valor: (l) => l.porClasse.materia_prima, origem: "classe:materia_prima" },
+          { rotulo: "Receita", valor: (l) => l.receita, estilo: "total", origem: "receita" },
           { rotulo: "Compras ÷ receita", valor: (l) => (l.receita ? Math.max(l.comprasPedidos, l.comprasNf, l.porClasse.materia_prima) / l.receita : null), formato: "pct", estilo: "total", dica: "Maior entre ordens de compra, NF de entrada e matéria-prima no contas a pagar." },
           { rotulo: "Compras ÷ saída da fábrica", valor: (l) => (l.saidaPedidos ? Math.max(l.comprasPedidos, l.comprasNf, l.porClasse.materia_prima) / l.saidaPedidos : null), formato: "pct" },
         ]}
@@ -663,19 +737,20 @@ function Folha(c: Ctx) {
       <TabelaMeses
         meses={c.linhas}
         mesesMedia={c.mesesMedia}
+        ver={c.ver}
         linhas={[
-          { rotulo: "Holerites (proventos + FGTS)", valor: (l) => l.folhaHolerite, estilo: "sub" },
-          { rotulo: "Vale-transporte (fora do holerite)", valor: (l) => l.vt, estilo: "sub", href: (l) => `/rh/funcionarios/beneficios?mes=${l.mes}` },
-          { rotulo: "Auxílio-alimentação", valor: (l) => l.va, estilo: "sub", href: (l) => `/rh/funcionarios/beneficios?mes=${l.mes}` },
-          { rotulo: "Ajuda de custo (contas a pagar)", valor: (l) => l.ajudaCusto || null, estilo: "sub" },
-          { rotulo: "= Custo total da folha", valor: custo, estilo: "total", dica: "Holerites + VT + auxílio + ajuda de custo. Sem holerite no mês: a folha lançada no contas a pagar." },
+          { rotulo: "Holerites (proventos + FGTS)", valor: (l) => l.folhaHolerite, estilo: "sub", origem: "folha::holerites" },
+          { rotulo: "Vale-transporte (fora do holerite)", valor: (l) => l.vt, estilo: "sub", origem: "folha::vt" },
+          { rotulo: "Auxílio-alimentação", valor: (l) => l.va, estilo: "sub", origem: "folha::va" },
+          { rotulo: "Ajuda de custo (contas a pagar)", valor: (l) => l.ajudaCusto || null, estilo: "sub", origem: "ajuda" },
+          { rotulo: "= Custo total da folha", valor: custo, estilo: "total", origem: "folha", dica: "Holerites + VT + auxílio + ajuda de custo. Sem holerite no mês: a folha lançada no contas a pagar." },
           { rotulo: "Folha da produção", valor: (l) => l.folhaProducao, estilo: "sub", dica: "Holerites e benefícios de quem está no setor Produção." },
-          { rotulo: "Folha no contas a pagar (conferência)", valor: (l) => l.porClasse.folha, estilo: "sub" },
+          { rotulo: "Folha no contas a pagar (conferência)", valor: (l) => l.porClasse.folha, estilo: "sub", origem: "classe:folha" },
           { rotulo: "Funcionários", valor: (l) => l.funcionarios, formato: "numero" },
           { rotulo: "Funcionários da produção", valor: (l) => l.funcionariosProducao, formato: "numero", estilo: "sub" },
           { rotulo: "Custo médio por funcionário", valor: (l) => (l.funcionarios && l.folhaTotal ? l.folhaTotal / l.funcionarios : null) },
           "separador",
-          { rotulo: "Saída da fábrica (R$)", valor: saida },
+          { rotulo: "Saída da fábrica (R$)", valor: saida, origem: "pedidos:saida" },
           { rotulo: "Saída por funcionário da produção", valor: (l) => (l.funcionariosProducao ? saida(l) / l.funcionariosProducao : null), estilo: "total" },
           { rotulo: "Saída por funcionário (todos)", valor: (l) => (l.funcionarios ? saida(l) / l.funcionarios : null) },
           { rotulo: "R$ produzido por R$ 1 de folha", valor: (l) => (l.folhaTotal ? saida(l) / l.folhaTotal : null), formato: "vezes", estilo: "total" },
@@ -691,7 +766,11 @@ function Folha(c: Ctx) {
                 <tr key={x.id}>
                   <Celula>{x.nome}</Celula>
                   <Celula className="text-right tabular-nums">{x.pessoas || "—"}</Celula>
-                  <Celula className="text-right tabular-nums">{m$(x.valor)}</Celula>
+                  <Celula className="text-right tabular-nums">
+                    <Link href={c.ver("folha", ultimo.mes)} className={LINK_ORIGEM}>
+                      {m$(x.valor)}
+                    </Link>
+                  </Celula>
                   <Celula className="text-right tabular-nums">{m$(x.porPessoa)}</Celula>
                   <Celula className="text-right tabular-nums">
                     <Barra fracao={totalSetores ? x.valor / totalSetores : 0} /> {totalSetores ? formatar(x.valor / totalSetores, "pct") : ""}
@@ -774,7 +853,13 @@ function Folha(c: Ctx) {
                   );
                   return (
                     <Celula key={l.mes} className="text-right tabular-nums">
-                      {v ? m$(v) : "—"}
+                      {v ? (
+                        <Link href={c.ver("ajuda", l.mes)} className={LINK_ORIGEM}>
+                          {m$(v)}
+                        </Link>
+                      ) : (
+                        "—"
+                      )}
                     </Celula>
                   );
                 })}
@@ -844,7 +929,6 @@ function Pessoas(c: Ctx) {
   const tabela = (tipo: TipoTitulo) => {
     const lista = c.dados.pessoas.filter((p) => p.tipo === tipo);
     const total = somaQtd(lista, (p) => p.total);
-    const href = `/financeiro/${tipo}?de=${c.periodo.de}&ate=${c.periodo.ate}&por=vencimento&situacao=`;
     return (
       <Secao titulo={tipo === "receber" ? "Principais clientes" : "Principais fornecedores"}>
         <Tabela
@@ -857,11 +941,15 @@ function Pessoas(c: Ctx) {
               <tr key={p.pessoa_id ?? "sem"}>
                 <Celula className="w-0 text-xs text-texto-suave">{i + 1}</Celula>
                 <Celula>
-                  <Link href={href} className="hover:text-primaria hover:underline">
+                  <Link href={c.ver(`pessoa:${tipo}:${p.pessoa_id ?? "sem"}`)} className="hover:text-primaria hover:underline">
                     {p.nome}
                   </Link>
                 </Celula>
-                <Celula className="text-right tabular-nums">{m$(p.total)}</Celula>
+                <Celula className="text-right tabular-nums">
+                  <Link href={c.ver(`pessoa:${tipo}:${p.pessoa_id ?? "sem"}`)} className={LINK_ORIGEM}>
+                    {m$(p.total)}
+                  </Link>
+                </Celula>
                 <Celula className="text-right tabular-nums">
                   <Barra fracao={total ? Number(p.total) / total : 0} /> {total ? formatar(Number(p.total) / total, "pct") : ""}
                 </Celula>
@@ -913,7 +1001,15 @@ function Ecommerce(c: Ctx) {
             <Celula>{x.nome}</Celula>
             <Celula className="text-xs text-texto-suave">{x.fonte}</Celula>
             <Celula className="text-right tabular-nums">{x.temDados ? formatar(x.pedidos, "numero") : "—"}</Celula>
-            <Celula className="text-right tabular-nums">{x.temDados ? m$(x.vendido) : "—"}</Celula>
+            <Celula className="text-right tabular-nums">
+              {x.temDados ? (
+                <Link href={c.ver(`canal:${x.canal}`)} className={LINK_ORIGEM}>
+                  {m$(x.vendido)}
+                </Link>
+              ) : (
+                "—"
+              )}
+            </Celula>
             <Celula className="text-right tabular-nums">{x.temDados ? m$(x.ticket) : "—"}</Celula>
             <Celula className="text-right tabular-nums">{x.temDados ? m$(x.recebivel) : "—"}</Celula>
             <Celula className="text-right tabular-nums">{x.temDados ? m$(x.tarifas) : "—"}</Celula>
