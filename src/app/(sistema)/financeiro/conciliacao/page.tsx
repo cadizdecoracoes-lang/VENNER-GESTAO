@@ -55,6 +55,9 @@ type Filtros = {
   importadas?: string;
   repetidas?: string;
   automaticas?: string;
+  // Vários arquivos de uma vez: quantos e em quantas contas.
+  arquivos?: string;
+  contas?: string;
 };
 
 // O que mudou no Tiny depois de conciliar (a ligação fica; a correção é no Tiny).
@@ -424,9 +427,11 @@ async function PaginaConciliacao({ searchParams }: { searchParams: Promise<Filtr
 
       {filtros.importadas !== undefined && (
         <p className="rounded-lg bg-sucesso/10 px-3 py-1.5 text-sm text-sucesso">
-          Extrato importado: {filtros.importadas} lançamento(s) novo(s)
+          {Number(filtros.arquivos) > 1 ? `${filtros.arquivos} extratos importados em ${filtros.contas} conta(s)` : "Extrato importado"}:{" "}
+          {filtros.importadas} lançamento(s) novo(s)
           {Number(filtros.repetidas) > 0 && `, ${filtros.repetidas} já estavam no sistema e não entraram de novo`}
-          {Number(filtros.automaticas) > 0 && `; ${filtros.automaticas} bateram com títulos e já foram conciliadas`}. Abaixo ficam só as divergências.
+          {Number(filtros.automaticas) > 0 && `; ${filtros.automaticas} bateram com títulos e já foram conciliadas`}. Abaixo ficam só as divergências
+          {Number(filtros.contas) > 1 && " (troque a conta no seletor para ver as outras)"}.
         </p>
       )}
 

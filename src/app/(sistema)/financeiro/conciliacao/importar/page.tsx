@@ -5,6 +5,7 @@ import { carregarAcesso, pode } from "@/lib/acesso";
 import { carregarEmpresas, empresaSelecionada } from "@/lib/empresa";
 import { supabaseConfigurado } from "@/lib/supabase/config";
 import { criarClienteNavegador } from "@/lib/supabase/client";
+import { lerContaGuardada } from "@/lib/extrato-identificar";
 import { ImportarExtrato } from "./importar-extrato";
 import { TelaCliente } from "@/components/tela-cliente";
 
@@ -16,21 +17,43 @@ async function PaginaImportarExtrato({ searchParams }: { searchParams: Promise<{
   const { conta } = await searchParams;
   const [empresas, selecionada] = await Promise.all([carregarEmpresas(), empresaSelecionada()]);
   const nomeEmpresa = new Map(empresas.map((e) => [e.id, e.nome]));
-  let contas: { id: string; nome: string; empresa_id: string; conta: string | null; banco_nome: string | null }[] = [];
+  let contas: {
+    id: string;
+    nome: string;
+    empresa_id: string;
+    conta: string | null;
+    banco_codigo: string | null;
+    banco_nome: string | null;
+  }[] = [];
+  let cnpjs: { id: string; cnpj: string | null }[] = [];
+  let vistos: { conta_bancaria_id: string; conta_no_arquivo: string | null }[] = [];
   if (supabaseConfigurado) {
     const supabase = criarClienteNavegador();
-    let q = supabase.from("contas_bancarias").select("id, nome, empresa_id, conta, banco_nome").eq("ativa", true).neq("tipo", "caixa").order("nome");
+    let q = supabase.from("contas_bancarias").select("id, nome, empresa_id, conta, banco_codigo, banco_nome").eq("ativa", true).neq("tipo", "caixa").order("nome");
     if (selecionada) q = q.eq("empresa_id", selecionada.id);
-    contas = (await q).data ?? [];
+    // Contas dos arquivos já importados: a tela reconhece a conta da próxima vez.
+    const [c, e, v] = await Promise.all([
+      q,
+      supabase.from("empresas").select("id, cnpj").eq("ativa", true),
+      supabase.from("extrato_importacoes").select("conta_bancaria_id, conta_no_arquivo").not("conta_no_arquivo", "is", null),
+    ]);
+    contas = c.data ?? [];
+    cnpjs = e.data ?? [];
+    vistos = v.data ?? [];
   }
+  const numerosVistos = (id: string) => [
+    ...new Set(vistos.filter((v) => v.conta_bancaria_id === id).flatMap((v) => lerContaGuardada(v.conta_no_arquivo)?.numero ?? [])),
+  ];
 
   return (
     <div className="space-y-3">
       <CabecalhoTela codigo={TELA} />
       {pode(acesso, TELA, "criar") && (
         <ImportarExtrato
-          contas={contas.map((c) => ({ id: c.id, nome: c.nome, empresa: nomeEmpresa.get(c.empresa_id) ?? "", numero: c.conta }))}
-          contaInicial={contas.some((c) => c.id === conta) ? conta! : contas.length === 1 ? contas[0].id : ""}
+          contas={contas.map((c) => ({ ...c, empresa: nomeEmpresa.get(c.empresa_id) ?? "", vistos: numerosVistos(c.id) }))}
+          empresas={cnpjs}
+          contaInicial={contas.some((c) => c.id === conta) ? conta! : ""}
+          versao={Date.now()}
         />
       )}
 
