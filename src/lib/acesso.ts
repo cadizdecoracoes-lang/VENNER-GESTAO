@@ -31,7 +31,14 @@ export const carregarAcesso = guardado(async (): Promise<Acesso> => {
   return { email: user.email ?? null, ativo: !!usuario?.ativo, permissoes };
 });
 
+// Contas a pagar e a receber (e as notas de fornecedor, que geram contas a
+// pagar) são lançadas, editadas, baixadas e excluídas só no Tiny (regra do
+// Alexandre, 23/11/2026): nessas telas o sistema só mostra. O banco barra
+// também (bloquear_titulo_tiny).
+const SO_NO_TINY = new Set(["financeiro.pagar", "financeiro.receber", "financeiro.notas_fornecedor"]);
+
 export function pode(acesso: Acesso, tela: string, acao: Acao): boolean {
+  if (acao !== "ver" && SO_NO_TINY.has(tela)) return false;
   return acesso.permissoes === null || acesso.permissoes.has(`${tela}:${acao}`);
 }
 

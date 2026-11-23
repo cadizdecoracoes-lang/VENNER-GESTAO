@@ -562,9 +562,8 @@ async function PaginaContasPagar({ searchParams }: { searchParams: Promise<Filtr
                     )}
                   </Celula>
                   <Celula className="whitespace-nowrap text-right">
-                    {podeEditar && (
-                      <div className="flex items-center justify-end gap-1" data-filtro-ignorar>
-                        {t.situacao === "aberto" && (
+                    <div className="flex items-center justify-end gap-1" data-filtro-ignorar>
+                        {podeEditar && t.situacao === "aberto" && (
                           <>
                             <Link
                               href={comJanela("pagar", t.id)}
@@ -587,7 +586,7 @@ async function PaginaContasPagar({ searchParams }: { searchParams: Promise<Filtr
                             </span>
                           </>
                         )}
-                        {t.situacao === "pago" && (
+                        {podeEditar && t.situacao === "pago" && (
                           <FormAcao
                             acao={estornarPagamento.bind(null, t.id)}
                             rotulo="Estornar"
@@ -596,12 +595,11 @@ async function PaginaContasPagar({ searchParams }: { searchParams: Promise<Filtr
                             confirmar="Desfazer o pagamento? A conta volta para em aberto."
                           />
                         )}
-                        {t.situacao === "cancelado" && <FormAcao acao={reabrirConta.bind(null, t.id)} rotulo="Reabrir" enviando="..." discreto />}
+                        {podeEditar && t.situacao === "cancelado" && <FormAcao acao={reabrirConta.bind(null, t.id)} rotulo="Reabrir" enviando="..." discreto />}
                         <Link href={comJanela("ver", t.id)} scroll={false} title="Origem e histórico" aria-label="Origem e histórico" className="rounded p-1 text-texto-suave hover:bg-fundo hover:text-primaria">
                           <History size={14} />
                         </Link>
                       </div>
-                    )}
                   </Celula>
                 </tr>
               );

@@ -8,7 +8,7 @@ import { Cartao, estiloBotao, estiloCampo } from "@/components/ui";
 import type { Estado } from "@/lib/erros";
 import type { TituloCandidato } from "@/lib/extrato";
 import { formatarData, formatarMoeda } from "@/lib/formato";
-import { conciliar, conciliarVarios, ignorar, marcarTransferencia } from "./actions";
+import { conciliar, conciliarVarios, ignorar } from "./actions";
 import type { LinhaConciliacao } from "./dados";
 
 const semAcento = (t: string) => t.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
@@ -23,12 +23,10 @@ const semAcento = (t: string) => t.normalize("NFD").replace(/[̀-ͯ]/g, "").toLo
 export function PainelResolver({
   linhas,
   candidatos,
-  linkCriar,
   voltar,
 }: {
   linhas: LinhaConciliacao[];
   candidatos: TituloCandidato[];
-  linkCriar: string;
   voltar: string;
 }) {
   const router = useRouter();
@@ -202,18 +200,9 @@ export function PainelResolver({
 
           {!varias && (
             <div className="space-y-3 text-sm">
-              <div className="space-y-1">
-                <p className="font-medium">Sem título correspondente?</p>
-                <p className="text-xs text-texto-suave">
-                  A conciliação só dá baixa. Crie o título no contas {saida ? "a pagar" : "a receber"} (já vai preenchido com esta linha) e volte aqui para conciliar.
-                </p>
-                <Link href={linkCriar} className={`${estiloBotao} py-1.5`}>
-                  Criar conta {saida ? "a pagar" : "a receber"}
-                </Link>
-              </div>
-              <div className="flex flex-wrap items-start gap-3 border-t border-borda pt-3">
-                <FormAcao acao={() => depois(marcarTransferencia(linha.id))} rotulo="É transferência entre contas" secundario />
-              </div>
+              <p className="text-xs text-texto-suave">
+                Sem título correspondente? Lance no contas {saida ? "a pagar" : "a receber"} do Tiny: o título aparece aqui sozinho e esta linha ganha a sugestão para conciliar.
+              </p>
               <FormAcao acao={(e, f) => depois(ignorar(linha.id, e, f))} rotulo="Ignorar" secundario className="flex flex-wrap items-center gap-2 border-t border-borda pt-3">
                 <input name="motivo" placeholder="Motivo (ex.: estorno que se anula)" className={`${estiloCampo} w-auto flex-1 py-1.5`} />
               </FormAcao>
