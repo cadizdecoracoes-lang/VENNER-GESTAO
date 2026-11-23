@@ -6,6 +6,9 @@ import { rotuloMes, type Gravidade, type LinhaMes } from "@/lib/indicadores";
 
 // Peças visuais da tela de Indicadores.
 
+// Número que abre a origem: sublinhado pontilhado discreto.
+export const LINK_ORIGEM = "underline decoration-dotted decoration-texto-suave/50 underline-offset-2 hover:text-primaria";
+
 export type Formato = "moeda" | "numero" | "pct" | "dias" | "vezes";
 
 export function formatar(v: number | null | undefined, formato: Formato): string {
@@ -35,6 +38,9 @@ export type LinhaTabelaMes = {
   dica?: string;
   negativoRuim?: boolean;
   href?: (m: LinhaMes) => string | undefined;
+  // Chave da origem do número (painel "Origem do valor"): cada mês e a média
+  // abrem a composição e os lançamentos.
+  origem?: string;
 };
 
 // Tabela com uma coluna por mês e a média no fim.
@@ -42,10 +48,12 @@ export function TabelaMeses({
   meses,
   mesesMedia,
   linhas,
+  ver,
 }: {
   meses: LinhaMes[];
   mesesMedia: string[];
   linhas: (LinhaTabelaMes | "separador")[];
+  ver?: (origem: string, mes: string) => string;
 }) {
   return (
     <div className="overflow-x-auto rounded-xl bg-superficie shadow-[0_1px_3px_rgba(16,24,40,0.06)]">
@@ -89,11 +97,11 @@ export function TabelaMeses({
                 </td>
                 {meses.map((m) => {
                   const v = l.valor(m);
-                  const href = l.href?.(m);
+                  const href = l.origem && ver ? ver(l.origem, m.mes) : l.href?.(m);
                   return (
                     <td key={m.mes} className={`whitespace-nowrap px-3 py-1.5 text-right tabular-nums ${cor(v)}`}>
                       {href && v ? (
-                        <Link href={href} className="hover:text-primaria hover:underline">
+                        <Link href={href} className={l.origem && ver ? LINK_ORIGEM : "hover:text-primaria hover:underline"} title={l.origem && ver ? "Ver a origem" : undefined}>
                           {formatar(v, f)}
                         </Link>
                       ) : (
@@ -102,7 +110,15 @@ export function TabelaMeses({
                     </td>
                   );
                 })}
-                <td className={`whitespace-nowrap bg-fundo/40 px-3 py-1.5 text-right tabular-nums ${cor(media)}`}>{formatar(media, f)}</td>
+                <td className={`whitespace-nowrap bg-fundo/40 px-3 py-1.5 text-right tabular-nums ${cor(media)}`}>
+                  {l.origem && ver && media ? (
+                    <Link href={ver(l.origem, "media")} className={LINK_ORIGEM} title="Ver a origem da média">
+                      {formatar(media, f)}
+                    </Link>
+                  ) : (
+                    formatar(media, f)
+                  )}
+                </td>
               </tr>
             );
           })}
