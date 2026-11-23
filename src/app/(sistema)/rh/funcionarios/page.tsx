@@ -93,6 +93,11 @@ async function PaginaFuncionarios({ searchParams }: { searchParams: Promise<{ no
         empresa={selecionada}
         ajuda="Cargo e salário base seguem o holerite mensal mais recente importado. O holerite não traz admissão nem setor: a admissão é estimada pelo primeiro holerite com mês incompleto (marcada como estimada) e o setor é sugerido pelo cargo. Corrija na ficha de cada um."
       >
+        {verFolha && (
+          <Link href="/rh/funcionarios/beneficios" className={estiloBotaoSecundario}>
+            VT e alimentação
+          </Link>
+        )}
         {importar && (
           <Link href="/rh/funcionarios/importar" className={estiloBotaoSecundario}>
             <FileUp size={16} /> Importar holerites
@@ -124,7 +129,7 @@ async function PaginaFuncionarios({ searchParams }: { searchParams: Promise<{ no
               rotulo={ultimo ? `Custo da folha ${mesAno(ultimo.competencia)}` : "Custo da folha"}
               valor={ultimo ? formatarMoeda(ultimo.total) : "—"}
               detalhe={ultimo ? `${ultimo.pessoas} holerites` : undefined}
-              fonte="Proventos do holerite mensal + FGTS do mês. O vale já está dentro do mensal. Não inclui o INSS da empresa nem benefícios fora da folha."
+              fonte="Proventos do holerite mensal + FGTS do mês. O vale já está dentro do mensal. Não inclui o INSS da empresa nem o VT e o auxílio pagos à parte (veja VT e alimentação)."
             />
             <Indicador
               rotulo="Média dos 3 meses anteriores"
