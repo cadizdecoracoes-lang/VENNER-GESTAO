@@ -615,7 +615,7 @@ export function possiveisRepetidas(linhas: LinhaRepeticao[], importacoes: Import
 
 // ---------------------------------------------------------------------------
 // Linha sem título: o que ela provavelmente é, para a tela explicar e sugerir
-// o caminho (transferência, criar título de tarifa, contas a receber).
+// o que lançar no Tiny (transferência, tarifa, rendimento, contas a receber).
 // ---------------------------------------------------------------------------
 export type NaturezaSemTitulo = { tipo: "transferencia" | "tarifa" | "rendimento" | "cobranca" | "aplicacao"; dica: string };
 
@@ -638,14 +638,14 @@ export function naturezaSemTitulo(descricao: string, valor: number, marcas: stri
   const palavrasLinha = new Set(d.split(/[^a-z0-9]+/));
   const doGrupo = marcas.find((m) => palavrasLinha.has(m));
   if (doGrupo && /(pix|transf|ted|doc|des:|rem:)/.test(d))
-    return { tipo: "transferencia", dica: `Transferência entre contas do grupo (${doGrupo.toUpperCase()}): “Lançar transferência” cria o título já baixado` };
+    return { tipo: "transferencia", dica: `Transferência do grupo (${doGrupo.toUpperCase()}): lance no Tiny (saída numa conta e entrada na outra)` };
   if (ehAplicacaoAutomatica(descricao) || /(aplic|resg)\.? ?(invest|aut)/.test(d))
-    return { tipo: "aplicacao", dica: "Aplicação/resgate automático do banco: “Lançar transferência” cria o título já baixado" };
-  if (/(rentab|rendimento|rend pago|remuneracao)/.test(d)) return { tipo: "rendimento", dica: "Rendimento da aplicação: criar título no contas a receber" };
+    return { tipo: "aplicacao", dica: "Aplicação/resgate automático do banco: lance no Tiny" };
+  if (/(rentab|rendimento|rend pago|remuneracao)/.test(d)) return { tipo: "rendimento", dica: "Rendimento da aplicação: lance no contas a receber do Tiny" };
   if (valor < 0 && /(tarifa|tar\b|encargos|juros|iof|cesta|mensalidade|manutencao conta|seguro conta)/.test(d))
-    return { tipo: "tarifa", dica: "Tarifa ou juros do banco: criar título no contas a pagar" };
+    return { tipo: "tarifa", dica: "Tarifa ou juros do banco: lance no contas a pagar do Tiny" };
   if (valor > 0 && /(cobranca|liquidacao|liq\.)/.test(d))
-    return { tipo: "cobranca", dica: "Boletos recebidos: o título fica no contas a receber" };
+    return { tipo: "cobranca", dica: "Boletos recebidos: o título fica no contas a receber do Tiny" };
   return null;
 }
 

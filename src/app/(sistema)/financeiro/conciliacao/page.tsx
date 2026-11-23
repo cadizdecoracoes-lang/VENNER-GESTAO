@@ -16,8 +16,6 @@ import {
   excluirImportacao,
   marcarRepetida,
   marcarRepetidas,
-  marcarTransferencia,
-  marcarTransferencias,
 } from "./actions";
 import {
   carregarCandidatos,
@@ -378,22 +376,6 @@ async function PaginaConciliacao({ searchParams }: { searchParams: Promise<Filtr
     }),
   );
   const listaRepetidas = pend.filter((l) => repetidas.has(l.id)).map((l) => l.id);
-  const transferencias = [...natureza].filter(([, n]) => n.tipo === "transferencia").map(([id]) => id);
-  // Marcadas como transferência antes da regra de 09/11/2026 (sem título).
-  const antigas = linhas.filter((l) => l.situacao === "transferencia").map((l) => l.id);
-  // Atalho para criar o título que falta, já preenchido; depois de salvar volta para a linha.
-  const linkCriar = (l: LinhaConciliacao) => {
-    const destino = Number(l.valor) < 0 ? "/financeiro/pagar" : "/financeiro/receber";
-    const p = new URLSearchParams({
-      novo: "1",
-      empresa: conta?.empresa_id ?? "",
-      descricao: l.descricao,
-      valor: Math.abs(Number(l.valor)).toFixed(2),
-      vencimento: l.data,
-      volta: `/financeiro/conciliacao${base({ linha: l.id })}`,
-    });
-    return `${destino}?${p.toString()}`;
-  };
   const totalPendConta = conta ? (pendentes.get(conta.id) ?? 0) : 0;
 
   return (
@@ -501,28 +483,6 @@ async function PaginaConciliacao({ searchParams }: { searchParams: Promise<Filtr
                 <input type="hidden" name="linhas" value={JSON.stringify(listaRepetidas)} />
               </FormAcao>
             )}
-            {podeEditar && transferencias.length > 1 && (
-              <FormAcao
-                acao={marcarTransferencias}
-                rotulo={`Lançar ${transferencias.length} transferências`}
-                enviando="Lançando..."
-                secundario
-                confirmar={`Lançar ${transferencias.length} linha(s) como transferência entre contas? Cada uma vira um título já baixado (saída no contas a pagar, entrada no contas a receber) e fica conciliada.`}
-              >
-                <input type="hidden" name="linhas" value={JSON.stringify(transferencias)} />
-              </FormAcao>
-            )}
-            {podeEditar && antigas.length > 0 && (
-              <FormAcao
-                acao={marcarTransferencias}
-                rotulo={`Lançar ${antigas.length} transferências antigas como título`}
-                enviando="Lançando..."
-                secundario
-                confirmar={`${antigas.length} linha(s) foram marcadas como transferência sem título. Lançar cada uma como título já baixado (saída no contas a pagar, entrada no contas a receber)?`}
-              >
-                <input type="hidden" name="linhas" value={JSON.stringify(antigas)} />
-              </FormAcao>
-            )}
             {paraCorrigir.length > 0 && <CopiarAvisos texto={textoCorrigir} quantos={paraCorrigir.length} />}
             {podeEditar && pares.length > 1 && (
               <FormAcao acao={conciliarSugestoes} rotulo={`Aceitar as ${pares.length} sugestões`} enviando="Conciliando..." secundario>
@@ -581,7 +541,6 @@ async function PaginaConciliacao({ searchParams }: { searchParams: Promise<Filtr
               key={resolvendoVarias.map((l) => l.id).join(",")}
               linhas={resolvendoVarias}
               candidatos={amplos}
-              linkCriar={linkCriar(resolvendo)}
               voltar={base({})}
             />
           )}
@@ -687,22 +646,13 @@ async function PaginaConciliacao({ searchParams }: { searchParams: Promise<Filtr
                                 discreto
                               />
                             )}
-                            {!titulo && ["transferencia", "aplicacao"].includes(natureza.get(l.id)?.tipo ?? "") && (
-                              <FormAcao acao={marcarTransferencia.bind(null, l.id)} rotulo="Lançar transferência" enviando="..." discreto />
-                            )}
-                            {!titulo && !repetida && !ant && !avisos.has(l.id) && !["transferencia", "aplicacao"].includes(natureza.get(l.id)?.tipo ?? "") && (
-                              <LinkAcao href={linkCriar(l)}>Criar título</LinkAcao>
+                            {!titulo && !repetida && !ant && !avisos.has(l.id) && l.data < hoje && (
+                              <span className="text-xs text-texto-suave" title="Contas a pagar e a receber são lançadas só no Tiny. Depois de lançar lá, o título aparece aqui e a linha ganha a sugestão para conciliar.">
+                                lançar no Tiny
+                              </span>
                             )}
                             <LinkAcao href={base({ linha: l.id })}>{titulo ? "Outro" : "Escolher"}</LinkAcao>
                           </>
-                        ) : l.situacao === "transferencia" ? (
-                          <FormAcao
-                            acao={marcarTransferencia.bind(null, l.id)}
-                            rotulo="Lançar como título"
-                            enviando="..."
-                            discreto
-                            confirmar="Marcada como transferência antes da regra nova. Lançar como título já baixado (saída no contas a pagar, entrada no contas a receber)?"
-                          />
                         ) : (
                           <FormAcao
                             acao={desfazer.bind(null, l.id)}
@@ -712,7 +662,7 @@ async function PaginaConciliacao({ searchParams }: { searchParams: Promise<Filtr
                             confirmar={
                               l.extrato_conciliacoes.some((c) => c.grupo !== l.id)
                                 ? "Desfazer? Esta linha foi conciliada junto com outras: todas voltam para pendente. Os títulos não mudam."
-                                : "Desfazer? Títulos baixados pela conciliação voltam para em aberto e os lançados aqui são cancelados."
+                                : "Desfazer? A linha volta para pendente. Os títulos não mudam."
                             }
                           />
                         )}
