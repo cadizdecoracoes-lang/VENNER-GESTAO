@@ -174,11 +174,11 @@ async function PaginaContasBancarias({ searchParams }: { searchParams: Promise<F
               </summary>
               <FormAcao
                 acao={juntarContas.bind(null, emEdicao.id)}
-                rotulo="Juntar e apagar esta conta"
+                rotulo="Juntar com a conta escolhida"
                 enviando="Juntando..."
                 secundario
                 className="mt-2 flex flex-wrap items-end gap-3"
-                confirmar={`Passar tudo de "${emEdicao.nome}" (${textoUso(uso.get(emEdicao.id))}) para a conta escolhida e apagar "${emEdicao.nome}"? Vale o saldo inicial da conta escolhida. Não dá para desfazer.`}
+                confirmar={`Passar o extrato e os títulos de "${emEdicao.nome}" (${textoUso(uso.get(emEdicao.id))}) para a conta escolhida? "${emEdicao.nome}" é apagada; se as duas vieram do Tiny, ela fica inativa e os títulos do Tiny ficam onde o Tiny diz (corrija a conta da baixa no Tiny). Vale o saldo inicial da conta escolhida. Não dá para desfazer.`}
               >
                 <Campo rotulo="Passar títulos e extrato para">
                   <select name="destino" required defaultValue="" className={estiloCampo}>

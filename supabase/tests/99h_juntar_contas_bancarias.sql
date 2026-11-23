@@ -67,9 +67,10 @@ select pg_temp.esperar_erro(
 
 select set_config('teste.r', juntar_contas_bancarias(current_setting('teste.errada')::uuid, current_setting('teste.certa')::uuid)::text, false);
 select pg_temp.esperar(
-  (current_setting('teste.r')::jsonb ->> 'pagar')::int = 1 and (current_setting('teste.r')::jsonb ->> 'extrato')::int = 2
+  (current_setting('teste.r')::jsonb ->> 'pagar')::int = 1 and (current_setting('teste.r')::jsonb ->> 'extrato')::int = 1
+  and (current_setting('teste.r')::jsonb ->> 'repetidas')::int = 1
   and (current_setting('teste.r')::jsonb ->> 'importacoes')::int = 1,
-  'junta: 1 título, 2 linhas e 1 importação mudam de conta');
+  'junta: 1 título, 1 linha e 1 importação mudam de conta; o PIX repetido (mesma chave) fica um só');
 reset role;
 
 select pg_temp.esperar(not exists (select 1 from contas_bancarias where id = current_setting('teste.errada')::uuid), 'conta errada apagada');
@@ -84,15 +85,8 @@ select pg_temp.esperar(
           where p.descricao = 'Pago na conta errada' and h.mudancas ? 'Conta bancária'),
   'mudança de conta fica no histórico do título');
 select pg_temp.esperar(
-  (select count(*) filter (where situacao = 'pendente') = 2 and count(*) = 3
+  (select count(*) filter (where situacao = 'pendente') = 2 and count(*) = 2
    from extrato_lancamentos where conta_bancaria_id = current_setting('teste.certa')::uuid),
-  'extrato na conta certa: o PIX repetido sai da lista, a tarifa entra');
+  'extrato na conta certa: o PIX uma vez só, a tarifa entra');
 
--- Duas contas do Tiny não se juntam.
-insert into contas_bancarias (empresa_id, nome, tiny_id) values (current_setting('teste.industria')::uuid, 'Outra do Tiny', 111222);
-set role authenticated;
-set request.jwt.claim.sub = '00000000-0000-0000-0000-00000000000b';
-select pg_temp.esperar_erro(
-  $$select juntar_contas_bancarias((select id from contas_bancarias where nome = 'Outra do Tiny'), current_setting('teste.certa')::uuid)$$,
-  'vieram do Tiny', 'duas contas do Tiny: recusa');
-reset role;
+-- Duas contas do Tiny: desde a migração 20261123000071 se juntam (ver 99zz_juntar_contas_tiny.sql).
