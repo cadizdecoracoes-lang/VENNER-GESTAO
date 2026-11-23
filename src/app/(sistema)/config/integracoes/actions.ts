@@ -77,14 +77,3 @@ export async function lerTinyAgora(id: string): Promise<Estado> {
   revalidatePath(CAMINHO);
   return { ok: Date.now() };
 }
-
-export async function ajustarPagarTiny(id: string, _: Estado, form: FormData): Promise<Estado> {
-  if (!supabaseConfigurado) return SEM_BANCO;
-  const ate = String(form.get("ate") ?? "");
-  if (ate && !/^\d{4}-\d{2}-\d{2}$/.test(ate)) return { erro: "Data inválida." };
-  const supabase = criarClienteNavegador();
-  const { error } = await supabase.rpc("ajustar_robo_tiny", { integracao: id, ler_contas_pagar_ate: ate || null });
-  if (error) return { erro: mensagemErro(error) };
-  revalidatePath(CAMINHO);
-  return { ok: Date.now() };
-}

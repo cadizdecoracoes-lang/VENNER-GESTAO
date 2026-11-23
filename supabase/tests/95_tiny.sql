@@ -231,8 +231,8 @@ select pg_temp.esperar(
   'situação mostra importados e pendentes');
 select ajustar_robo_tiny(current_setting('teste.tiny')::uuid, date '2026-01-01');
 select pg_temp.esperar(
-  (select jsonb_array_length(robo_tiny_inicio(current_setting('teste.tiny')::uuid, current_setting('teste.chave')) -> 'pendentes')) = 0,
-  'com data para parar já passada, pendentes do pagar ficam de fora');
+  (select jsonb_array_length(robo_tiny_inicio(current_setting('teste.tiny')::uuid, current_setting('teste.chave')) -> 'pendentes')) = 1,
+  'mesmo com data para parar, o contas a pagar continua lido (Tiny sempre vence, 19/11)');
 select pg_temp.esperar(chave_robo_tiny(current_setting('teste.tiny')::uuid) = current_setting('teste.chave'), 'botão Ler agora usa a chave');
 
 set request.jwt.claim.sub = '00000000-0000-0000-0000-00000000000c';

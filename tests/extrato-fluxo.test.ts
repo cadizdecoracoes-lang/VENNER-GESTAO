@@ -14,6 +14,7 @@ import {
   saldoBancoNoDia,
   sugerirAntecipacao,
   sugerirConciliacao,
+  avisosDoTiny,
   valorCelula,
 } from "../src/lib/extrato.ts";
 import { feriado, pascoa, proximoDiaUtil } from "../src/lib/feriados.ts";
@@ -37,6 +38,20 @@ test("OFX: lançamentos, sinal, FITID, conta e saldo final", () => {
   assert.equal(r.linhas[1].descricao, "TED RECEBIDA · CLIENTE X");
   assert.equal(r.saldoFinal, 1194.9);
   assert.deepEqual(r.conta, { banco: "0341", agencia: "0001", numero: "12345-6" });
+});
+
+test("OFX do Itaú: linhas de saldo do dia não viram lançamento", () => {
+  const r = lerOfx(`<OFX><BANKTRANLIST>
+<STMTTRN><TRNTYPE>OTHER<DTPOSTED>20261103<TRNAMT>-3030.11<FITID>20261103001<CHECKNUM>20261103001<MEMO>SALDO TOTAL DISPONÍVEL DIA</STMTTRN>
+<STMTTRN><TRNTYPE>CREDIT<DTPOSTED>20261103<TRNAMT>12700.00<FITID>20261103002<MEMO>PIX RECEBIDO AX CAPI03/11</STMTTRN>
+<STMTTRN><TRNTYPE>OTHER<DTPOSTED>20261104<TRNAMT>-2719.74<FITID>20261104001<NAME>SALDO TOTAL DISPONIVEL DIA</STMTTRN>
+<STMTTRN><TRNTYPE>DEBIT<DTPOSTED>20261104<TRNAMT>-50.00<FITID>20261104002<MEMO>TOTALPASS MENSAL</STMTTRN>
+</BANKTRANLIST><LEDGERBAL><BALAMT>-2719.74<DTASOF>20261104</LEDGERBAL></OFX>`);
+  assert.deepEqual(
+    r.linhas.map((l) => [l.descricao, l.valor]),
+    [["PIX RECEBIDO AX CAPI03/11", 12700], ["TOTALPASS MENSAL", -50]],
+  );
+  assert.equal(r.saldoFinal, -2719.74);
 });
 
 test("valores de célula com o sinal dos bancos", () => {
@@ -385,4 +400,27 @@ test("diferença do fluxo leva ao dia em que apareceu", () => {
   const [, dif] = linhasConferenciaBanco(fluxo, (d) => banco[d] ?? null, "2026-11-09", (de, ate) => `${de}|${ate}`);
   assert.deepEqual(dif.valores, [0, 0, 155.65, 155.65]);
   assert.deepEqual(dif.links, [null, null, "2026-10-15|2026-10-15", "2026-10-15|2026-10-15"]);
+});
+
+test("conciliação: título do Tiny que precisa de correção aparece com o motivo", () => {
+  const linhas = [
+    { id: "L1", data: "2026-11-03", valor: -1975, descricao: "BOLETO PAGO J A B" },
+    { id: "L2", data: "2026-11-03", valor: -145, descricao: "PIX MORETI" },
+    { id: "L3", data: "2026-11-03", valor: -35, descricao: "PIX EVERTON" },
+  ];
+  const titulos = [
+    { id: "T1", tipo: "pagar" as const, descricao: "NF 1", pessoa: "J A B", valor: 1975, data: "2026-11-05", pago: true, bloqueado: true,
+      aviso: "baixado no Tiny na conta Itaú em 05/11/2026, mas o extrato é da conta Sicoob: corrija a conta da baixa no Tiny" },
+    { id: "T2", tipo: "pagar" as const, descricao: "NF 2", pessoa: "Moreti", valor: 145, data: "2026-11-10", pago: true },
+    { id: "T3", tipo: "pagar" as const, descricao: "NF 3", pessoa: "Everton", valor: 35, data: "2026-11-04", pago: true },
+  ];
+  // Bloqueado nunca vira sugestão; pago nesta conta perto da data, sim.
+  const s = sugerirConciliacao(linhas, titulos);
+  assert.equal(s.has("L1"), false);
+  assert.equal(s.has("L2"), false, "7 dias de diferença não vira sugestão");
+  assert.deepEqual(s.get("L3")?.titulos, ["T3"]);
+  const a = avisosDoTiny(linhas.filter((l) => !s.has(l.id)), titulos);
+  assert.match(a.get("L1")!.texto, /conta Itaú/);
+  assert.equal(a.get("L2")!.texto, "baixado no Tiny em 10/11/2026, 7 dia(s) depois do banco: confira a data da baixa no Tiny");
+  assert.equal(a.has("L3"), false);
 });

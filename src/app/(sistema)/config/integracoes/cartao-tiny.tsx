@@ -1,7 +1,7 @@
 import { FormAcao } from "@/components/form-acao";
 import { Campo, Cartao, Etiqueta, LinkAcao, estiloBotao, estiloCampo } from "@/components/ui";
 import type { EmpresaResumo } from "@/lib/empresa";
-import { ajustarPagarTiny, lerTinyAgora, removerConta, salvarChavesTiny } from "./actions";
+import { lerTinyAgora, removerConta, salvarChavesTiny } from "./actions";
 import { LigarConta } from "./ligar-conta";
 
 export type AplicativoTiny = { empresa_id: string; client_id: string; atualizado_em: string };
@@ -57,8 +57,8 @@ export function CartaoTiny({
     >
       <div className="space-y-3 text-sm">
         <p className="text-texto-suave">
-          A cada minuto o sistema lê do Tiny os pedidos de venda, as contas a receber, os produtos, as ordens de compra e as contas a pagar. O que muda no
-          Tiny vem para cá, sem desfazer o que foi mudado aqui. A ligação só lê: não altera nada no Tiny.
+          A cada minuto o sistema lê do Tiny as contas a pagar e a receber, os pedidos de venda, as ordens de compra, as notas e os produtos. O Tiny
+          sempre vence: inclusão, edição, baixa, cancelamento e exclusão feitos lá aparecem aqui sozinhos. A ligação só lê: não altera nada no Tiny.
         </p>
 
         {contas.map((c) => (
@@ -93,21 +93,6 @@ export function CartaoTiny({
             {ligar && (
               <div className="flex flex-wrap items-end gap-3">
                 <FormAcao acao={lerTinyAgora.bind(null, c.id)} rotulo="Ler agora" enviando="Lendo o Tiny..." secundario />
-                {editar && (
-                  <FormAcao
-                    key={c.ler_pagar_ate ?? ""}
-                    acao={ajustarPagarTiny.bind(null, c.id)}
-                    rotulo="Salvar"
-                    enviando="..."
-                    secundario
-                    className="flex items-end gap-2"
-                  >
-                    <label className="text-xs text-texto-suave">
-                      Parar de ler contas a pagar em (vazio = ler sempre)
-                      <input name="ate" type="date" defaultValue={c.ler_pagar_ate ?? ""} className={estiloCampo} />
-                    </label>
-                  </FormAcao>
-                )}
                 {editar && (
                   <FormAcao
                     acao={removerConta.bind(null, c.id)}

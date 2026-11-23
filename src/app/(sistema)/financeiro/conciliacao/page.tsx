@@ -7,7 +7,7 @@ import { CabecalhoTela, Celula, Etiqueta, LinkAcao, SemAcesso, Tabela, estiloBot
 import { carregarAcesso, pode } from "@/lib/acesso";
 import { hojeBrasil, somarDias } from "@/lib/datas";
 import { carregarEmpresas, empresaSelecionada } from "@/lib/empresa";
-import { diferencaDoDia, marcasDoGrupo, naturezaSemTitulo, possiveisRepetidas, sugerirAntecipacao, sugerirConciliacao, type ItemDiferenca } from "@/lib/extrato";
+import { avisosDoTiny, diferencaDoDia, marcasDoGrupo, naturezaSemTitulo, possiveisRepetidas, sugerirAntecipacao, sugerirConciliacao, type ItemDiferenca } from "@/lib/extrato";
 import { formatarData, formatarMoeda } from "@/lib/formato";
 import {
   conciliar,
@@ -34,6 +34,7 @@ import {
   nomePessoa,
   type LinhaConciliacao,
 } from "./dados";
+import { CopiarAvisos } from "./copiar-avisos";
 import { PainelResolver } from "./painel-resolver";
 import { BarraSelecao, MarcarLinha, SelecaoLinhas } from "./selecao-linhas";
 import { SeletorConta } from "./seletor-conta";
@@ -56,7 +57,20 @@ type Filtros = {
   automaticas?: string;
 };
 
-function Ligacoes({ linha }: { linha: LinhaConciliacao }) {
+// O que mudou no Tiny depois de conciliar (a ligação fica; a correção é no Tiny).
+function avisoLigacao(linha: LinhaConciliacao, conta: string): string | null {
+  for (const c of linha.extrato_conciliacoes) {
+    const t = c.contas_pagar ?? c.contas_receber;
+    if (!t) continue;
+    if (t.situacao === "cancelado") return "título cancelado no Tiny";
+    if (t.situacao !== "pago") return "no Tiny o título voltou para em aberto: confira a baixa no Tiny";
+    if (t.conta_bancaria_id !== conta && t.contas_bancarias?.nome !== "Tiny · conta não informada")
+      return `no Tiny está baixado na conta ${t.contas_bancarias?.nome ?? "outra"}: corrija a conta da baixa no Tiny`;
+  }
+  return null;
+}
+
+function Ligacoes({ linha, conta }: { linha: LinhaConciliacao; conta: string }) {
   if (linha.situacao === "transferencia") return <Etiqueta cor="alerta">Transferência sem título</Etiqueta>;
   if (linha.situacao === "ignorado")
     return (
@@ -65,9 +79,15 @@ function Ligacoes({ linha }: { linha: LinhaConciliacao }) {
       </span>
     );
   const emGrupo = linha.extrato_conciliacoes.some((c) => c.grupo !== linha.id);
+  const aviso = linha.situacao === "conciliado" ? avisoLigacao(linha, conta) : null;
   return (
     <span className="text-xs">
       <Etiqueta cor="sucesso">Conciliada</Etiqueta>{" "}
+      {aviso && (
+        <>
+          <Etiqueta cor="alerta">Corrigir no Tiny</Etiqueta> <span className="text-alerta">{aviso} · </span>
+        </>
+      )}
       {emGrupo && (
         <span className="text-texto-suave" title="Conciliada junto com outras linhas do extrato (ex.: um título recebido em duas entradas)">
           junto com outras linhas ·{" "}
@@ -309,6 +329,26 @@ async function PaginaConciliacao({ searchParams }: { searchParams: Promise<Filtr
     new Set([...sugestoes.values()].flatMap((x) => x.titulos)),
   );
 
+  // Sem sugestão, mas com título de mesmo valor no Tiny que precisa de
+  // correção lá (outra conta, já ligado a outra linha, data longe).
+  const avisos = avisosDoTiny(
+    pend.filter((l) => !repetidas.has(l.id) && !sugestoes.has(l.id) && !antecipacoes.has(l.id)).map((l) => ({ ...l, valor: Number(l.valor) })),
+    candidatos,
+  );
+  // Lista para mandar ao financeiro: pendentes com aviso e conciliadas que o Tiny mudou depois.
+  const paraCorrigir = conta
+    ? linhas.flatMap((l) => {
+        const a = l.situacao === "pendente" ? avisos.get(l.id) : undefined;
+        const texto = a
+          ? `${a.titulo.pessoa ? `${a.titulo.pessoa} · ` : ""}${a.titulo.descricao}: ${a.texto}`
+          : l.situacao === "conciliado"
+            ? avisoLigacao(l, conta.id)
+            : null;
+        return texto ? [`• ${formatarData(l.data)} · ${l.descricao} · ${formatarMoeda(Number(l.valor))}\n  ${texto}`] : [];
+      })
+    : [];
+  const textoCorrigir = conta && paraCorrigir.length ? `Conciliação ${conta.nome}: corrigir no Tiny (${paraCorrigir.length})\n\n${paraCorrigir.join("\n\n")}` : "";
+
   // Endereço com os filtros atuais (conta, situação e período) mais `extra`.
   const filtroPeriodo: Record<string, string | undefined> =
     modo === "dia" ? { dia: diaEscolhido! } : modo === "tudo" ? { tudo: "1" } : filtros.de || filtros.ate ? { de: periodoDe, ate: periodoAte } : {};
@@ -478,6 +518,7 @@ async function PaginaConciliacao({ searchParams }: { searchParams: Promise<Filtr
                 <input type="hidden" name="linhas" value={JSON.stringify(antigas)} />
               </FormAcao>
             )}
+            {paraCorrigir.length > 0 && <CopiarAvisos texto={textoCorrigir} quantos={paraCorrigir.length} />}
             {podeEditar && pares.length > 1 && (
               <FormAcao acao={conciliarSugestoes} rotulo={`Aceitar as ${pares.length} sugestões`} enviando="Conciliando..." secundario>
                 <input type="hidden" name="pares" value={JSON.stringify(pares)} />
@@ -590,7 +631,7 @@ async function PaginaConciliacao({ searchParams }: { searchParams: Promise<Filtr
                   <Celula className="whitespace-nowrap text-right tabular-nums text-texto-suave">{l.saldo === null ? "" : formatarMoeda(Number(l.saldo))}</Celula>
                   <Celula>
                     {l.situacao !== "pendente" ? (
-                      <Ligacoes linha={l} />
+                      <Ligacoes linha={l} conta={conta!.id} />
                     ) : repetida ? (
                       <span
                         className="text-xs text-alerta"
@@ -609,10 +650,15 @@ async function PaginaConciliacao({ searchParams }: { searchParams: Promise<Filtr
                         <Etiqueta cor="primaria">Sugestão</Etiqueta> {titulo.pessoa ? `${titulo.pessoa} · ` : ""}
                         {titulo.descricao} · {titulo.pago ? "pago" : "vence"} {formatarData(titulo.data)}
                       </span>
+                    ) : avisos.get(l.id) ? (
+                      <span className="text-xs" title={avisos.get(l.id)!.texto}>
+                        <Etiqueta cor="alerta">Corrigir no Tiny</Etiqueta> {avisos.get(l.id)!.titulo.pessoa ? `${avisos.get(l.id)!.titulo.pessoa} · ` : ""}
+                        {avisos.get(l.id)!.titulo.descricao} · <span className="text-alerta">{avisos.get(l.id)!.texto}</span>
+                      </span>
                     ) : natureza.get(l.id) ? (
                       <span className="text-xs text-alerta">{natureza.get(l.id)!.dica}</span>
                     ) : (
-                      <span className="text-xs text-texto-suave" title="Nenhum título em aberto ou pago nesta conta com o mesmo valor perto desta data">
+                      <span className="text-xs text-texto-suave" title="Nenhum título do Tiny (em aberto ou pago) com o mesmo valor perto desta data">
                         {l.data < hoje ? "nenhum título com este valor" : ""}
                       </span>
                     )}
@@ -639,7 +685,7 @@ async function PaginaConciliacao({ searchParams }: { searchParams: Promise<Filtr
                             {!titulo && ["transferencia", "aplicacao"].includes(natureza.get(l.id)?.tipo ?? "") && (
                               <FormAcao acao={marcarTransferencia.bind(null, l.id)} rotulo="Lançar transferência" enviando="..." discreto />
                             )}
-                            {!titulo && !repetida && !ant && !["transferencia", "aplicacao"].includes(natureza.get(l.id)?.tipo ?? "") && (
+                            {!titulo && !repetida && !ant && !avisos.has(l.id) && !["transferencia", "aplicacao"].includes(natureza.get(l.id)?.tipo ?? "") && (
                               <LinkAcao href={linkCriar(l)}>Criar título</LinkAcao>
                             )}
                             <LinkAcao href={base({ linha: l.id })}>{titulo ? "Outro" : "Escolher"}</LinkAcao>

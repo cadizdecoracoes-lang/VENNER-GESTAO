@@ -79,6 +79,10 @@ export function lerOfx(texto: string): ExtratoLido {
     if (!data || !valor) continue;
     const memo = tag(b, "MEMO");
     const nome = tag(b, "NAME");
+    // O Itaú manda o saldo de cada dia como se fosse lançamento ("SALDO TOTAL
+    // DISPONÍVEL DIA"): é informação, não entrada nem saída de dinheiro.
+    // Só "saldo..." (não "total..."): no OFX, pular por engano some com dinheiro.
+    if ([nome, memo].some((t) => t && /^(saldo|sdo\b|s a l d o)/.test(semAcento(t)))) continue;
     const descricao = [nome, memo && memo !== nome ? memo : null].filter(Boolean).join(" · ") || tag(b, "TRNTYPE") || "Sem descrição";
     linhas.push({
       data,
@@ -293,6 +297,12 @@ export type TituloCandidato = {
   // Pago pelo Tiny sem a conta da baixa ("Tiny · conta não informada"): a data
   // pode ser o vencimento, então vale a folga de título em aberto.
   semConta?: boolean;
+  // Pago no Tiny, mas não serve para esta linha sem corrigir no Tiny (baixado
+  // em outra conta) ou já ligado a outra linha do extrato: aparece com o
+  // motivo e não pode ser escolhido.
+  bloqueado?: boolean;
+  // Motivo em português simples (vai para o financeiro corrigir no Tiny).
+  aviso?: string;
 };
 
 // certa: casa sem dúvida e é conciliada sozinha ao importar (título já baixado
@@ -321,7 +331,7 @@ export function sugerirConciliacao(linhas: { id: string; data: string; valor: nu
     const doHistorico = palavras(l.descricao);
     let melhor: { t: TituloCandidato; pontos: number; dias: number; comuns: number } | null = null;
     for (const t of titulos) {
-      if (t.tipo !== tipo || usados.has(t.id) || Math.abs(t.valor - alvo) > 0.01) continue;
+      if (t.bloqueado || t.tipo !== tipo || usados.has(t.id) || Math.abs(t.valor - alvo) > 0.01) continue;
       const dias = Math.abs(diasEntre(t.data, l.data));
       if (dias > (t.pago && !t.semConta ? 3 : 10)) continue;
       const nome = palavras(`${t.pessoa ?? ""} ${t.descricao}`);
@@ -342,6 +352,37 @@ export function sugerirConciliacao(linhas: { id: string; data: string; valor: nu
   return resultado;
 }
 
+// Linha sem sugestão que tem, no Tiny, um título de mesmo valor perto da data
+// que não serve como está: baixado em outra conta, já ligado a outra linha
+// do extrato ou baixado com data longe da do banco. O texto diz o que
+// corrigir no Tiny (a conciliação não muda título nenhum).
+export type AvisoTiny = { titulo: TituloCandidato; texto: string };
+export function avisosDoTiny(linhas: { id: string; data: string; valor: number }[], titulos: TituloCandidato[]): Map<string, AvisoTiny> {
+  const resultado = new Map<string, AvisoTiny>();
+  const usados = new Set<string>();
+  for (const l of [...linhas].sort((a, b) => a.data.localeCompare(b.data))) {
+    const tipo = l.valor < 0 ? "pagar" : "receber";
+    const alvo = Math.abs(l.valor);
+    let melhor: { t: TituloCandidato; dias: number } | null = null;
+    for (const t of titulos) {
+      if (t.tipo !== tipo || !t.pago || usados.has(t.id) || Math.abs(t.valor - alvo) > 0.01) continue;
+      const dias = Math.abs(diasEntre(t.data, l.data));
+      // Pago nesta conta perto da data já vira sugestão; aqui só o que precisa de correção.
+      const precisa = t.bloqueado || (!t.semConta && dias > 3);
+      if (!precisa || dias > 10) continue;
+      if (!melhor || dias < melhor.dias) melhor = { t, dias };
+    }
+    if (!melhor) continue;
+    usados.add(melhor.t.id);
+    const { t, dias } = melhor;
+    const texto =
+      t.aviso ??
+      `baixado no Tiny em ${t.data.split("-").reverse().join("/")}, ${dias} dia(s) ${t.data > l.data ? "depois" : "antes"} do banco: confira a data da baixa no Tiny`;
+    resultado.set(l.id, { titulo: t, texto });
+  }
+  return resultado;
+}
+
 // Antecipação (factoring): o banco credita o líquido, ou seja, o título a
 // receber menos os juros da antecipação lançados no contas a pagar. Para a
 // entrada que ficou sem sugestão, procura um par a receber − a pagar que bata
@@ -356,11 +397,11 @@ export function sugerirAntecipacao(
   const resultado = new Map<string, Sugestao>();
   const receber = new Map<number, TituloCandidato[]>();
   for (const t of titulos)
-    if (t.tipo === "receber" && !usados.has(t.id)) {
+    if (t.tipo === "receber" && !usados.has(t.id) && !t.bloqueado) {
       const c = Math.round(t.valor * 100);
       receber.set(c, [...(receber.get(c) ?? []), t]);
     }
-  const juros = titulos.filter((t) => t.tipo === "pagar" && !usados.has(t.id));
+  const juros = titulos.filter((t) => t.tipo === "pagar" && !usados.has(t.id) && !t.bloqueado);
   const ocupados = new Set(usados);
   for (const l of [...linhas].sort((a, b) => a.data.localeCompare(b.data))) {
     if (l.valor <= 0) continue;
